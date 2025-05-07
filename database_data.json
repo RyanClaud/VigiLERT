@@ -1,0 +1,47 @@
+{
+  "users": {
+    "xXRfPL1IbYlO0FrwcdVNCYrhAu2": {
+      "profile": {
+        "name": "User Name",
+        "email": "user@example.com",
+        "createdAt": 1234567890
+      },
+      "emergencyContacts": {
+        "-NxYz123": {
+          "name": "Emergency Contact 1",
+          "phone": "+1234567890",
+          "relationship": "Family",
+          "createdAt": 1234567890
+        }
+      }
+    }
+  },
+  "helmet": {
+    "xXRfPL1IbYlO0FrwcdVNCYrhAu2": {
+      "drowsiness": {
+        "status": "Normal"
+      },
+      "gps": {
+        "lat": 37.7749,
+        "lng": -122.4194
+      },
+      "speed": {
+        "current": 45,
+        "limit": 90
+      },
+      "battery": {
+        "level": 85
+      }
+    }
+  },
+  "trips": {
+    "xXRfPL1IbYlO0FrwcdVNCYrhAu2": {
+      "-NxYz125": {
+        "startTime": 1234567890,
+        "endTime": 1234567891,
+        "distance": 25.5,
+        "averageSpeed": 45
+      }
+    }
+  }
+} 
