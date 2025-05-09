@@ -1,13 +1,17 @@
 {
   "rules": {
     "users": {
-      "$uid": {
-        "emergencyContacts": {
-          ".read": true,
-          ".write": "$uid === auth.uid",
-          "$contactId": {
-            ".validate": "newData.hasChildren(['name', 'phone', 'relationship'])"
-          }
+      "$userId": {
+        ".read": "auth != null || root.child('users').child($userId).child('emergencyContacts').hasChild(auth.token.phone_number)",
+        ".write": "auth != null && auth.uid === $userId"
+      }
+    },
+    "emergency_contacts": {
+      "$userId": {
+        ".read": "auth != null || root.child('users').child($userId).child('emergencyContacts').hasChild(auth.token.phone_number)",
+        ".write": "auth != null && auth.uid === $userId"
+      }
+    }
         },
         "profile": {
           ".read": "$uid === auth.uid",

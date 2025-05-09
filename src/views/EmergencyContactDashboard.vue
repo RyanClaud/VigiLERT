@@ -18,9 +18,9 @@
       <div v-else>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
           <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4">
-            <span class="material-icons text-3xl">verified_user</span>
+            <span class="material-icons text-3xl">RIDER</span>
             <div>
-              <div class="text-sm font-medium">Rider Status</div>
+              <div class="text-sm font-medium">Status</div>
               <div class="text-2xl font-bold">{{ helmetData.helmetConnected ? 'Active' : 'Inactive' }}</div>
               <div class="text-xs">{{ helmetData.helmetConnected ? 'Helmet connected' : 'Helmet not connected' }}</div>
             </div>
@@ -34,7 +34,7 @@
             </div>
           </div>
           <div :class="['rounded-xl shadow-lg p-6 flex items-center gap-4', helmetData.alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]']">
-            <span class="material-icons text-3xl">visibility</span>
+            <span class="material-icons text-3xl">AWAKE</span>
             <div>
               <div class="text-sm font-medium">Alertness</div>
               <div class="text-2xl font-bold">{{ helmetData.alertnessStatus || 'Normal' }}</div>
@@ -60,11 +60,22 @@
         </div>
         <section class="mt-8">
           <h3 class="font-semibold text-lg mb-2 text-[#3D52A0] flex items-center gap-2">
-            <span class="material-icons text-xl">notifications</span>
+            <span class="material-icons text-xl">Notifications</span>
             Recent Alerts
           </h3>
-          <div class="bg-[#EDE8F5] rounded-lg shadow p-4">
+          <div class="bg-[rgb(251,251,252)] rounded-lg shadow p-4">
             <RecentAlerts :alerts="helmetData.alerts || []" />
+          </div>
+        </section>
+        <section class="mt-8">
+          <h3 class="font-semibold text-lg mb-2 text-[#3D52A0] flex items-center gap-2">
+            <span class="material-icons text-xl">Emergency</span>
+            Contacts Information
+          </h3>
+          <div class="bg-[#EDE8F5] rounded-lg shadow p-4">
+            <p><strong>Name:</strong> {{ emergencyContact.name || 'N/A' }}</p>
+            <p><strong>Phone:</strong> {{ emergencyContact.phone || 'N/A' }}</p>
+            <p><strong>Relationship:</strong> {{ emergencyContact.relationship || 'N/A' }}</p>
           </div>
         </section>
       </div>
@@ -86,6 +97,7 @@ const route = useRoute();
 const router = useRouter();
 const userId = route.params.userId;
 const helmetData = ref({});
+const emergencyContact = ref({});
 const loading = ref(true);
 
 function logout() {
@@ -94,10 +106,22 @@ function logout() {
 
 onMounted(() => {
   const db = getDatabase();
+
+  // Fetch helmet data
   const helmetRef = dbRef(db, `helmet/${userId}`);
   onValue(helmetRef, (snapshot) => {
     helmetData.value = snapshot.val() || {};
+  });
+
+  // Fetch emergency contact data
+  const emergencyContactRef = dbRef(db, `users/${userId}/emergencyContacts`);
+  onValue(emergencyContactRef, (snapshot) => {
+    const contacts = snapshot.val();
+    if (contacts) {
+      // Assuming the first contact is the one to display
+      emergencyContact.value = Object.values(contacts)[0] || {};
+    }
     loading.value = false;
   });
 });
-</script> 
+</script>

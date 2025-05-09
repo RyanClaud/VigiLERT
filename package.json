@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vite-pwa/assets-generator": "^1.0.0",
     "@vue-leaflet/vue-leaflet": "^0.10.1",
     "chart.js": "^4.4.9",
     "firebase": "^10.14.1",
@@ -18,8 +19,12 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@babel/core": "^7.27.1",
+    "@babel/preset-env": "^7.27.2",
+    "@tsconfig/node22": "^22.0.1",
     "@vitejs/plugin-vue": "^5.0.3",
     "autoprefixer": "^10.4.17",
+    "babel-loader": "^10.0.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "vite": "^5.1.0",

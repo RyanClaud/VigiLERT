@@ -56,7 +56,7 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
-  
+
   // Wait for auth state to be initialized
   if (authStore.loading) {
     await new Promise(resolve => {
@@ -80,4 +80,4 @@ router.beforeEach(async (to, from, next) => {
   }
 });
 
-export default router; 
+export default router;
