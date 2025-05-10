@@ -2,7 +2,6 @@
   <div class="min-h-screen flex items-center justify-center bg-[#EDE8F5] py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8 bg-white/90 shadow-xl rounded-2xl p-8">
       <div class="flex flex-col items-center">
-        <img src="https://img.icons8.com/color/96/000000/motorcycle-helmet.png" alt="VIGILERT Logo" class="h-16 w-16 mb-2" />
         <h2 class="text-3xl font-extrabold text-[#3D52A0] mb-1">Create your account</h2>
         <p class="text-[#8697C4] text-sm">Join the VIGILERT safety network</p>
       </div>
