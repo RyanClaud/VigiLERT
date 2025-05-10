@@ -128,7 +128,8 @@ const formatDuration = (minutes) => {
 };
 
 onMounted(() => {
-  const tripsRef = dbRef(database, 'trips');
+  const userId = getCurrentUserId(); 
+  const tripsRef = dbRef(database, `trips/${userId}`);
   onValue(tripsRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {

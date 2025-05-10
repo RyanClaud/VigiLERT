@@ -15,8 +15,8 @@
         </span>
         <span class="font-semibold text-lg">
           Welcome,
-          <span v-if="authStore.user && authStore.user.displayName">{{authStore.user.displayName}}</span>
-          <span v-else-if="authStore.user && authStore.user.email">{{authStore.user.email}}</span>
+          <span v-if="authStore.user && authStore.user.displayName">{{ authStore.user.displayName }}</span>
+          <span v-else-if="authStore.user && authStore.user.email">{{ authStore.user.email }}</span>
           <span v-else>User</span>
         </span>
       </div>
@@ -27,15 +27,15 @@
       <!-- Top Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
         <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
-          <span class="material-icons text-3xl">USER</span>
+          <span class="material-icons text-3xl">person</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
         </div>
         <div class="bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
-          <span class="material-icons text-3xl">SPEED</span>
+          <span class="material-icons text-3xl">speed</span>
           <DashboardCard title="Current Speed" :value="currentSpeed + ' kph'" :subtitle="speedSubtitle" icon="speed" status="info" />
         </div>
         <div :class="['rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl', alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]']">
-          <span class="material-icons text-3xl">ALERT</span>
+          <span class="material-icons text-3xl">warning</span>
           <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle" icon="alert" :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
         </div>
       </div>
@@ -58,8 +58,8 @@
 
       <!-- Recent Alerts -->
       <section class="mt-8">
-        <h3 class="font-semibold text-lg mb-2 text-[#3D52A0] flex items-center gap-2">
-          <span class="material-icons text-xl">Notifications</span>
+        <h3 class="font-semibold text-lg mb-2 text-[#6e7eb9] flex items-center gap-2">
+          <span class="material-icons text-xl">notifications</span>
           Recent Alerts
         </h3>
         <div class="bg-[#ffffff] rounded-lg shadow p-4">
@@ -92,7 +92,7 @@ const activeTab = ref('My Location');
 
 // Dashboard state
 const user = ref({ name: 'Loading...' });
-const location = ref({ lat: null, lng: null, address: '', user: '' });
+const location = ref({ lat: null, lng: null });
 const currentSpeed = ref(0);
 const speedHistory = ref([]);
 const speedLimit = ref(90);
@@ -105,46 +105,64 @@ const alertnessSubtitle = ref('No drowsiness detected');
 const speedSubtitle = ref('Within speed limit');
 
 function onAvatarError(event) {
-  event.target.src = 'https://ui-avatars.com/api/?name=User&background=ADBBD4&color=3D52A0';
+  event.target.src = 'https://ui-avatars.com/api/?name=User&background=ADBBD4&color=3D52A0 ';
 }
 
 onMounted(() => {
-  const helmetRef = dbRef(database, 'helmet');
+  const helmetPublicRef = dbRef(database, `helmet_public/${authStore.user.uid}`);
+
+  // Listen to public helmet data (sent by ESP32)
+  onValue(helmetPublicRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      // Update location
+      if (typeof data.locationLat === 'number' && typeof data.locationLng === 'number') {
+        location.value = {
+          lat: data.locationLat,
+          lng: data.locationLng
+        };
+      }
+
+      // Update speed
+      const rawSpeed = parseFloat(data.speed) || 0;
+      currentSpeed.value = rawSpeed < 0.1 ? 0.00 : rawSpeed.toFixed(2);
+      speedHistory.value.push(currentSpeed.value);
+      if (speedHistory.value.length > 10) speedHistory.value.shift();
+      speedSubtitle.value = currentSpeed.value > speedLimit.value ? 'Over speed limit!' : 'Within speed limit';
+
+      // Update diagnostics
+      diagnostics.value = [
+        { label: 'Headlight', value: data.headlight ? 'On' : 'Off' },
+        { label: 'Taillight', value: data.taillight ? 'On' : 'Off' },
+        { label: 'Left Signal', value: data.leftSignal ? 'Blinking' : 'Off' },
+        { label: 'Right Signal', value: data.rightSignal ? 'Blinking' : 'Off' },
+        { label: 'Battery Voltage', value: `${parseFloat(data.batteryVoltage || 0).toFixed(2)} V` }
+      ];
+
+      // Show alert if over speed limit
+      if (currentSpeed.value > speedLimit.value) {
+        alerts.value.unshift({
+          type: 'danger',
+          message: 'Speed Limit Exceeded',
+          details: `Speed: ${currentSpeed.value} kph | Limit: ${speedLimit.value} kph`,
+          time: new Date().toLocaleTimeString(),
+          extra: ''
+        });
+        if (alerts.value.length > 5) alerts.value.pop();
+      }
+    }
+  });
+
+  // Optional: Also listen to private helmet data if available
+  const helmetRef = dbRef(database, `helmet/${authStore.user.uid}`);
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      // User
-      user.value = { name: data.userName || 'Unknown' };
-      // Location
-      location.value = {
-        lat: data.locationLat || null,
-        lng: data.locationLng || null,
-        address: data.locationAddress || '',
-        user: data.userName || 'Unknown'
-      };
-      // Speed
-      currentSpeed.value = data.speed || 0;
-      speedHistory.value = data.speedHistory || [0];
-      speedLimit.value = data.speedLimit || 90;
-      speedSubtitle.value = currentSpeed.value > speedLimit.value ? 'Over speed limit!' : 'Within speed limit';
-      // Diagnostics
-      diagnostics.value = data.diagnostics || [];
-      // Alerts
-      alerts.value = (data.alerts || []).map(alert => ({
-        ...alert,
-        type: alert.type || 'info',
-        message: alert.message || '',
-        details: alert.details || '',
-        time: alert.time || '',
-        extra: alert.extra || ''
-      }));
-      // Rider status
       riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
       riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
-      // Alertness
       alertnessStatus.value = data.alertnessStatus || 'Normal';
       alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
     }
   });
 });
-</script> 
+</script>

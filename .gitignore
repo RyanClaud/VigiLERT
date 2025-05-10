@@ -80,3 +80,4 @@ Thumbs.db
 
 # Vercel and Firebase
 .vercel/
+.vercel
