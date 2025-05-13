@@ -27,22 +27,41 @@ function formatLatLng(lat, lng) {
 
 let mapInstance = null;
 
+// Function to create a red marker icon
+function createRedMarkerIcon() {
+  return L.icon({
+    iconUrl: 'https://unpkg.com/leaflet/dist/images/marker-icon-2x.png ',
+    shadowUrl: 'https://unpkg.com/leaflet/dist/images/marker-shadow.png ',
+    iconSize: [25, 41],
+    shadowSize: [41, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [-3, -76],
+    tooltipAnchor: [16, -44],
+    className: 'marker-red'
+  });
+}
+
 onMounted(() => {
-  if (!props.location.lat || !props.location.lng) {
-    console.warn("No valid coordinates to display map");
+  const mapElement = document.getElementById('location-section-map');
+  if (!mapElement) {
+    console.warn("Map container not found");
     return;
   }
 
-  mapInstance = L.map('location-section-map').setView([props.location.lat, props.location.lng], 13);
+  if (mapInstance) {
+    mapInstance.setView([props.location.lat, props.location.lng], 13);
+    return;
+  }
+
+  mapInstance = L.map(mapElement).setView([props.location.lat, props.location.lng], 13);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(mapInstance);
 
-  let marker = L.marker([props.location.lat, props.location.lng]).addTo(mapInstance);
+  let marker = L.marker([props.location.lat, props.location.lng], { icon: createRedMarkerIcon() }).addTo(mapInstance);
   marker.bindPopup("Current Location").openPopup();
 
-  // Watch for changes and update map
   watch(
     () => props.location,
     (newLoc) => {
@@ -51,7 +70,8 @@ onMounted(() => {
         marker.setLatLng([newLoc.lat, newLoc.lng]);
         marker.bindPopup(`Lat: ${newLoc.lat}, Lng: ${newLoc.lng}`).openPopup();
       }
-    }
+    },
+    { deep: true }
   );
 });
 
@@ -67,5 +87,19 @@ onBeforeUnmount(() => {
 .leaflet-container {
   height: 400px;
   width: 100%;
+}
+
+.marker-red {
+  width: 25px;
+  height: 41px;
+  background-color: red;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.marker-red .leaflet-marker-icon {
+  filter: invert(1) hue-rotate(180deg); /* Invert colors and rotate hue to red */
 }
 </style>

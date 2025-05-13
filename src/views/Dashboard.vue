@@ -34,7 +34,10 @@
           <span class="material-icons text-3xl">Speed</span>
           <DashboardCard title="Current Speed" :value="currentSpeedText" :subtitle="speedSubtitle" icon="speed" status="info" />
         </div>
-        <div :class="['rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl', alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]' ]">
+        <div :class="[
+          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]'
+        ]">
           <span class="material-icons text-3xl">Warning</span>
           <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle" icon="alert" :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
         </div>
@@ -65,7 +68,6 @@
             <p><strong>From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</p>
             <p><strong>To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</p>
             <p><strong>Max Speed:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</p>
-
             <!-- Navigate Button -->
             <a
               :href="getGoogleMapsLink(trip)"
@@ -75,7 +77,6 @@
             >
               Navigate
             </a>
-
             <!-- Delete Button -->
             <button
               @click="deleteTrip(trip.id)"
@@ -119,8 +120,8 @@ import LocationSection from '../components/LocationSection.vue';
 import SpeedDataSection from '../components/SpeedDataSection.vue';
 import DiagnosticsSection from '../components/DiagnosticsSection.vue';
 import RecentAlerts from '../components/RecentAlerts.vue';
-
 import L from 'leaflet';
+import { nextTick } from 'vue';
 
 const authStore = useAuthStore();
 const activeTab = ref('Speed Data');
@@ -139,6 +140,7 @@ const alertnessStatus = ref('Normal');
 const alertnessSubtitle = ref('No drowsiness detected');
 const currentLocationName = ref(null);
 const recentTrips = ref([]);
+const speedSubtitle = ref('Waiting for data...'); // ✅ Now declared correctly
 
 // Format lat/lng
 const formatLatLng = (lat, lng) => {
@@ -164,15 +166,19 @@ const formatDate = (timestamp) => {
 // Computed — formatted speed for display only
 const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
 
+let helmetPublicListener = null;
+
 onMounted(() => {
   const userId = authStore.user?.uid || 'MnzBjTBslZNijOkq732PE91hHa23';
   const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
+  const helmetRef = dbRef(database, `helmet/${userId}`);
+  const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
 
-  // Listen to live helmet data
-  onValue(helmetPublicRef, (snapshot) => {
+  helmetPublicListener = onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
     if (data && data.live) {
       const liveData = data.live;
+
       if (typeof liveData.locationLat === 'number' && typeof liveData.locationLng === 'number') {
         location.value = {
           lat: Number(liveData.locationLat),
@@ -180,11 +186,14 @@ onMounted(() => {
         };
         reverseGeocode(location.value.lat, location.value.lng);
       }
+
       const rawSpeed = parseFloat(liveData.speed) || 0;
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
+
       speedSubtitle.value = currentSpeed.value > speedLimit.value ? 'Over speed limit!' : 'Within speed limit';
+
       diagnostics.value = [
         { label: 'Headlight', value: liveData.headlight ? 'On' : 'Off' },
         { label: 'Taillight', value: liveData.taillight ? 'On' : 'Off' },
@@ -192,6 +201,7 @@ onMounted(() => {
         { label: 'Right Signal', value: liveData.rightSignal ? 'Blinking' : 'Off' },
         { label: 'Battery Voltage', value: `${parseFloat(liveData.batteryVoltage || 0).toFixed(2)} V` }
       ];
+
       if (currentSpeed.value > speedLimit.value) {
         alerts.value.unshift({
           type: 'danger',
@@ -204,26 +214,36 @@ onMounted(() => {
     }
   });
 
-  // Load recent trips
-  const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
   onValue(tripsRef, async (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      const tripList = Object.entries(data).map(([id, trip]) => ({
-        id,
-        ...trip
-      }));
-      tripList.sort((a, b) => {
-        const aTime = typeof a.timestamp === 'string' ? parseInt(a.timestamp) : a.timestamp;
-        const bTime = typeof b.timestamp === 'string' ? parseInt(b.timestamp) : b.timestamp;
-        return bTime - aTime;
-      });
-      recentTrips.value = tripList.slice(0, 5);
-      await Promise.all(recentTrips.value.map(loadLocationNames));
-    }
-  });
+  const data = snapshot.val();
+  if (data) {
+    const tripList = Object.entries(data).map(([id, trip]) => ({
+      id,
+      ...trip
+    }));
 
-  const helmetRef = dbRef(database, `helmet/${userId}`);
+    // Sort trips by timestamp in descending order (latest first)
+    tripList.sort((a, b) => {
+      const aTime = typeof a.timestamp === 'string' ? parseInt(a.timestamp) : a.timestamp;
+      const bTime = typeof b.timestamp === 'string' ? parseInt(b.timestamp) : b.timestamp;
+
+      // Handle invalid timestamps gracefully
+      if (isNaN(aTime) || isNaN(bTime)) {
+        console.warn("Invalid timestamp detected:", a, b);
+        return 0; // Keep original order for invalid timestamps
+      }
+
+      return bTime - aTime; // Descending order (latest first)
+    });
+
+    // Limit to the most recent 5 trips
+    recentTrips.value = tripList.slice(0, 5);
+
+    // Load location names for start and end locations
+    await Promise.all(recentTrips.value.map(loadLocationNames));
+  }
+});
+
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -236,21 +256,32 @@ onMounted(() => {
 });
 
 function initLiveMap(lat, lng) {
-  if (window.map) {
-    window.map.setView([lat, lng], 13);
+  const mapElement = document.getElementById('location-section-map');
+  if (!mapElement) {
+    console.warn("Map container not found");
     return;
   }
-  window.map = L.map('leaflet-map').setView([lat, lng], 13);
+
+  if (window.map) {
+    window.map.setView([lat, lng], 13);
+    window.map.invalidateSize();
+    return;
+  }
+
+  window.map = L.map(mapElement).setView([lat, lng], 13);
+
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(window.map);
+
   L.marker([lat, lng]).addTo(window.map).bindPopup("Current Location").openPopup();
 }
 
 watch(
   () => location.value,
-  (newLoc) => {
+  async (newLoc) => {
     if (newLoc.lat && newLoc.lng) {
+      await nextTick(); // Ensure DOM is updated
       initLiveMap(newLoc.lat, newLoc.lng);
     }
   },
@@ -258,6 +289,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (helmetPublicListener) helmetPublicListener();
   if (window.map) {
     window.map.remove();
     window.map = null;
@@ -265,33 +297,36 @@ onBeforeUnmount(() => {
 });
 
 async function loadLocationNames(trip) {
-  async function reverseGeocode(lat, lng) {
-    try {
-      const response = await fetch(`https://photon.komoot.io/reverse?lat= ${lat}&lon=${lng}`);
-      const data = await response.json();
-      return data?.features[0]?.properties?.name || "Unknown";
-    } catch (err) {
-      return "Unknown";
-    }
-  }
-
   if (trip.startLat && trip.startLng && !trip.startLocationName) {
     trip.startLocationName = await reverseGeocode(trip.startLat, trip.startLng);
   }
   if (trip.endLat && trip.endLng && !trip.endLocationName) {
     trip.endLocationName = await reverseGeocode(trip.endLat, trip.endLng);
   }
-
   recentTrips.value = [...recentTrips.value];
 }
 
 async function reverseGeocode(lat, lng) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
+
   try {
-    const response = await fetch(`https://photon.komoot.io/reverse?lat= ${lat}&lon=${lng}`);
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat= ${lat}&lon=${lng}`,
+      {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'VigilERTApp/1.0'
+        }
+      }
+    );
+    clearTimeout(timeoutId);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
     const data = await response.json();
-    currentLocationName.value = data?.features[0]?.properties?.name || "Unknown Location";
+    return data.display_name || "Unknown Location";
   } catch (err) {
-    currentLocationName.value = "Unknown Location";
+    console.error("Reverse geocode error:", err.message);
+    return "Unknown Location";
   }
 }
 
