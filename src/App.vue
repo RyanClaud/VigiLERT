@@ -9,7 +9,6 @@
             </div>
             <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
               <router-link to="/dashboard" class="nav-link">Dashboard</router-link>
-              <router-link to="/trip-history" class="nav-link">Trip History</router-link>
               <router-link to="/emergency-contacts" class="nav-link">Emergency Contacts</router-link>
             </div>
           </div>

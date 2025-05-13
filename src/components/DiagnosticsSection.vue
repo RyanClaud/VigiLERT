@@ -43,8 +43,7 @@ const PARTS = [
   'Headlight',
   'Taillight',
   'Left Signal',
-  'Right Signal',
-  'Brake Light'
+  'Right Signal'
 ];
 
 const statusTextMap = {
@@ -100,7 +99,6 @@ function getLightIcon(name) {
     case 'Taillight': return TaillightIcon;
     case 'Left Signal': return LeftSignalIcon;
     case 'Right Signal': return RightSignalIcon;
-    case 'Brake Light': return BrakeLightIcon;
     default: return HeadlightIcon;
   }
 }

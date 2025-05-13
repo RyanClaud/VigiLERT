@@ -23,21 +23,23 @@ import { Bar } from 'vue-chartjs';
 import { Chart, BarElement, CategoryScale, LinearScale, Tooltip } from 'chart.js';
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip);
 
+import { ref, watch } from 'vue';
+
 const props = defineProps({
   speedData: Array,
   speedLimit: Number
 });
 
-const chartData = {
-  labels: Array.from({ length: props.speedData.length }, (_, i) => i - props.speedData.length + 1),
+const chartData = ref({
+  labels: [],
   datasets: [
     {
       label: 'Speed (kph)',
-      data: props.speedData,
-      backgroundColor: props.speedData.map(s => s > props.speedLimit ? '#f87171' : '#3b82f6')
+      data: [],
+      backgroundColor: []
     }
   ]
-};
+});
 
 const chartOptions = {
   responsive: true,
@@ -46,4 +48,17 @@ const chartOptions = {
     y: { beginAtZero: true, max: Math.max(...props.speedData, props.speedLimit) + 10 }
   }
 };
-</script> 
+
+watch(
+  () => props,
+  () => {
+    chartData.value.labels = Array.from({ length: props.speedData.length }, (_, i) => i - props.speedData.length + 1);
+    chartData.value.datasets[0].data = [...props.speedData];
+    chartData.value.datasets[0].backgroundColor = props.speedData.map(s =>
+      s > props.speedLimit ? '#f87171' : '#3b82f6'
+    );
+    chartOptions.scales.y.max = Math.max(...props.speedData, props.speedLimit) + 10;
+  },
+  { deep: true, immediate: true }
+);
+</script>

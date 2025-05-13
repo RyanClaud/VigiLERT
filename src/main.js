@@ -10,7 +10,7 @@ import './index.css';
 // 🔹 Leaflet Imports
 import 'leaflet/dist/leaflet.css';
 import * as L from 'leaflet';
-window.L = L; // Needed for some libraries
+window.L = L; 
 
 // PWA Service Worker
 import { registerSW } from 'virtual:pwa-register';
