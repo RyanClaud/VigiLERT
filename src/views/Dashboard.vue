@@ -21,11 +21,11 @@
         </span>
       </div>
     </div>
-
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
       <!-- Top Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+        <!-- Existing Cards -->
         <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
           <span class="material-icons text-3xl">Rider</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
@@ -41,13 +41,21 @@
           <span class="material-icons text-3xl">Warning</span>
           <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle" icon="alert" :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
         </div>
+
+        <!-- New Alcohol Detection Card -->
+        <div :class="[
+          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          alcoholStatus === 'Safe' ? 'bg-[#3D52A0] text-white' : 'bg-red-500 text-white'
+        ]">
+          <span class="material-icons text-3xl">Alcohol</span>
+          <DashboardCard title="Alcohol Detection" :value="alcoholStatus" :subtitle="alcoholSubtitle" icon="alcohol" :status="alcoholStatus === 'Safe' ? 'success' : 'danger'" />
+        </div>
       </div>
 
-      <!-- Tabs -->
+      <!-- Tabs and other sections remain unchanged -->
       <div class="mb-6">
         <TabGroup :tabs="['My Location', 'Speed Data', 'Diagnostics']" v-model="activeTab" class="bg-[#ADBBD4] rounded-lg p-2 flex flex-wrap gap-2" />
       </div>
-
       <!-- Tab Content -->
       <div v-if="activeTab === 'My Location'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
         <LocationSection :location="location" :user="user" />
@@ -58,7 +66,6 @@
       <div v-else-if="activeTab === 'Diagnostics'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
         <DiagnosticsSection :diagnostics="diagnostics" />
       </div>
-
       <!-- Recent Trips Preview -->
       <section class="mb-6">
         <h3 class="text-lg font-medium text-gray-800 mb-2">Recent Trips</h3>
@@ -90,7 +97,6 @@
           No trips found yet.
         </div>
       </section>
-
       <!-- Recent Alerts -->
       <section class="mt-8">
         <h3 class="font-semibold text-lg mb-2 text-[#6e7eb9] flex items-center gap-2">
@@ -101,7 +107,6 @@
         </div>
       </section>
     </main>
-
     <!-- Footer -->
     <footer class="bg-[#ADBBD4] text-center py-4 text-[#3D52A0] text-sm border-t mt-auto">
       © 2025 VIGILERT. All rights reserved.
@@ -126,7 +131,7 @@ import { nextTick } from 'vue';
 const authStore = useAuthStore();
 const activeTab = ref('Speed Data');
 
-// Dashboard state
+// Existing states
 const user = ref({ name: 'Loading...' });
 const location = ref({ lat: null, lng: null });
 const currentSpeed = ref(0);
@@ -140,7 +145,12 @@ const alertnessStatus = ref('Normal');
 const alertnessSubtitle = ref('No drowsiness detected');
 const currentLocationName = ref(null);
 const recentTrips = ref([]);
-const speedSubtitle = ref('Waiting for data...'); // ✅ Now declared correctly
+const speedSubtitle = ref('Waiting for data...'); 
+const alcoholAlertVisible = ref(false);
+
+// New state for Alcohol Detection
+const alcoholStatus = ref('Safe'); // Possible values: 'Safe', 'Caution', 'Danger'
+const alcoholSubtitle = ref('No alcohol detected');
 
 // Format lat/lng
 const formatLatLng = (lat, lng) => {
@@ -173,12 +183,12 @@ onMounted(() => {
   const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
   const helmetRef = dbRef(database, `helmet/${userId}`);
   const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
+  const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol`);
 
   helmetPublicListener = onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
     if (data && data.live) {
       const liveData = data.live;
-
       if (typeof liveData.locationLat === 'number' && typeof liveData.locationLng === 'number') {
         location.value = {
           lat: Number(liveData.locationLat),
@@ -186,14 +196,11 @@ onMounted(() => {
         };
         reverseGeocode(location.value.lat, location.value.lng);
       }
-
       const rawSpeed = parseFloat(liveData.speed) || 0;
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
-
       speedSubtitle.value = currentSpeed.value > speedLimit.value ? 'Over speed limit!' : 'Within speed limit';
-
       diagnostics.value = [
         { label: 'Headlight', value: liveData.headlight ? 'On' : 'Off' },
         { label: 'Taillight', value: liveData.taillight ? 'On' : 'Off' },
@@ -201,7 +208,6 @@ onMounted(() => {
         { label: 'Right Signal', value: liveData.rightSignal ? 'Blinking' : 'Off' },
         { label: 'Battery Voltage', value: `${parseFloat(liveData.batteryVoltage || 0).toFixed(2)} V` }
       ];
-
       if (currentSpeed.value > speedLimit.value) {
         alerts.value.unshift({
           type: 'danger',
@@ -215,42 +221,55 @@ onMounted(() => {
   });
 
   onValue(tripsRef, async (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const tripList = Object.entries(data).map(([id, trip]) => ({
+        id,
+        ...trip
+      }));
+      // Sort trips by timestamp in descending order (latest first)
+      tripList.sort((a, b) => {
+        const aTime = typeof a.timestamp === 'string' ? parseInt(a.timestamp) : a.timestamp;
+        const bTime = typeof b.timestamp === 'string' ? parseInt(b.timestamp) : b.timestamp;
+        // Handle invalid timestamps gracefully
+        if (isNaN(aTime) || isNaN(bTime)) {
+          console.warn("Invalid timestamp detected:", a, b);
+          return 0; // Keep original order for invalid timestamps
+        }
+        return bTime - aTime; // Descending order (latest first)
+      });
+      // Limit to the most recent 5 trips
+      recentTrips.value = tripList.slice(0, 5);
+      // Load location names for start and end locations
+      await Promise.all(recentTrips.value.map(loadLocationNames));
+    }
+  });
+
+  onValue(helmetRef, (snapshot) => {
   const data = snapshot.val();
   if (data) {
-    const tripList = Object.entries(data).map(([id, trip]) => ({
-      id,
-      ...trip
-    }));
+    riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
+    riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
+    alertnessStatus.value = data.alertnessStatus || 'Normal';
+    alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
 
-    // Sort trips by timestamp in descending order (latest first)
-    tripList.sort((a, b) => {
-      const aTime = typeof a.timestamp === 'string' ? parseInt(a.timestamp) : a.timestamp;
-      const bTime = typeof b.timestamp === 'string' ? parseInt(b.timestamp) : b.timestamp;
+    // Alcohol detection logic
+    alcoholStatus.value = data.alcoholLevel > 0.05 ? 'Danger' : 'Safe';
+    alcoholSubtitle.value = data.alcoholLevel > 0.05 
+      ? `Alcohol detected: ${data.alcoholLevel.toFixed(2)}%` 
+      : 'No alcohol detected';
 
-      // Handle invalid timestamps gracefully
-      if (isNaN(aTime) || isNaN(bTime)) {
-        console.warn("Invalid timestamp detected:", a, b);
-        return 0; // Keep original order for invalid timestamps
-      }
-
-      return bTime - aTime; // Descending order (latest first)
-    });
-
-    // Limit to the most recent 5 trips
-    recentTrips.value = tripList.slice(0, 5);
-
-    // Load location names for start and end locations
-    await Promise.all(recentTrips.value.map(loadLocationNames));
+    // Show alert if alcohol is above threshold
+    alcoholAlertVisible.value = data.alcoholLevel > 0.05;
   }
 });
 
-  onValue(helmetRef, (snapshot) => {
+  // Listen for alcohol data
+  onValue(alcoholRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
-      riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
-      alertnessStatus.value = data.alertnessStatus || 'Normal';
-      alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
+      alcoholStatus.value = data.status || 'Safe';
+      alcoholSubtitle.value = data.sensorValue > 1500 ? `Alcohol detected: ${data.sensorValue}` : 'No alcohol detected';
     }
   });
 });
@@ -261,19 +280,15 @@ function initLiveMap(lat, lng) {
     console.warn("Map container not found");
     return;
   }
-
   if (window.map) {
     window.map.setView([lat, lng], 13);
     window.map.invalidateSize();
     return;
   }
-
   window.map = L.map(mapElement).setView([lat, lng], 13);
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(window.map);
-
   L.marker([lat, lng]).addTo(window.map).bindPopup("Current Location").openPopup();
 }
 
@@ -309,7 +324,6 @@ async function loadLocationNames(trip) {
 async function reverseGeocode(lat, lng) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
-
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat= ${lat}&lon=${lng}`,
