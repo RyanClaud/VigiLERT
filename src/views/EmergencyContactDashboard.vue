@@ -1,33 +1,68 @@
 <template>
   <div class="min-h-screen flex flex-col bg-[#EDE8F5]">
-    <!-- User Greeting/Header -->
-    <div class="flex flex-col items-center justify-center py-4">
-      <div class="flex items-center gap-2 bg-[#7091E6] px-6 py-2 rounded-xl shadow text-white">
-    
+    <!-- Header -->
+    <div class="flex flex-col items-center justify-between py-4">
+      <div class="flex items-center gap-2 bg-[#7091E6] px-6 py-2 rounded-xl shadow text-white w-full justify-between">
         <span class="font-semibold text-lg">
           You are now viewing,
           <span v-if="authStore.user && authStore.user.displayName">{{ authStore.user.displayName }}</span>
           <span v-else-if="authStore.user && authStore.user.email">{{ authStore.user.email }}</span>
           <span v-else>Rider's Dashboard</span>
         </span>
+
+        <!-- Log Out Button -->
+        <button
+          @click="logout"
+          class="bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-1 rounded transition"
+        >
+          Log Out
+        </button>
       </div>
     </div>
 
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
       <!-- Top Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
-        <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4">
-          <span class="material-icons text-3xl">Rider</span>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-6">
+        <!-- Rider Status -->
+        <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
+          <span class="material-icons text-3xl">motorcycle</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
         </div>
-        <div class="bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4">
-          <span class="material-icons text-3xl">Speed</span>
+        <!-- Current Speed -->
+        <div class="bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
+          <span class="material-icons text-3xl">speed</span>
           <DashboardCard title="Current Speed" :value="currentSpeedText" :subtitle="speedSubtitle" icon="speed" status="info" />
         </div>
-        <div :class="['rounded-xl shadow-lg p-6 flex items-center gap-4', alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]' ]">
-          <span class="material-icons text-3xl">Warning</span>
+        <!-- Alertness -->
+        <div :class="[
+          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          alertnessStatus === 'Normal' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-[#3D52A0]'
+        ]">
+          <span class="material-icons text-3xl">warning</span>
           <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle" icon="alert" :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
+        </div>
+        <!-- Alcohol Detection -->
+        <div :class="[
+          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          alcoholStatus === 'Safe' ? 'bg-blue-600 text-white' : 'bg-red-500 text-white'
+        ]">
+          <span class="material-icons text-3xl">liquor</span>
+          <DashboardCard title="Alcohol Detected" :value="alcoholStatus" :subtitle="alcoholSubtitle" icon="alcohol" :status="alcoholStatus === 'Safe' ? 'success' : 'danger'" />
+        </div>
+        <!-- Crash Detection Card -->
+        <div :class="[
+          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          crashStatus === 'None' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+        ]">
+          <span class="material-icons text-3xl">crash</span>
+          <DashboardCard 
+            title="Crash Detected" 
+            :value="crashStatus" 
+            :subtitle="crashSubtitle" 
+            icon="crash" 
+            :status="crashStatus === 'None' ? 'success' : 'danger'" 
+          />
         </div>
       </div>
 
@@ -56,6 +91,16 @@
             <p><strong>From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</p>
             <p><strong>To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</p>
             <p><strong>Max Speed:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</p>
+
+            <!-- Navigate Button -->
+            <a
+              :href="getGoogleMapsLink(trip)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition"
+            >
+              Navigate
+            </a>
           </div>
         </div>
         <div v-else class="bg-white shadow-sm p-6 rounded-md text-center text-gray-500">
@@ -66,10 +111,23 @@
       <!-- Recent Alerts -->
       <section class="mt-8">
         <h3 class="font-semibold text-lg mb-2 text-[#6e7eb9] flex items-center gap-2">
-          <span class="material-icons text-xl">Notifications</span> Recent Alerts
+          <span class="material-icons text-xl">notifications</span> Recent Alerts
         </h3>
         <div class="bg-[#ffffff] rounded-lg shadow p-4">
           <RecentAlerts :alerts="alerts" />
+        </div>
+
+        <!-- Crash Event List -->
+        <div v-if="crashEvents.length > 0" class="mt-6">
+          <h3 class="font-semibold text-lg mb-2 text-red-600 flex items-center gap-2">
+            <span class="material-icons text-xl">warning</span> Recent Crash Events
+          </h3>
+          <ul class="bg-white shadow rounded-lg p-4 space-y-2">
+            <li v-for="(event, index) in crashEvents" :key="index" class="border-b pb-2 last:border-0">
+              <p class="font-medium text-sm text-gray-500">{{ formatDate(event.timestamp) }}</p>
+              <p class="text-sm">Impact: {{ event.impactStrength }} g | Location: {{ event.location }}</p>
+            </li>
+          </ul>
         </div>
       </section>
     </main>
@@ -86,6 +144,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
 import { ref as dbRef, onValue } from 'firebase/database';
+
+// Components
 import TabGroup from '../components/TabGroup.vue';
 import DashboardCard from '../components/DashboardCard.vue';
 import LocationSection from '../components/LocationSection.vue';
@@ -94,9 +154,9 @@ import DiagnosticsSection from '../components/DiagnosticsSection.vue';
 import RecentAlerts from '../components/RecentAlerts.vue';
 
 const authStore = useAuthStore();
-const activeTab = ref('Speed Data');
 
 // Dashboard state
+const activeTab = ref('Speed Data');
 const user = ref({ name: 'Loading...' });
 const location = ref({ lat: null, lng: null });
 const currentSpeed = ref(0);
@@ -108,8 +168,12 @@ const riderStatus = ref('Inactive');
 const riderSubtitle = ref('Helmet not connected');
 const alertnessStatus = ref('Normal');
 const alertnessSubtitle = ref('No drowsiness detected');
-const currentLocationName = ref(null);
 const recentTrips = ref([]);
+const crashStatus = ref('None');
+const crashSubtitle = ref('No crash detected');
+const crashEvents = ref([]);
+const alcoholStatus = ref('Safe');
+const alcoholSubtitle = ref('No alcohol detected');
 
 // Format lat/lng
 const formatLatLng = (lat, lng) => {
@@ -119,7 +183,7 @@ const formatLatLng = (lat, lng) => {
 // Unified Date Formatter
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Unknown Date';
-  let numTimestamp = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
+  const numTimestamp = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
   if (isNaN(numTimestamp)) return 'Invalid Date';
   const date = new Date(numTimestamp);
   if (isNaN(date.getTime())) return 'Invalid Date';
@@ -135,28 +199,37 @@ const formatDate = (timestamp) => {
 // Computed — formatted speed for display only
 const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
 
-onMounted(() => {
-  const userId = authStore.user?.uid || 'MnzBjTBslZNijOkq732PE91hHa23';
-  const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
+// Get Google Maps Navigation Link
+const getGoogleMapsLink = (trip) => {
+  const start = `${trip.startLat},${trip.startLng}`;
+  const end = `${trip.endLat},${trip.endLng}`;
+  return `https://www.google.com/maps/dir/?api=1&origin= ${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}`;
+};
 
-  // Listen to live helmet data
+// Firebase Listeners
+onMounted(() => {
+  const userId = authStore.user?.uid || 'MnzBjTBslZNijOkq732PE91hHa23'; // fallback UID
+  const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
+  const helmetRef = dbRef(database, `helmet/${userId}`);
+  const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
+  const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
+
+  // Live Helmet Public Data
   onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
-    if (data && data.live) {
+    if (data?.live) {
       const liveData = data.live;
       if (typeof liveData.locationLat === 'number' && typeof liveData.locationLng === 'number') {
         location.value = {
           lat: Number(liveData.locationLat),
           lng: Number(liveData.locationLng)
         };
-        reverseGeocode(location.value.lat, location.value.lng);
       }
 
       const rawSpeed = parseFloat(liveData.speed) || 0;
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
-
       speedSubtitle.value = currentSpeed.value > speedLimit.value ? 'Over speed limit!' : 'Within speed limit';
 
       diagnostics.value = [
@@ -179,8 +252,23 @@ onMounted(() => {
     }
   });
 
-  // Load recent trips
-  const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
+  // Helmet-specific Data
+  onValue(helmetRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
+      riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
+      alertnessStatus.value = data.alertnessStatus || 'Normal';
+      alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
+
+      alcoholStatus.value = data.alcoholLevel > 0.05 ? 'Danger' : 'Safe';
+      alcoholSubtitle.value = alcoholStatus.value === 'Danger'
+        ? `Alcohol detected: ${data.alcoholLevel.toFixed(2)}%`
+        : 'No alcohol detected';
+    }
+  });
+
+  // Trip Data
   onValue(tripsRef, async (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -198,18 +286,33 @@ onMounted(() => {
     }
   });
 
-  const helmetRef = dbRef(database, `helmet/${userId}`);
-  onValue(helmetRef, (snapshot) => {
+  // Crash Events
+  onValue(crashRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
-      riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
-      alertnessStatus.value = data.alertnessStatus || 'Normal';
-      alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
+      const crashList = Object.values(data);
+      if (crashList.length > 0) {
+        crashEvents.value = crashList.map((event) => ({
+          timestamp: event.timestamp,
+          impactStrength: event.impactStrength || 0,
+          location: formatLatLng(event.lat, event.lng)
+        }));
+        crashStatus.value = 'High';
+        crashSubtitle.value = 'Recent crash detected!';
+      } else {
+        crashStatus.value = 'None';
+        crashSubtitle.value = 'No crash detected';
+        crashEvents.value = [];
+      }
+    } else {
+      crashStatus.value = 'None';
+      crashSubtitle.value = 'No crash detected';
+      crashEvents.value = [];
     }
   });
 });
 
+// Reverse Geocode Helper
 async function loadLocationNames(trip) {
   async function reverseGeocode(lat, lng) {
     try {
@@ -230,13 +333,24 @@ async function loadLocationNames(trip) {
   recentTrips.value = [...recentTrips.value];
 }
 
-async function reverseGeocode(lat, lng) {
+// Logout Function
+const logout = async () => {
+  const userId = authStore.user?.uid;
+  if (!userId) return;
+
   try {
-    const response = await fetch(`https://photon.komoot.io/reverse?lat= ${lat}&lon=${lng}`);
-    const data = await response.json();
-    currentLocationName.value = data?.features[0]?.properties?.name || "Unknown Location";
-  } catch (err) {
-    currentLocationName.value = "Unknown Location";
+    const auth = getAuth();
+    await signOut(auth);
+
+    const authStore = useAuthStore();
+    if (authStore && authStore.logout) {
+      authStore.logout(); // Clear local store if available
+    }
+
+    router.push('/emergency-login'); // Redirect to login page
+  } catch (error) {
+    console.error("Error signing out:", error.message);
+    alert("Failed to log out. Please try again.");
   }
-}
+};
 </script>

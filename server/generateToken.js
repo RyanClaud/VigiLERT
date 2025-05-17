@@ -7,7 +7,7 @@ admin.initializeApp({
 });
 
 // Generate a custom token for the Arduino device
-const uid = "MnzBjTBslZNijOkq732PE91hHa23"; // Replace with the user's UID
+const uid = "MnzBjTBslZNijOkq732PE91hHa23"; //UID
 admin.auth().createCustomToken(uid)
   .then((customToken) => {
     console.log("Custom Token:", customToken);

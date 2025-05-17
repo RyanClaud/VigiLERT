@@ -46,7 +46,7 @@ const router = useRouter();
 const normalizePhoneNumber = (phoneNumber) => {
   const cleaned = phoneNumber.replace(/\D/g, ''); 
   if (cleaned.startsWith('0')) {
-    return '+63' + cleaned.slice(1); // Replace leading '0' with '+63'
+    return '+63' + cleaned.slice(1); // Mobile number starts with '+63'
   }
   if (!cleaned.startsWith('+')) {
     return '+' + cleaned; // Add '+' if not present
