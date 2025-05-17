@@ -42,6 +42,7 @@ const routes = [
     name: 'EmergencyContactLogin',
     component: () => import('../views/EmergencyContactLogin.vue')
   },
+
   {
     path: '/emergency-dashboard/:userId',
     name: 'EmergencyContactDashboard',

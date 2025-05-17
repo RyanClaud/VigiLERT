@@ -82,15 +82,23 @@
         <DiagnosticsSection :diagnostics="diagnostics" />
       </div>
 
-      <h3 class="font-semibold text-lg mb-2 text-[rgb(8,8,8)] flex items-center gap-2">
-        <span class="material-icons text-xl">Notifications</span> Recent Alerts
+      <!-- Recent Alerts -->
+      <h3 class="font-semibold text-lg mb-2 text-[rgb(8,8,8)] flex items-center justify-between">
+        <span class="flex items-center gap-2">
+          <span class="material-icons text-xl">Notifications</span> Recent Alerts
+        </span>
+        <button
+          @click="toggleAlerts"
+          class="text-sm font-medium text-blue-600 hover:text-blue-800 transition"
+        >
+          {{ showAlerts ? 'Hide Alerts' : 'Show Alerts' }}
+        </button>
       </h3>
-      <div class="bg-[#ffffff] rounded-lg shadow p-4">
+      <div v-if="showAlerts" class="bg-[#ffffff] rounded-lg shadow p-4">
         <RecentAlerts 
-  :alerts="alerts" 
-  :crash-events="crashEvents"
-  @delete="handleDeleteAlert"
-/>
+          :alerts="alerts" 
+          :crash-events="crashEvents"
+        />
       </div>
 
       <!-- Recent Trips Preview -->
@@ -159,7 +167,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, onValue, remove } from 'firebase/database';
+import { ref as dbRef, onValue } from 'firebase/database';
 import TabGroup from '../components/TabGroup.vue';
 import DashboardCard from '../components/DashboardCard.vue';
 import LocationSection from '../components/LocationSection.vue';
@@ -187,10 +195,17 @@ const user = ref({ name: 'Loading...' });
 const recentTrips = ref([]);
 const crashEvents = ref([]);
 
+// New State: Show or hide alerts
+const showAlerts = ref(true);
+
+// Toggle alerts visibility
+const toggleAlerts = () => {
+  showAlerts.value = !showAlerts.value;
+};
+
 // Crash Detection States
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
 const crashDisplayMessage = ref('Vehicle Stable');
-
 let crashInterval = null;
 let flashCount = 0;
 
@@ -198,9 +213,7 @@ let flashCount = 0;
 const formatLatLng = (lat, lng) => {
   return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
 };
-
 const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
-
 const getGoogleMapsLink = (lat, lng) => {
   const coords = `${lat},${lng}`;
   return `https://www.google.com/maps/dir/?api=1&destination= ${encodeURIComponent(coords)}`;
@@ -219,7 +232,6 @@ const flashCrashMessage = () => {
   crashDisplayStatus.value = 'Alerting';
   crashDisplayMessage.value = 'Crash Detected';
   playSound();
-
   crashInterval = setInterval(() => {
     if (flashCount >= 3) {
       clearInterval(crashInterval);
@@ -227,7 +239,6 @@ const flashCrashMessage = () => {
       crashDisplayMessage.value = 'Vehicle Stable';
       return;
     }
-
     crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
     flashCount++;
   }, 2000); // Toggle every 2 seconds
@@ -286,7 +297,6 @@ onMounted(() => {
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
-
       if (currentSpeed.value > speedLimit.value) {
         alerts.value.unshift({
           type: 'danger',
@@ -312,7 +322,6 @@ onMounted(() => {
       alcoholSubtitle.value = alcoholStatus.value === 'Danger'
         ? `Alcohol detected: ${data.alcoholLevel.toFixed(2)}%`
         : 'No alcohol detected';
-
       if (alertnessStatus.value !== 'Normal' || alcoholStatus.value === 'Danger') {
         playSound();
       }

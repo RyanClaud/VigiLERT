@@ -1,15 +1,17 @@
 <template>
   <div class="bg-[#EDE8F5] shadow rounded-xl p-6">
-    <ul class="divide-y divide-[#ADBBD4]">
-      <!-- Existing alerts -->
+    <!-- Scrollable Alert List -->
+    <ul class="divide-y divide-[#ADBBD4] space-y-2">
+      <!-- Loop Through Alerts -->
       <li 
-        v-for="(alert, i) in combinedAlerts" 
-        :key="i" 
-        class="py-4 flex items-start space-x-4 justify-between group transition hover:bg-[#ADBBD4]/40 rounded-lg"
+        v-for="(alert, index) in alerts" 
+        :key="index" 
+        class="py-3 flex items-start justify-between group bg-white p-3 rounded-lg shadow-sm hover:shadow-md transition"
       >
+        <!-- Left Side - Icon + Message -->
         <div class="flex items-start space-x-4">
-          <span>
-            <!-- Icons -->
+          <!-- Alert Type Icon -->
+          <span class="flex-shrink-0">
             <svg v-if="alert.type === 'speed'" class="h-6 w-6 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <circle cx="12" cy="12" r="10" stroke-width="2" />
               <path d="M12 8v4m0 4h.01" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -26,27 +28,45 @@
               <circle cx="12" cy="12" r="10" stroke-width="2" />
             </svg>
           </span>
+
+          <!-- Alert Text -->
           <div class="flex-1">
-            <div class="font-semibold text-[#3D52A0]">{{ alert.message }}</div>
-            <div class="text-xs text-[#7091E6]">{{ alert.details }}</div>
-            <div v-if="alert.extra" class="text-xs text-red-600 font-medium mt-1">{{ alert.extra }}</div>
+            <p class="font-semibold text-[#3D52A0]">{{ alert.message }}</p>
+            <p class="text-xs text-[#7091E6]">{{ alert.details }}</p>
+            <p v-if="alert.time" class="text-xs text-gray-400 mt-1">{{ alert.time }}</p>
           </div>
         </div>
 
-        <div class="flex flex-col items-end">
-          <div class="text-xs text-[#ADBBD4] whitespace-nowrap">
-            {{ formatDate(alert.timestamp) }}
-          </div>
-          <!-- Delete Button -->
-          <button 
-            @click="$emit('delete', i)"
-            class="mt-1 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
-            title="Delete Alert"
-          >
-            <span class="material-icons">delete</span>
-          </button>
-        </div>
+        <!-- Right Side - Delete Button -->
+        <button 
+          @click="$emit('delete', index)" 
+          class="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Delete Alert"
+        >
+          <span class="material-icons">delete</span>
+        </button>
       </li>
     </ul>
   </div>
 </template>
+
+<script setup>
+// Define Props
+const props = defineProps({
+  alerts: {
+    type: Array,
+    required: true,
+    default: () => []
+  }
+});
+
+// Emit delete event
+defineEmits(['delete']);
+</script>
+
+<style scoped>
+/* Optional custom styles for better spacing */
+.material-icons {
+  font-size: 18px;
+}
+</style>
