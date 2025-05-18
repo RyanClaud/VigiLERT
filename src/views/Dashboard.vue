@@ -188,7 +188,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue } from 'firebase/database'; 
+import { ref as dbRef, set, onValue } from 'firebase/database'; // Import set for writing
 import TabGroup from '../components/TabGroup.vue';
 import DashboardCard from '../components/DashboardCard.vue';
 import LocationSection from '../components/LocationSection.vue';
@@ -198,7 +198,7 @@ import RecentAlerts from '../components/RecentAlerts.vue';
 
 const authStore = useAuthStore();
 
-// Existing States
+// States
 const riderStatus = ref('Inactive');
 const riderSubtitle = ref('Helmet not connected');
 const alertnessStatus = ref('Normal');
@@ -216,13 +216,11 @@ const user = ref({ name: 'Loading...' });
 const recentTrips = ref([]);
 const crashEvents = ref([]);
 
-// New State: Show or hide alerts
-const showAlerts = ref(true);
-
-// Track over-speed state
+// New state for over-speed detection
 const isOverSpeed = ref(false);
 
-// Toggle alerts visibility
+// Show or hide alerts
+const showAlerts = ref(true);
 const toggleAlerts = () => {
   showAlerts.value = !showAlerts.value;
 };
@@ -274,7 +272,7 @@ const flashCrashMessage = () => {
 };
 
 // Firebase References
-const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // UID
+const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Replace with dynamic UID if needed
 const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
 const helmetRef = dbRef(database, `helmet/${userId}`);
 const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
@@ -308,7 +306,7 @@ onMounted(() => {
     }
   });
 
-  // Alcohol listener (unchanged)
+  // Alcohol listener
   onValue(alcoholRef, (snapshot) => {
     const data = snapshot.val();
     if (data && data.status === "Danger") {
@@ -327,7 +325,7 @@ onMounted(() => {
     }
   });
 
-  // Helmet Public Listener (updated to track over-speed state)
+  // Helmet Public Listener
   onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
     if (data?.live) {
@@ -341,7 +339,7 @@ onMounted(() => {
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
 
-      // Update over-speed state
+      // Update over-speed flag
       isOverSpeed.value = currentSpeed.value > speedLimit.value;
 
       if (isOverSpeed.value) {
@@ -357,7 +355,37 @@ onMounted(() => {
     }
   });
 
-  // Other listeners unchanged...
+  // Helmet-specific data
+  onValue(helmetRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
+      riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
+      alertnessStatus.value = data.alertnessStatus || 'Normal';
+      alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
+      alcoholStatus.value = data.alcoholLevel > 0.05 ? 'Danger' : 'Safe';
+      alcoholSubtitle.value = alcoholStatus.value === 'Danger'
+        ? `Alcohol detected: ${data.alcoholLevel.toFixed(2)}%`
+        : 'No alcohol detected';
+      if (alertnessStatus.value !== 'Normal' || alcoholStatus.value === 'Danger') {
+        playSound();
+      }
+    }
+  });
+
+  // Trip data
+  onValue(tripsRef, async (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const tripList = Object.entries(data).map(([id, trip]) => ({ id, ...trip }));
+      tripList.sort((a, b) => {
+        const aTime = typeof a.startTime === 'string' ? parseInt(a.startTime) : a.startTime;
+        const bTime = typeof b.startTime === 'string' ? parseInt(b.startTime) : b.startTime;
+        return bTime - aTime;
+      });
+      recentTrips.value = tripList.slice(0, 5);
+    }
+  });
 });
 
 // Push updated speed limit to Firebase
