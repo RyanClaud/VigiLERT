@@ -3,9 +3,7 @@
     <!-- Header -->
     <div class="flex flex-col items-center justify-between py-4">
       <div class="flex items-center gap-2 bg-[#7091E6] px-6 py-2 rounded-xl shadow text-white w-full justify-between">
-        <span class="font-semibold text-lg">
-          Emergency Contact Dashboard
-        </span>
+        <span class="font-semibold text-lg">Emergency Contact Dashboard</span>
         <!-- Log Out Button -->
         <button
           @click="logout"
@@ -21,18 +19,18 @@
       <!-- Top Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-6">
         <!-- Rider Status -->
-        <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
-          <span class="material-icons text-3xl">Person</span>
+        <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4">
+          <span class="material-icons text-3xl">Rider</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
         </div>
         <!-- Current Speed -->
-        <div class="bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
+        <div class="bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4">
           <span class="material-icons text-3xl">Speed</span>
           <DashboardCard title="Current Speed" :value="currentSpeedText" :subtitle="speedSubtitle" icon="speed" status="info" />
         </div>
         <!-- Alertness -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          'rounded-xl shadow-lg p-6 flex items-center gap-4',
           alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]'
         ]">
           <span class="material-icons text-3xl">Warning</span>
@@ -40,7 +38,7 @@
         </div>
         <!-- Alcohol Detection -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          'rounded-xl shadow-lg p-6 flex items-center gap-4',
           alcoholStatus === 'Safe' ? 'bg-[#3D52A0] text-white' : 'bg-red-500 text-white'
         ]">
           <span class="material-icons text-3xl">Liquor</span>
@@ -48,7 +46,7 @@
         </div>
         <!-- Crash Detection Card -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
+          'rounded-xl shadow-lg p-6 flex items-center gap-4',
           crashDisplayStatus === 'Stable' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
         ]">
           <span class="material-icons text-3xl">Vehicle</span>
@@ -71,7 +69,7 @@
         <LocationSection :location="location" :user="user" />
       </div>
       <div v-else-if="activeTab === 'Speed Data'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <SpeedDataSection :speedData="speedHistory" :speedLimit="speedLimit" />
+        <SpeedDataSection :speedData="speedHistory" :speedLimit="speedLimit" :isOverSpeed="isOverSpeed" />
       </div>
       <div v-else-if="activeTab === 'Diagnostics'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
         <DiagnosticsSection :diagnostics="diagnostics" />
@@ -84,26 +82,23 @@
       <div class="bg-[#ffffff] rounded-lg shadow p-4">
         <RecentAlerts 
           :alerts="alerts" 
-          :user-id="userId"
-          @delete="handleDeleteAlert"
+          :crash-events="crashEvents"
         />
       </div>
 
       <!-- Recent Trips Preview -->
-      <section class="mb-6">
+      <section class="mb-6 mt-6">
         <h3 class="text-lg font-medium text-gray-800 mb-2">Recent Trips</h3>
         <div v-if="recentTrips.length > 0" class="space-y-4 max-h-64 overflow-y-auto bg-white shadow-sm p-4 rounded-md">
           <div v-for="trip in recentTrips" :key="trip.id" class="py-2 border-b last:border-b-0">
-            <p class="text-sm text-gray-500">Routes</p>
             <p><strong>From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</p>
             <p><strong>To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</p>
             <p><strong>Max Speed:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</p>
-            <p v-if="trip.distance"><strong>Distance:</strong> {{ trip.distance }}</p>
             <a
               :href="getGoogleMapsLink(trip)"
               target="_blank"
               rel="noopener noreferrer"
-              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition"
+              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition mr-2"
             >
               Navigate
             </a>
@@ -132,12 +127,6 @@
               >
                 See Location
               </a>
-              <button
-                @click="deleteCrashEvent(index)"
-                class="inline-block mt-2 ml-2 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition"
-              >
-                Delete
-              </button>
             </div>
           </div>
         </div>
@@ -154,8 +143,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, onValue, remove } from 'firebase/database';
+import { ref as dbRef, onValue } from 'firebase/database';
+
+// Components
 import TabGroup from '../components/TabGroup.vue';
 import DashboardCard from '../components/DashboardCard.vue';
 import LocationSection from '../components/LocationSection.vue';
@@ -164,6 +156,7 @@ import DiagnosticsSection from '../components/DiagnosticsSection.vue';
 import RecentAlerts from '../components/RecentAlerts.vue';
 
 const router = useRouter();
+const authStore = useAuthStore();
 
 // States
 const riderStatus = ref('Inactive');
@@ -174,7 +167,7 @@ const alcoholStatus = ref('Safe');
 const alcoholSubtitle = ref('No alcohol detected');
 const currentSpeed = ref(0);
 const speedHistory = ref([]);
-const speedLimit = ref(90);
+const speedLimit = ref(90); // Default value
 const diagnostics = ref([]);
 const alerts = ref([]);
 const activeTab = ref('Speed Data');
@@ -182,69 +175,45 @@ const location = ref({ lat: null, lng: null });
 const user = ref({ name: 'Loading...' });
 const recentTrips = ref([]);
 const crashEvents = ref([]);
+const acknowledgedCrashes = ref([]);
 
-// Crash Detection States
+// Crash Detection UI
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
 const crashDisplayMessage = ref('Vehicle Stable');
 let crashInterval = null;
 let flashCount = 0;
 
-// Helpers
-const formatLatLng = (lat, lng) => {
-  return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
-};
+// Track last known crash timestamp to avoid false alarms
+let lastCrashTimestamp = null;
 
-const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
-
-const getGoogleMapsLink = (lat, lng) => {
-  const coords = `${lat},${lng}`;
-  return `https://www.google.com/maps/dir/?api=1&destination= ${encodeURIComponent(coords)}`;
-};
-
-// Play alert sound
-const playSound = () => {
-  const audio = new Audio('/sounds/alert.mp3');
-  audio.play().catch(err => console.warn("Audio playback failed:", err));
-};
-
-// Flash Crash Message
-const flashCrashMessage = () => {
-  clearInterval(crashInterval);
-  flashCount = 0;
-  crashDisplayStatus.value = 'Alerting';
-  crashDisplayMessage.value = 'Crash Detected';
-  playSound();
-  crashInterval = setInterval(() => {
-    if (flashCount >= 3) {
-      clearInterval(crashInterval);
-      crashDisplayStatus.value = 'Stable';
-      crashDisplayMessage.value = 'Vehicle Stable';
-      return;
-    }
-    crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
-    flashCount++;
-  }, 2000); // Toggle every 2 seconds
-};
-
-// Firebase References
-const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Replace with dynamic UID if needed
-const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
-const helmetRef = dbRef(database, `helmet/${userId}`);
-const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
-const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
-const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol`);
-const alertRef = dbRef(database, `alerts/${userId}`);
-
-// Firebase Listeners
 onMounted(() => {
-  // Crash listener
+  const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
+  if (storedLastCrashTime) {
+    lastCrashTimestamp = parseInt(storedLastCrashTime);
+  }
+
+  // Firebase References
+  const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
+  const helmetRef = dbRef(database, `helmet/${userId}`);
+  const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
+  const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
+  const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol`);
+
+  // Crash listener - Only trigger on new crash events
   onValue(crashRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      const crashList = Object.values(data);
-      if (crashList.some(e => e.impactStrength >= 1.5)) {
-        flashCrashMessage(); // Trigger flash alert
-      }
+      Object.values(data).forEach(event => {
+        const eventTime = event.timestamp;
+        if (
+          event.impactStrength >= 1.5 &&
+          eventTime > (lastCrashTimestamp || 0)
+        ) {
+          lastCrashTimestamp = eventTime;
+          localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
+          flashCrashMessage();
+        }
+      });
     }
   });
 
@@ -280,7 +249,8 @@ onMounted(() => {
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
-      if (currentSpeed.value > speedLimit.value) {
+      isOverSpeed.value = currentSpeed.value > speedLimit.value;
+      if (isOverSpeed.value) {
         alerts.value.unshift({
           type: 'danger',
           message: 'Speed Limit Exceeded',
@@ -324,32 +294,69 @@ onMounted(() => {
       recentTrips.value = tripList.slice(0, 5);
     }
   });
-
-  // Alerts Listener
-  onValue(alertRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      alerts.value = Object.entries(data).map(([key, value]) => ({
-        id: key,
-        ...value
-      }));
-    } else {
-      alerts.value = [];
-    }
-  });
 });
 
-// Handle alert deletion
-const handleDeleteAlert = (alertId) => {
-  const alertPath = `alerts/${userId}/${alertId}`;
-  const alertDbRef = dbRef(database, alertPath);
-  remove(alertDbRef).catch((err) => {
-    console.error("Failed to delete alert", err);
-  });
+// Helpers
+const userId = 'MnzBjTBslZNijOkq732PE91hHa23';
+const formatLatLng = (lat, lng) => {
+  return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
+};
+
+const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
+
+const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
+  let startLat, startLng, endLat, endLng;
+  if (lng === undefined) {
+    startLat = parseFloat(tripOrLat.startLat);
+    startLng = parseFloat(tripOrLat.startLng);
+    endLat = parseFloat(tripOrLat.endLat);
+    endLng = parseFloat(tripOrLat.endLng);
+  } else {
+    startLat = parseFloat(tripOrLat);
+    startLng = parseFloat(lng);
+    endLat = startLat;
+    endLng = startLng;
+  }
+  const isValidCoord = (lat, lng) =>
+    lat !== undefined &&
+    lng !== undefined &&
+    !isNaN(lat) &&
+    !isNaN(lng);
+  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps ';
+  if (endLat === undefined || isNaN(endLat)) endLat = startLat;
+  if (endLng === undefined || isNaN(endLng)) endLng = startLng;
+  const zoomLevel = 14;
+  return `https://www.google.com/maps/dir/?api=1&origin= ${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
+};
+
+// Play alert sound
+const playSound = () => {
+  const audio = new Audio('/sounds/alert.mp3');
+  audio.play().catch(err => console.warn("Audio playback failed:", err));
+};
+
+// Flash Crash Message
+const flashCrashMessage = () => {
+  clearInterval(crashInterval);
+  flashCount = 0;
+  crashDisplayStatus.value = 'Alerting';
+  crashDisplayMessage.value = 'Crash Detected';
+  playSound();
+  crashInterval = setInterval(() => {
+    if (flashCount >= 3) {
+      clearInterval(crashInterval);
+      crashDisplayStatus.value = 'Stable';
+      crashDisplayMessage.value = 'Vehicle Stable';
+      return;
+    }
+    crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
+    flashCount++;
+  }, 2000);
 };
 
 // Logout function
 const logout = () => {
+  authStore.logout(); // Optional: clear session
   router.push({ name: 'EmergencyContactLogin' });
 };
 </script>

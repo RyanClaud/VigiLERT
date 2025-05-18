@@ -27,7 +27,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-6">
         <!-- Rider Status -->
         <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
-          <span class="material-icons text-3xl">Person</span>
+          <span class="material-icons text-3xl">Rider</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
         </div>
         <!-- Current Speed -->
@@ -67,10 +67,10 @@
       </div>
 
       <!-- Speed Limit Control -->
-      <div class="bg-white rounded-lg shadow p-4 mb-6 mx-4 md:mx-8">
+      <div class="bg-yellow-400 rounded-lg shadow p-4 mb-8 mx-2 md:mx-8">
         <div class="flex justify-between items-center">
           <label for="speed-limit" class="font-medium text-gray-700">Set Speed Limit</label>
-          <span class="text-xl font-bold text-[#3D52A0]">{{ speedLimit }} km/h</span>
+          <span class="text-xl font-bold text-[#0c0c0c]">{{ speedLimit }} km/h</span>
         </div>
         <input
           type="range"
@@ -79,9 +79,9 @@
           step="5"
           v-model.number="speedLimit"
           @change="updateSpeedLimitInFirebase"
-          class="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-[#3D52A0]"
+          class="w-full h- bg-blue-00 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring accent-[#2701fd]"
         />
-        <div class="flex justify-between mt-1 text-xs text-gray-500">
+        <div class="flex justify-between mt-1 text-xs text-gray-900">
           <span>1 km/h</span>
           <span>120 km/h</span>
         </div>
@@ -131,15 +131,20 @@
             <p><strong>From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</p>
             <p><strong>To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</p>
             <p><strong>Max Speed:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</p>
-            <p v-if="trip.distance"><strong>Distance:</strong> {{ trip.distance }}</p>
             <a
               :href="getGoogleMapsLink(trip)"
               target="_blank"
               rel="noopener noreferrer"
-              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition"
+              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition mr-2"
             >
               Navigate
             </a>
+            <button
+              @click="deleteTrip(trip.id)"
+              class="inline-block mt-2 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition"
+            >
+              Delete
+            </button>
           </div>
         </div>
         <div v-else class="bg-white shadow-sm p-6 rounded-md text-center text-gray-500">
@@ -171,6 +176,14 @@
               >
                 Delete
               </button>
+              <!-- Clear Crash Button -->
+              <button
+                @click="clearCrashAlert(index)"
+                v-if="isCrashActive(index)"
+                class="inline-block mt-2 ml-2 px-3 py-1 bg-gray-600 text-white text-sm font-medium rounded hover:bg-gray-700 transition"
+              >
+                Clear Crash
+              </button>
             </div>
           </div>
         </div>
@@ -188,7 +201,9 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue } from 'firebase/database'; // Import set for writing
+import { ref as dbRef, set, onValue, remove } from 'firebase/database';
+
+// Components
 import TabGroup from '../components/TabGroup.vue';
 import DashboardCard from '../components/DashboardCard.vue';
 import LocationSection from '../components/LocationSection.vue';
@@ -215,6 +230,7 @@ const location = ref({ lat: null, lng: null });
 const user = ref({ name: 'Loading...' });
 const recentTrips = ref([]);
 const crashEvents = ref([]);
+const acknowledgedCrashes = ref([]);
 
 // New state for over-speed detection
 const isOverSpeed = ref(false);
@@ -225,7 +241,7 @@ const toggleAlerts = () => {
   showAlerts.value = !showAlerts.value;
 };
 
-// Crash Detection States
+// Crash Detection UI
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
 const crashDisplayMessage = ref('Vehicle Stable');
 let crashInterval = null;
@@ -234,16 +250,43 @@ let flashCount = 0;
 // Track last known crash timestamp to avoid false alarms
 let lastCrashTimestamp = null;
 
+// Load last crash timestamp from localStorage
+onMounted(() => {
+  const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
+  if (storedLastCrashTime) {
+    lastCrashTimestamp = parseInt(storedLastCrashTime);
+  }
+});
+
 // Helpers
+const userId = 'MnzBjTBslZNijOkq732PE91hHa23';
 const formatLatLng = (lat, lng) => {
   return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
 };
-
 const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
-
-const getGoogleMapsLink = (lat, lng) => {
-  const coords = `${lat},${lng}`;
-  return `https://www.google.com/maps/dir/?api=1&destination= ${encodeURIComponent(coords)}`;
+const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
+  let startLat, startLng, endLat, endLng;
+  if (lng === undefined) {
+    startLat = parseFloat(tripOrLat.startLat);
+    startLng = parseFloat(tripOrLat.startLng);
+    endLat = parseFloat(tripOrLat.endLat);
+    endLng = parseFloat(tripOrLat.endLng);
+  } else {
+    startLat = parseFloat(tripOrLat);
+    startLng = parseFloat(lng);
+    endLat = startLat;
+    endLng = startLng;
+  }
+  const isValidCoord = (lat, lng) =>
+    lat !== undefined &&
+    lng !== undefined &&
+    !isNaN(lat) &&
+    !isNaN(lng);
+  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps  ';
+  if (endLat === undefined || isNaN(endLat)) endLat = startLat;
+  if (endLng === undefined || isNaN(endLng)) endLng = startLng;
+  const zoomLevel = 14;
+  return `https://www.google.com/maps/dir/?api=1&origin=  ${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
 };
 
 // Play alert sound
@@ -268,11 +311,10 @@ const flashCrashMessage = () => {
     }
     crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
     flashCount++;
-  }, 2000); // Toggle every 2 seconds
+  }, 2000);
 };
 
 // Firebase References
-const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Replace with dynamic UID if needed
 const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
 const helmetRef = dbRef(database, `helmet/${userId}`);
 const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
@@ -294,13 +336,14 @@ onMounted(() => {
     const data = snapshot.val();
     if (data) {
       Object.values(data).forEach(event => {
-        const eventTime = event.timestamp; // Ensure each crash has a timestamp field
+        const eventTime = event.timestamp;
         if (
           event.impactStrength >= 1.5 &&
-          eventTime !== lastCrashTimestamp
+          eventTime > (lastCrashTimestamp || 0)
         ) {
           lastCrashTimestamp = eventTime;
-          flashCrashMessage(); // Only triggers on new crashes
+          localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
+          flashCrashMessage();
         }
       });
     }
@@ -338,10 +381,7 @@ onMounted(() => {
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
-
-      // Update over-speed flag
       isOverSpeed.value = currentSpeed.value > speedLimit.value;
-
       if (isOverSpeed.value) {
         alerts.value.unshift({
           type: 'danger',
@@ -388,10 +428,46 @@ onMounted(() => {
   });
 });
 
-// Push updated speed limit to Firebase
+// Update speed limit in Firebase
 const updateSpeedLimitInFirebase = () => {
-  set(speedLimitRef, speedLimit.value).catch((error) => {
+  set(speedLimitRef, speedLimit.value).catch(error => {
     console.error("Failed to update speed limit:", error);
   });
+};
+
+// Delete a trip by ID
+const deleteTrip = async (tripId) => {
+  const confirmDelete = confirm("Are you sure you want to delete this trip?");
+  if (!confirmDelete) return;
+  const tripRef = dbRef(database, `helmet_public/${userId}/trips/${tripId}`);
+  try {
+    await remove(tripRef);
+    recentTrips.value = recentTrips.value.filter(trip => trip.id !== tripId);
+  } catch (error) {
+    console.error("Failed to delete trip:", error);
+    alert("Failed to delete trip.");
+  }
+};
+
+// Determine if crash alert should be shown
+const isCrashActive = (index) => {
+  const event = crashEvents.value[index];
+  return event && event.timestamp > lastCrashTimestamp;
+};
+
+// Clear crash alert manually
+const clearCrashAlert = (index) => {
+  const event = crashEvents.value[index];
+  if (event && event.timestamp > lastCrashTimestamp) {
+    lastCrashTimestamp = event.timestamp;
+    localStorage.setItem(`lastCrashTimestamp_${userId}`, event.timestamp.toString());
+    crashDisplayStatus.value = 'Stable';
+    crashDisplayMessage.value = 'Vehicle Stable';
+  }
+};
+
+// Delete Crash Event
+const deleteCrashEvent = (index) => {
+  crashEvents.value.splice(index, 1);
 };
 </script>
