@@ -51,7 +51,7 @@
           'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
           crashDisplayStatus === 'Stable' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
         ]">
-          <span class="material-icons text-3xl">Crash</span>
+          <span class="material-icons text-3xl">Vehicle</span>
           <DashboardCard 
             title="Crash Status" 
             :value="crashDisplayMessage" 
