@@ -27,7 +27,6 @@
           <span class="material-icons text-3xl">Rider</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
         </div>
-
         <!-- Current Speed -->
         <div :class="[
           'bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
@@ -36,7 +35,6 @@
           <span class="material-icons text-3xl">Speed</span>
           <DashboardCard title="Current Speed" :value="currentSpeedText" :subtitle="speedSubtitle" icon="speed" status="info" />
         </div>
-
         <!-- Alertness -->
         <div :class="[
           'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
@@ -46,7 +44,6 @@
           <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle"
             :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
         </div>
-
         <!-- Alcohol Detection -->
         <div :class="[
           'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
@@ -56,7 +53,6 @@
           <DashboardCard title="Alcohol Detection" :value="alcoholStatus" :subtitle="alcoholSubtitle"
             :status="alcoholStatus === 'Safe' ? 'success' : 'danger'" />
         </div>
-
         <!-- Crash Detection Card -->
         <div :class="[
           'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
@@ -94,7 +90,11 @@
         <LocationSection :location="location" :user="user" />
       </div>
       <div v-else-if="activeTab === 'Speed Data'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <SpeedDataSection :speedData="speedHistory" :speedLimit="speedLimit" :isOverSpeed="isOverSpeed" />
+        <SpeedDataSection
+          :speedData="speedHistory"
+          :speedLimit="speedLimit"
+          @overspeed="handleOverspeed"
+        />
       </div>
       <div v-else-if="activeTab === 'Diagnostics'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
         <DiagnosticsSection :diagnostics="diagnostics" />
@@ -220,6 +220,7 @@ let flashCount = 0;
 
 // Track last known crash timestamp
 let lastCrashTimestamp = null;
+
 const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
 
 // Helpers
@@ -247,14 +248,14 @@ const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
     lng !== undefined &&
     !isNaN(lat) &&
     !isNaN(lng);
-  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps  ';
+  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps ';
   const zoomLevel = 14;
   return `https://www.google.com/maps/dir/?api=1&origin= ${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
 };
 
 // Play alert sound
 const playSound = () => {
-  const audio = new Audio('/sounds/alert.mp3');
+  const audio = new Audio('/sounds/alert.mp3'); // ✅ Audio path
   audio.play().catch(err => console.warn("Audio playback failed:", err));
 };
 
@@ -282,6 +283,18 @@ const flashCrashMessage = () => {
     crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
     flashCount++;
   }, 2000);
+};
+
+// Handle Overspeed Event
+const handleOverspeed = ({ speed, limit }) => {
+  playSound(); // Triggers alert sound
+  alerts.value.unshift({
+    type: 'danger',
+    message: 'Overspeed Detected!',
+    details: `Current Speed: ${speed} kph | Limit: ${limit} kph`,
+    time: new Date().toLocaleTimeString()
+  });
+  if (alerts.value.length > 5) alerts.value.pop();
 };
 
 // Firebase References
