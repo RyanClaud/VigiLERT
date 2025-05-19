@@ -41,10 +41,11 @@ import {
   Tooltip
 } from 'chart.js';
 
-// Register required components
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip);
 
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, defineProps, defineEmits } from 'vue';
+
+const emit = defineEmits(['overspeed']);
 
 const props = defineProps({
   speedData: {
@@ -65,6 +66,16 @@ const currentSpeed = computed(() => {
 // Check if current speed exceeds the limit
 const isOverSpeed = computed(() => {
   return currentSpeed.value > props.speedLimit;
+});
+
+// Watch for changes and emit overspeed event
+watch(isOverSpeed, (newVal) => {
+  if (newVal) {
+    emit('overspeed', {
+      speed: currentSpeed.value,
+      limit: props.speedLimit
+    });
+  }
 });
 
 // Chart Data

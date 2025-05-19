@@ -20,7 +20,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-6">
         <!-- Rider Status -->
         <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4">
-          <span class="material-icons text-3xl">Rider</span>
+          <span class="material-icons text-3xl">Helmet</span>
           <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
         </div>
         <!-- Current Speed -->
