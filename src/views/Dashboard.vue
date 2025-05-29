@@ -431,6 +431,8 @@ const initializeCrashListener = () => {
   onChildAdded(crashRef, (snapshot) => {
     const event = snapshot.val();
 
+    console.log("Received crash event:", event);
+
     // Validate data
     if (!event || !event.timestamp || typeof event.roll !== 'number') {
       console.warn("Invalid crash event received", event);
@@ -440,15 +442,17 @@ const initializeCrashListener = () => {
     const eventTime = event.timestamp;
     const rollTriggered = event.roll < -40 || event.roll > 40;
 
-    console.log("Raw crash event:", event);
-    console.log("Roll: ", event.roll, "| Triggered: ", rollTriggered);
+    console.log(`Roll: ${event.roll}, Triggered: ${rollTriggered}`);
 
-    if (rollTriggered) {
+    // Only check for roll-based crash
+    if (rollTriggered && (!lastCrashTimestamp || eventTime > lastCrashTimestamp)) {
       console.log("✅ Valid crash detected:", event);
 
+      // Update last crash timestamp
       lastCrashTimestamp = eventTime;
       localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
 
+      // Add to crash events list
       crashEvents.value.push({
         timestamp: eventTime,
         impactStrength: "N/A",
@@ -457,9 +461,13 @@ const initializeCrashListener = () => {
         lng: event.lng
       });
 
+      // Trigger flash crash message
       flashCrashMessage();
     } else {
-      console.log("⚠️ Ignored crash due to low roll angle");
+      console.log("⚠️ Ignored crash:", {
+        roll: event.roll,
+        isNew: !lastCrashTimestamp || eventTime > lastCrashTimestamp
+      });
     }
   }, (error) => {
     console.error("Firebase crash listener error:", error);
