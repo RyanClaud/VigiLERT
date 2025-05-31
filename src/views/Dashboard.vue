@@ -70,11 +70,11 @@
           <label for="speed-limit" class="font-medium text-gray-700">Set Speed Limit</label>
           <span class="text-xl font-bold text-[#0c0c0c]">{{ speedLimit }} km/h</span>
         </div>
-        <input type="range" min="10" max="120" step="5" v-model.number="speedLimit"
+        <input type="range" min="1" max="120" step="5" v-model.number="speedLimit"
           @change="updateSpeedLimitInFirebase"
           class="w-full h-2 bg-blue-00 rounded-lg cursor-pointer focus:outline-none focus:ring-2 accent-[#2701fd]" />
         <div class="flex justify-between mt-1 text-xs text-gray-900">
-          <span>10 km/h</span>
+          <span>1 km/h</span>
           <span>120 km/h</span>
         </div>
       </div>
@@ -251,6 +251,7 @@ const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
 
 // Play alert sound
 const playSound = () => {
+  console.log("Attempting to play sound...");
   try {
     const audio = new Audio('/sounds/alert.mp3');
     audio.play().catch(err => {
@@ -286,6 +287,19 @@ const flashCrashMessage = () => {
   }, 2000);
 };
 
+// Handle overspeed event
+const handleOverspeed = (payload) => {
+  console.log("Overspeed detected:", payload);
+  playSound(); // Play sound
+  alerts.value.unshift({
+    type: 'danger',
+    message: 'Speed Limit Exceeded!',
+    details: `Current: ${payload.speed} kph | Limit: ${payload.limit} kph`,
+    time: new Date().toLocaleTimeString()
+  });
+  if (alerts.value.length > 5) alerts.value.pop();
+};
+
 // Firebase References
 const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
 const helmetRef = dbRef(database, `helmet/${userId}`);
@@ -306,23 +320,23 @@ onMounted(() => {
   initializeCrashListener();
 
   onValue(alcoholRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data && data.status === "Danger") {
-      alcoholStatus.value = 'Danger';
-      alcoholSubtitle.value = `Alcohol Detected! Value: ${data.sensorValue}`;
-      alerts.value.unshift({
-        type: 'danger',
-        message: 'Alcohol Detected!',
-        details: `Sensor Value: ${data.sensorValue}`,
-        time: new Date().toLocaleTimeString()
-      });
-      playSound();
-      if (alerts.value.length > 5) alerts.value.pop();
-    } else {
-      alcoholStatus.value = 'Safe';
-      alcoholSubtitle.value = 'No alcohol detected';
-    }
-  });
+  const data = snapshot.val();
+  if (data && data.status === "Danger") {
+    alcoholStatus.value = 'Danger';
+    alcoholSubtitle.value = `Alcohol Detected! Value: ${data.sensorValue}`;
+    alerts.value.unshift({
+      type: 'danger',
+      message: 'Alcohol Detected!',
+      details: `Sensor Value: ${data.sensorValue}`,
+      time: new Date().toLocaleTimeString()
+    });
+    playSound();
+    if (alerts.value.length > 5) alerts.value.pop();
+  } else {
+    alcoholStatus.value = 'Safe';
+    alcoholSubtitle.value = 'No alcohol detected';
+  }
+});
 
   onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
@@ -430,29 +444,17 @@ const deleteCrashEvent = (index) => {
 const initializeCrashListener = () => {
   onChildAdded(crashRef, (snapshot) => {
     const event = snapshot.val();
-
-    console.log("Received crash event:", event);
-
-    // Validate data
     if (!event || !event.timestamp || typeof event.roll !== 'number') {
       console.warn("Invalid crash event received", event);
       return;
     }
-
     const eventTime = event.timestamp;
     const rollTriggered = event.roll < -40 || event.roll > 40;
 
-    console.log(`Roll: ${event.roll}, Triggered: ${rollTriggered}`);
-
-    // Only check for roll-based crash
     if (rollTriggered && (!lastCrashTimestamp || eventTime > lastCrashTimestamp)) {
-      console.log("✅ Valid crash detected:", event);
-
-      // Update last crash timestamp
       lastCrashTimestamp = eventTime;
       localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
 
-      // Add to crash events list
       crashEvents.value.push({
         timestamp: eventTime,
         impactStrength: "N/A",
@@ -461,13 +463,7 @@ const initializeCrashListener = () => {
         lng: event.lng
       });
 
-      // Trigger flash crash message
       flashCrashMessage();
-    } else {
-      console.log("⚠️ Ignored crash:", {
-        roll: event.roll,
-        isNew: !lastCrashTimestamp || eventTime > lastCrashTimestamp
-      });
     }
   }, (error) => {
     console.error("Firebase crash listener error:", error);
