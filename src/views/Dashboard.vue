@@ -207,19 +207,17 @@ const location = ref({ lat: null, lng: null });
 const user = ref({ name: 'Loading...' });
 const recentTrips = ref([]);
 const crashEvents = ref([]);
-
-// Extra state
 const isOverSpeed = ref(false);
 const showAlerts = ref(true);
 
 // Crash UI
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
 const crashDisplayMessage = ref('Vehicle Stable');
+
 let crashInterval = null;
 let flashCount = 0;
-
-// Track last known crash timestamp
 let lastCrashTimestamp = null;
+
 const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
 
 // Helpers
@@ -251,7 +249,6 @@ const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
 
 // Play alert sound
 const playSound = () => {
-  console.log("Attempting to play sound...");
   try {
     const audio = new Audio('/sounds/alert.mp3');
     audio.play().catch(err => {
@@ -287,10 +284,9 @@ const flashCrashMessage = () => {
   }, 2000);
 };
 
-// Handle overspeed event
+// Handle Overspeed Event
 const handleOverspeed = (payload) => {
-  console.log("Overspeed detected:", payload);
-  playSound(); // Play sound
+  playSound(); // Triggers alert sound
   alerts.value.unshift({
     type: 'danger',
     message: 'Speed Limit Exceeded!',
@@ -302,10 +298,10 @@ const handleOverspeed = (payload) => {
 
 // Firebase References
 const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
-const helmetRef = dbRef(database, `helmet/${userId}`);
+const helmetRef = dbRef(database, `helmet_public/${userId}/helmetStatus/status`);
 const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
 const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
-const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol`);
+const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol/status`);
 const speedLimitRef = dbRef(database, `helmet_public/${userId}/settings/speedLimit`);
 
 onMounted(() => {
@@ -320,23 +316,23 @@ onMounted(() => {
   initializeCrashListener();
 
   onValue(alcoholRef, (snapshot) => {
-  const data = snapshot.val();
-  if (data && data.status === "Danger") {
-    alcoholStatus.value = 'Danger';
-    alcoholSubtitle.value = `Alcohol Detected! Value: ${data.sensorValue}`;
-    alerts.value.unshift({
-      type: 'danger',
-      message: 'Alcohol Detected!',
-      details: `Sensor Value: ${data.sensorValue}`,
-      time: new Date().toLocaleTimeString()
-    });
-    playSound();
-    if (alerts.value.length > 5) alerts.value.pop();
-  } else {
-    alcoholStatus.value = 'Safe';
-    alcoholSubtitle.value = 'No alcohol detected';
-  }
-});
+    const data = snapshot.val();
+    if (data && data.status === "Danger") {
+      alcoholStatus.value = 'Danger';
+      alcoholSubtitle.value = `Alcohol Detected! Value: ${data.sensorValue}`;
+      alerts.value.unshift({
+        type: 'danger',
+        message: 'Alcohol Detected!',
+        details: `Sensor Value: ${data.sensorValue}`,
+        time: new Date().toLocaleTimeString()
+      });
+      playSound();
+      if (alerts.value.length > 5) alerts.value.pop();
+    } else {
+      alcoholStatus.value = 'Safe';
+      alcoholSubtitle.value = 'No alcohol detected';
+    }
+  });
 
   onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
@@ -450,11 +446,12 @@ const initializeCrashListener = () => {
     }
     const eventTime = event.timestamp;
     const rollTriggered = event.roll < -40 || event.roll > 40;
-
-    if (rollTriggered && (!lastCrashTimestamp || eventTime > lastCrashTimestamp)) {
+    if (
+      rollTriggered &&
+      (!lastCrashTimestamp || eventTime > lastCrashTimestamp)
+    ) {
       lastCrashTimestamp = eventTime;
       localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
-
       crashEvents.value.push({
         timestamp: eventTime,
         impactStrength: "N/A",
@@ -462,7 +459,6 @@ const initializeCrashListener = () => {
         lat: event.lat,
         lng: event.lng
       });
-
       flashCrashMessage();
     }
   }, (error) => {

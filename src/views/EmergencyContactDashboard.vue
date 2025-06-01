@@ -60,14 +60,15 @@
         </div>
       </div>
 
-      <!-- Speed Limit Control (Read-only for Emergency Contact) -->
+      <!-- Speed Limit Control -->
       <div class="bg-yellow-400 rounded-lg shadow p-4 mb-8 mx-2 md:mx-8">
         <div class="flex justify-between items-center">
           <label for="speed-limit" class="font-medium text-gray-700">Set Speed Limit</label>
           <span class="text-xl font-bold text-[#0c0c0c]">{{ speedLimit }} km/h</span>
         </div>
-        <input type="range" min="1" max="120" step="5" :value="speedLimit"
-          class="w-full h-2 bg-blue-00 rounded-lg cursor-pointer focus:outline-none focus:ring-2 accent-[#2701fd]" disabled />
+        <input type="range" min="1" max="120" step="5" v-model.number="speedLimit"
+          @change="updateSpeedLimitInFirebase"
+          class="w-full h-2 bg-blue-00 rounded-lg cursor-pointer focus:outline-none focus:ring-2 accent-[#2701fd]" />
         <div class="flex justify-between mt-1 text-xs text-gray-900">
           <span>1 km/h</span>
           <span>120 km/h</span>
@@ -141,7 +142,7 @@
               <p><strong>Impact:</strong> {{ event.impactStrength }} g</p>
               <p><strong>Location:</strong> {{ event.location }}</p>
               <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
-                class="inline-block mt-2 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition">
+                class="mt-2 inline-block px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition">
                 See Location
               </a>
             </div>
@@ -159,10 +160,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router'; // Import router
-import { useAuthStore } from '../stores/auth';
+import { useRouter } from 'vue-router';
 import { database } from '../firebase/config';
-import { ref as dbRef, onValue } from 'firebase/database';
+import { ref as dbRef, set, onValue, onChildAdded, remove } from 'firebase/database';
 
 // Components
 import TabGroup from '../components/TabGroup.vue';
@@ -172,8 +172,7 @@ import SpeedDataSection from '../components/SpeedDataSection.vue';
 import DiagnosticsSection from '../components/DiagnosticsSection.vue';
 import RecentAlerts from '../components/RecentAlerts.vue';
 
-const router = useRouter(); // Initialize router
-const authStore = useAuthStore();
+const router = useRouter();
 
 // States
 const riderStatus = ref('Inactive');
@@ -184,7 +183,7 @@ const alcoholStatus = ref('Safe');
 const alcoholSubtitle = ref('No alcohol detected');
 const currentSpeed = ref(0);
 const speedHistory = ref([]);
-const speedLimit = ref(90); // Default value
+const speedLimit = ref(80); // Default value
 const diagnostics = ref([]);
 const alerts = ref([]);
 const activeTab = ref('Speed Data');
@@ -198,11 +197,8 @@ const showAlerts = ref(true);
 // Crash UI
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
 const crashDisplayMessage = ref('Vehicle Stable');
-
-let flashCount = 0;
 let crashInterval = null;
-
-// Track last known crash timestamp
+let flashCount = 0;
 let lastCrashTimestamp = null;
 
 const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
@@ -228,19 +224,22 @@ const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
     endLng = startLng;
   }
   const isValidCoord = (lat, lng) =>
-    lat !== undefined &&
-    lng !== undefined &&
-    !isNaN(lat) &&
-    !isNaN(lng);
-  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps  ';
+    lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng);
+  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps'; 
   const zoomLevel = 14;
-  return `https://www.google.com/maps/dir/?api=1&origin= ${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
+  return `https://www.google.com/maps/dir/?api=1&origin=${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
 };
 
 // Play alert sound
 const playSound = () => {
-  const audio = new Audio('/sounds/alert.mp3');
-  audio.play().catch(err => console.warn("Audio playback failed:", err));
+  try {
+    const audio = new Audio('/sounds/alert.mp3');
+    audio.play().catch(err => {
+      console.warn("Audio playback failed:", err);
+    });
+  } catch (err) {
+    console.error("Error creating audio object:", err);
+  }
 };
 
 // Flash Crash Message
@@ -262,7 +261,6 @@ const flashCrashMessage = () => {
       clearInterval(crashInterval);
       crashDisplayStatus.value = 'Stable';
       crashDisplayMessage.value = 'Vehicle Stable';
-      return;
     }
     crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
     flashCount++;
@@ -270,12 +268,12 @@ const flashCrashMessage = () => {
 };
 
 // Handle Overspeed Event
-const handleOverspeed = ({ speed, limit }) => {
+const handleOverspeed = (payload) => {
   playSound(); // Triggers alert sound
   alerts.value.unshift({
     type: 'danger',
-    message: 'Overspeed Detected!',
-    details: `Current Speed: ${speed} kph | Limit: ${limit} kph`,
+    message: 'Speed Limit Exceeded!',
+    details: `Current: ${payload.speed} kph | Limit: ${payload.limit} kph`,
     time: new Date().toLocaleTimeString()
   });
   if (alerts.value.length > 5) alerts.value.pop();
@@ -283,44 +281,23 @@ const handleOverspeed = ({ speed, limit }) => {
 
 // Firebase References
 const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
-const helmetRef = dbRef(database, `helmet/${userId}`);
+const helmetRef = dbRef(database, `helmet_public/${userId}/helmetStatus/status`);
 const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
 const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
-const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol`);
+const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol/status`);
 const speedLimitRef = dbRef(database, `helmet_public/${userId}/settings/speedLimit`);
 
 onMounted(() => {
-  // Load last crash timestamp
   const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
   if (storedLastCrashTime) lastCrashTimestamp = parseInt(storedLastCrashTime);
 
-  // Read initial speed limit
   onValue(speedLimitRef, (snapshot) => {
     const data = snapshot.val();
     if (data !== null) speedLimit.value = data;
   });
 
-  // Crash listener - Only trigger on new crash events
-  onValue(crashRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      Object.values(data).forEach(event => {
-        const eventTime = event.timestamp;
-        const impactInG = event.impactStrength / 9.81; // Convert m/s² → g-force
-        const rollTriggered = event.roll < -47 || event.roll > 40;
-        if (
-          (impactInG >= 1.5 || rollTriggered) &&
-          eventTime > (lastCrashTimestamp || 0)
-        ) {
-          lastCrashTimestamp = eventTime;
-          localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
-          flashCrashMessage(); // triggers alert card + sound
-        }
-      });
-    }
-  });
+  initializeCrashListener();
 
-  // Alcohol listener
   onValue(alcoholRef, (snapshot) => {
     const data = snapshot.val();
     if (data && data.status === "Danger") {
@@ -340,7 +317,6 @@ onMounted(() => {
     }
   });
 
-  // Helmet Public Listener
   onValue(helmetPublicRef, (snapshot) => {
     const data = snapshot.val();
     if (data?.live) {
@@ -353,11 +329,19 @@ onMounted(() => {
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
       if (speedHistory.value.length > 10) speedHistory.value.shift();
-      isOverSpeed.value = currentSpeed.value > speedLimit.value;
+
+      const isOverspeed = currentSpeed.value > speedLimit.value;
+      isOverSpeed.value = isOverspeed;
+
+      if (isOverspeed) {
+        handleOverspeed({
+          speed: currentSpeed.value,
+          limit: speedLimit.value
+        });
+      }
     }
   });
 
-  // Helmet-specific data
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -382,7 +366,6 @@ onMounted(() => {
     }
   });
 
-  // Trip data
   onValue(tripsRef, async (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -397,9 +380,50 @@ onMounted(() => {
   });
 });
 
-// Logout function
+// Show/Hide Alerts Panel
+const toggleAlerts = () => {
+  showAlerts.value = !showAlerts.value;
+};
+
+// Update speed limit in Firebase
+const updateSpeedLimitInFirebase = () => {
+  set(dbRef(database, `helmet_public/${userId}/settings/speedLimit`), speedLimit.value).catch(error => {
+    console.error("Failed to update speed limit:", error);
+  });
+};
+
+// Initialize crash event listener
+const initializeCrashListener = () => {
+  onChildAdded(crashRef, (snapshot) => {
+    const event = snapshot.val();
+    if (!event || !event.timestamp || typeof event.roll !== 'number') {
+      console.warn("Invalid crash event received", event);
+      return;
+    }
+    const eventTime = event.timestamp;
+    const rollTriggered = event.roll < -40 || event.roll > 40;
+    if (
+      rollTriggered &&
+      (!lastCrashTimestamp || eventTime > lastCrashTimestamp)
+    ) {
+      lastCrashTimestamp = eventTime;
+      localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
+      crashEvents.value.push({
+        timestamp: eventTime,
+        impactStrength: "N/A",
+        location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
+        lat: event.lat,
+        lng: event.lng
+      });
+      flashCrashMessage();
+    }
+  }, (error) => {
+    console.error("Firebase crash listener error:", error);
+  });
+};
+
+// Logout Function for Emergency Contact
 const logout = () => {
-  authStore.logout(); 
-  router.push({ name: 'EmergencyContactLogin' }); // Navigate back to login page
+  router.push({ name: 'EmergencyContactLogin' }); // Make sure this route exists
 };
 </script>
