@@ -1,166 +1,450 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-[#EDE8F5]">
+  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0]">
     <!-- User Greeting/Header -->
-    <div class="flex flex-col items-center justify-center py-4">
-      <div class="flex items-center gap-2 bg-[#7091E6] px-6 py-2 rounded-xl shadow text-white">
-        <span v-if="authStore.user && authStore.user.photoURL">
-          <img :src="authStore.user.photoURL" alt="User Avatar"
-            class="w-8 h-8 rounded-full border-2 border-white shadow"
-            @error="onAvatarError" />
-        </span>
-        <span v-else class="material-icons text-2xl">account_circle</span>
-        <span class="font-semibold text-lg">
-          Welcome,
-          <span v-if="authStore.user?.displayName">{{ authStore.user.displayName }}</span>
-          <span v-else-if="authStore.user?.email">{{ authStore.user.email }}</span>
-          <span v-else>User</span>
-        </span>
+    <div class="flex flex-col items-center justify-center py-6 px-4">
+      <div class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-[#7091E6] via-[#5571c6] to-[#3D52A0] opacity-90 blur-xl"></div>
+        <div class="relative flex items-center gap-4 bg-white/20 backdrop-blur-md border border-white/30 px-8 py-4 rounded-2xl shadow-2xl">
+          <div class="relative">
+            <span v-if="authStore.user && authStore.user.photoURL">
+              <img :src="authStore.user.photoURL" alt="User Avatar"
+                class="w-12 h-12 rounded-full border-3 border-white shadow-lg ring-2 ring-white/50"
+                @error="onAvatarError" />
+            </span>
+            <span v-else class="material-icons text-4xl text-white drop-shadow-lg">account_circle</span>
+            <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
+          </div>
+          <div>
+            <p class="text-xs text-white/80 font-medium uppercase tracking-wider">Welcome Back</p>
+            <p class="font-bold text-xl text-white drop-shadow-md">
+              <span v-if="authStore.user?.displayName">{{ authStore.user.displayName }}</span>
+              <span v-else-if="authStore.user?.email">{{ authStore.user.email }}</span>
+              <span v-else>User</span>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
-      <!-- Top Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-6">
-        <!-- Rider Status -->
-        <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
-          <span class="material-icons text-3xl">Rider</span>
-          <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
+      <!-- System Status Bar -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Helmet-Motorcycle Pairing Status -->
+        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div :class="['p-3 rounded-xl', helmetPaired && motorcyclePaired ? 'bg-green-500' : 'bg-red-500']">
+                <span class="material-icons text-white text-2xl">link</span>
+              </div>
+              <div>
+                <p class="text-xs text-gray-500 font-medium uppercase">Pairing Status</p>
+                <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-600' : 'text-red-600']">
+                  {{ helmetPaired && motorcyclePaired ? 'Connected' : 'Disconnected' }}
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="helmetPaired ? 'text-green-500' : 'text-gray-400'">sports_motorsports</span>
+                <span class="text-xs font-medium" :class="helmetPaired ? 'text-green-600' : 'text-gray-500'">Helmet</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="motorcyclePaired ? 'text-green-500' : 'text-gray-400'">two_wheeler</span>
+                <span class="text-xs font-medium" :class="motorcyclePaired ? 'text-green-600' : 'text-gray-500'">Motorcycle</span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Device Health -->
+        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600">
+                <span class="material-icons text-white text-2xl">battery_charging_full</span>
+              </div>
+              <div>
+                <p class="text-xs text-gray-500 font-medium uppercase">Device Health</p>
+                <p class="text-lg font-bold text-blue-600">{{ deviceBattery }}%</p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1 text-right">
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="gsmConnected ? 'text-green-500' : 'text-red-500'">signal_cellular_alt</span>
+                <span class="text-xs font-medium">GSM</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="gpsConnected ? 'text-green-500' : 'text-red-500'">gps_fixed</span>
+                <span class="text-xs font-medium">GPS</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emergency SOS Button -->
+        <div class="relative overflow-hidden bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-5 border border-white/50 cursor-pointer hover:scale-105 transition-all duration-300" @click="triggerSOS">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-3 rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
+                <span class="material-icons text-white text-3xl">emergency</span>
+              </div>
+              <div>
+                <p class="text-xs text-white/80 font-medium uppercase">Emergency</p>
+                <p class="text-xl font-bold text-white">SOS Alert</p>
+              </div>
+            </div>
+            <span class="material-icons text-white text-4xl">touch_app</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 mb-8">
+        <!-- Rider Status -->
+        <div class="group relative overflow-hidden bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70] text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+              </div>
+              <div class="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Rider Status</p>
+              <p class="text-2xl font-bold">{{ riderStatus }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ riderSubtitle }}</p>
+            </div>
+          </div>
+        </div>
+        
         <!-- Current Speed -->
         <div :class="[
-          'bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          isOverSpeed ? 'bg-red-500' : ''
+          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          isOverSpeed ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#7091E6] via-[#6081d6] to-[#5571c6]'
         ]">
-          <span class="material-icons text-3xl">Speed</span>
-          <DashboardCard title="Current Speed" :value="currentSpeedText" :subtitle="speedSubtitle" icon="speed" status="info" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', isOverSpeed ? 'bg-yellow-300 animate-pulse' : 'bg-blue-300']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Current Speed</p>
+              <p class="text-2xl font-bold">{{ currentSpeedText }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ isOverSpeed ? 'Over speed limit!' : 'Within limit' }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Alertness -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]'
+          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          alertnessStatus === 'Normal' ? 'bg-gradient-to-br from-[#8697C4] via-[#7687b4] to-[#6677a4] text-white' : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-gray-800'
         ]">
-          <span class="material-icons text-3xl">Warning</span>
-          <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle"
-            :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10" :class="alertnessStatus === 'Normal' ? 'text-white' : 'text-gray-800'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', alertnessStatus === 'Normal' ? 'bg-green-400' : 'bg-orange-400 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Alertness</p>
+              <p class="text-2xl font-bold">{{ alertnessStatus }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ alertnessSubtitle }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Alcohol Detection -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          alcoholStatus === 'Safe' ? 'bg-[#3D52A0] text-white' : 'bg-red-500 text-white'
+          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          alcoholStatus === 'Safe' ? 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70] text-white' : 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white'
         ]">
-          <span class="material-icons text-3xl">Liquor</span>
-          <DashboardCard title="Alcohol Detection" :value="alcoholStatus" :subtitle="alcoholSubtitle"
-            :status="alcoholStatus === 'Safe' ? 'success' : 'danger'" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', alcoholStatus === 'Safe' ? 'bg-green-400' : 'bg-red-300 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Alcohol Detection</p>
+              <p class="text-2xl font-bold">{{ alcoholStatus }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ alcoholSubtitle }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Crash Detection Card -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          crashDisplayStatus === 'Stable' ? 'bg-green-600 text-white' : 'bg-red-600 text-white animate-pulse'
+          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          crashDisplayStatus === 'Stable' ? 'bg-gradient-to-br from-green-600 via-green-700 to-green-800 text-white' : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 text-white animate-pulse'
         ]">
-          <span class="material-icons text-3xl">Vehicle</span>
-          <DashboardCard title="Crash Status" :value="crashDisplayMessage"
-            :status="crashDisplayStatus === 'Stable' ? 'success' : 'danger'" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', crashDisplayStatus === 'Stable' ? 'bg-emerald-300' : 'bg-yellow-300 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Vehicle Status</p>
+              <p class="text-2xl font-bold">{{ crashDisplayMessage }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ crashDisplayStatus === 'Stable' ? 'No incidents' : 'Alert active' }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Electrical Diagnostics Panel -->
+      <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-8 border border-white/50">
+        <div class="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-full -ml-32 -mt-32"></div>
+        <h3 class="relative text-2xl font-bold text-[#3D52A0] mb-6 flex items-center gap-3">
+          <div class="bg-gradient-to-br from-purple-500 to-purple-600 p-3 rounded-2xl shadow-lg">
+            <span class="material-icons text-3xl text-white">electrical_services</span>
+          </div>
+          <span>Motorcycle Electrical Diagnostics</span>
+        </h3>
+        <div class="relative grid grid-cols-2 md:grid-cols-4 gap-4">
+          <!-- Headlight -->
+          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.headlight ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
+            <div class="flex flex-col items-center gap-2">
+              <span class="material-icons text-4xl" :class="electricalDiagnostics.headlight ? 'text-green-600' : 'text-red-600'">lightbulb</span>
+              <p class="text-sm font-semibold text-gray-700">Headlight</p>
+              <p :class="['text-xs font-bold', electricalDiagnostics.headlight ? 'text-green-600' : 'text-red-600']">
+                {{ electricalDiagnostics.headlight ? 'OK' : 'FAULT' }}
+              </p>
+            </div>
+          </div>
+          
+          <!-- Taillight -->
+          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.taillight ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
+            <div class="flex flex-col items-center gap-2">
+              <span class="material-icons text-4xl" :class="electricalDiagnostics.taillight ? 'text-green-600' : 'text-red-600'">highlight</span>
+              <p class="text-sm font-semibold text-gray-700">Taillight</p>
+              <p :class="['text-xs font-bold', electricalDiagnostics.taillight ? 'text-green-600' : 'text-red-600']">
+                {{ electricalDiagnostics.taillight ? 'OK' : 'FAULT' }}
+              </p>
+            </div>
+          </div>
+          
+          <!-- Brake Light -->
+          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.brakeLight ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
+            <div class="flex flex-col items-center gap-2">
+              <span class="material-icons text-4xl" :class="electricalDiagnostics.brakeLight ? 'text-green-600' : 'text-red-600'">traffic</span>
+              <p class="text-sm font-semibold text-gray-700">Brake Light</p>
+              <p :class="['text-xs font-bold', electricalDiagnostics.brakeLight ? 'text-green-600' : 'text-red-600']">
+                {{ electricalDiagnostics.brakeLight ? 'OK' : 'FAULT' }}
+              </p>
+            </div>
+          </div>
+          
+          <!-- Signal Lights -->
+          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.signalLights ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
+            <div class="flex flex-col items-center gap-2">
+              <span class="material-icons text-4xl" :class="electricalDiagnostics.signalLights ? 'text-green-600' : 'text-red-600'">turn_slight_right</span>
+              <p class="text-sm font-semibold text-gray-700">Signal Lights</p>
+              <p :class="['text-xs font-bold', electricalDiagnostics.signalLights ? 'text-green-600' : 'text-red-600']">
+                {{ electricalDiagnostics.signalLights ? 'OK' : 'FAULT' }}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Speed Limit Control -->
-      <div class="bg-yellow-400 rounded-lg shadow p-4 mb-8 mx-2 md:mx-8">
-        <div class="flex justify-between items-center">
-          <label for="speed-limit" class="font-medium text-gray-700">Set Speed Limit</label>
-          <span class="text-xl font-bold text-[#0c0c0c]">{{ speedLimit }} km/h</span>
-        </div>
-        <input type="range" min="1" max="120" step="5" v-model.number="speedLimit"
-          @change="updateSpeedLimitInFirebase"
-          class="w-full h-2 bg-blue-00 rounded-lg cursor-pointer focus:outline-none focus:ring-2 accent-[#2701fd]" />
-        <div class="flex justify-between mt-1 text-xs text-gray-900">
-          <span>1 km/h</span>
-          <span>120 km/h</span>
+      <div class="relative overflow-hidden bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 rounded-3xl shadow-2xl p-8 mb-8 transition-all duration-500 hover:shadow-3xl group">
+        <div class="absolute inset-0 bg-gradient-to-r from-yellow-300/20 to-amber-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        <div class="relative">
+          <div class="flex justify-between items-center mb-5">
+            <label for="speed-limit" class="font-bold text-gray-900 flex items-center gap-3 text-lg">
+              <div class="bg-white/30 backdrop-blur-sm p-2 rounded-xl">
+                <span class="material-icons text-3xl text-gray-800">tune</span>
+              </div>
+              <span>Speed Limit Control</span>
+            </label>
+            <div class="relative">
+              <div class="absolute inset-0 bg-white/40 blur-xl rounded-2xl"></div>
+              <span class="relative text-3xl font-black text-gray-900 bg-white/60 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border border-white/50">
+                {{ speedLimit }} <span class="text-xl font-semibold">km/h</span>
+              </span>
+            </div>
+          </div>
+          <div class="relative">
+            <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
+              @change="updateSpeedLimitInFirebase"
+              class="w-full h-4 bg-white/40 backdrop-blur-sm rounded-full cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/50 accent-gray-800 transition-all appearance-none slider-thumb" />
+            <div class="flex justify-between mt-3 text-sm font-bold text-gray-800">
+              <span class="bg-white/30 px-3 py-1 rounded-lg">1 km/h</span>
+              <span class="bg-white/30 px-3 py-1 rounded-lg">120 km/h</span>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Tabs -->
       <div class="mb-6">
-        <TabGroup :tabs="['My Location', 'Speed Data', 'Diagnostics']" v-model="activeTab"
-          class="bg-[#ADBBD4] rounded-lg p-2 flex flex-wrap gap-2" />
+        <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-4 border border-white/50">
+          <TabGroup :tabs="['My Location', 'Speed Data']" v-model="activeTab" />
+        </div>
       </div>
 
       <!-- Tab Content -->
-      <div v-if="activeTab === 'My Location'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <LocationSection :location="location" :user="user" />
-      </div>
-      <div v-else-if="activeTab === 'Speed Data'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <SpeedDataSection
-          :speedData="speedHistory"
-          :speedLimit="speedLimit"
-          @overspeed="handleOverspeed"
-        />
-      </div>
-      <div v-else-if="activeTab === 'Diagnostics'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <DiagnosticsSection :diagnostics="diagnostics" />
+      <div class="relative">
+        <div v-if="activeTab === 'My Location'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50 transition-all duration-300">
+          <LocationSection :location="location" :user="user" />
+        </div>
+        <div v-else-if="activeTab === 'Speed Data'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50 transition-all duration-300">
+          <SpeedDataSection
+            :currentSpeed="currentSpeed"
+            :speedLimit="speedLimit"
+            :speedHistory="speedHistory"
+            @overspeed="handleOverspeed"
+          />
+        </div>
       </div>
 
       <!-- Recent Alerts Section -->
-      <h3 class="font-semibold text-lg mb-2 text-[rgb(8,8,8)] flex items-center justify-between">
-        <span class="flex items-center gap-2">
-          <span class="material-icons text-xl">Notifications</span> Recent Alerts
-        </span>
-        <button @click="toggleAlerts"
-          class="text-sm font-medium text-blue-600 hover:text-blue-800 transition">
-          {{ showAlerts ? 'Hide Alerts' : 'Show Alerts' }}
-        </button>
-      </h3>
-      <div v-if="showAlerts" class="bg-white rounded-lg shadow p-4 mb-6 max-h-64 overflow-y-auto">
-        <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
+      <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/50 transition-all duration-300 hover:shadow-3xl">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#7091E6]/10 to-[#3D52A0]/10 rounded-full -mr-32 -mt-32"></div>
+        <h3 class="relative font-bold text-2xl mb-6 text-[#3D52A0] flex items-center justify-between">
+          <span class="flex items-center gap-3">
+            <div class="bg-gradient-to-br from-[#7091E6] to-[#3D52A0] p-3 rounded-2xl shadow-lg">
+              <span class="material-icons text-3xl text-white">notifications_active</span>
+            </div>
+            <span>Recent Alerts</span>
+          </span>
+          <button @click="toggleAlerts"
+            class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+            {{ showAlerts ? 'Hide' : 'Show' }}
+          </button>
+        </h3>
+        <div v-if="showAlerts" class="relative max-h-64 overflow-y-auto custom-scrollbar">
+          <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
+        </div>
       </div>
 
       <!-- Recent Trips Preview -->
       <section class="mb-6">
-        <h3 class="text-lg font-medium text-gray-800 mb-2">Recent Trips</h3>
-        <div v-if="recentTrips.length > 0"
-          class="space-y-4 max-h-64 overflow-y-auto bg-white shadow-sm p-4 rounded-md">
-          <div v-for="trip in recentTrips" :key="trip.id" class="py-2 border-b last:border-b-0">
-            <p class="text-sm text-gray-500">Routes</p>
-            <p><strong>From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</p>
-            <p><strong>To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</p>
-            <p><strong>Max Speed:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</p>
-            <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
-              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition mr-2">
-              Navigate
-            </a>
-            <button @click="deleteTrip(trip.id)"
-              class="inline-block mt-2 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition">
-              Delete
-            </button>
+        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/50 transition-all duration-300 hover:shadow-3xl">
+          <div class="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-[#3D52A0]/10 to-[#7091E6]/10 rounded-full -ml-32 -mt-32"></div>
+          <h3 class="relative text-2xl font-bold text-[#3D52A0] mb-6 flex items-center gap-3">
+            <div class="bg-gradient-to-br from-[#3D52A0] to-[#2a3a70] p-3 rounded-2xl shadow-lg">
+              <span class="material-icons text-3xl text-white">route</span>
+            </div>
+            <span>Recent Trips</span>
+          </h3>
+          <div v-if="recentTrips.length > 0"
+            class="relative space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+            <div v-for="trip in recentTrips" :key="trip.id" 
+              class="group relative overflow-hidden p-6 border-2 border-white/50 rounded-2xl hover:border-[#7091E6] hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-white to-[#EDE8F5]/30 backdrop-blur-sm">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#7091E6]/10 to-transparent rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+              <div class="relative">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="bg-gradient-to-r from-[#7091E6] to-[#5571c6] px-3 py-1 rounded-lg">
+                    <p class="text-xs text-white font-bold uppercase tracking-wider">Route Details</p>
+                  </div>
+                </div>
+                <div class="space-y-2 mb-4">
+                  <p class="text-sm flex items-start gap-2">
+                    <span class="material-icons text-[#3D52A0] text-lg">trip_origin</span>
+                    <span><strong class="text-[#3D52A0]">From:</strong> <span class="text-gray-700">{{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</span></span>
+                  </p>
+                  <p class="text-sm flex items-start gap-2">
+                    <span class="material-icons text-[#3D52A0] text-lg">location_on</span>
+                    <span><strong class="text-[#3D52A0]">To:</strong> <span class="text-gray-700">{{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</span></span>
+                  </p>
+                  <p class="text-sm flex items-center gap-2">
+                    <span class="material-icons text-[#3D52A0] text-lg">speed</span>
+                    <span><strong class="text-[#3D52A0]">Max Speed:</strong> <span class="text-gray-700 font-semibold">{{ trip.maxSpeed || 'N/A' }} km/h</span></span>
+                  </p>
+                </div>
+                <div class="flex gap-3">
+                  <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
+                    class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">navigation</span>
+                    Navigate
+                  </a>
+                  <button @click="deleteTrip(trip.id)"
+                    class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-semibold rounded-xl hover:from-red-600 hover:to-red-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div v-else class="bg-white shadow-sm p-6 rounded-md text-center text-gray-500">
-          No trips found yet.
+          <div v-else class="relative p-12 text-center">
+            <div class="inline-block p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-4">
+              <span class="material-icons text-7xl text-gray-400">explore_off</span>
+            </div>
+            <p class="text-gray-600 font-semibold text-lg">No trips found yet</p>
+            <p class="text-sm text-gray-400 mt-2">Your trip history will appear here</p>
+          </div>
         </div>
       </section>
 
       <!-- Crash Events -->
-      <section class="mt-8">
-        <div v-if="crashEvents.length > 0" class="mt-6">
-          <h3 class="font-semibold text-lg mb-2 text-black-600 flex items-center gap-2">
-            <span class="material-icons text-xl">Warning!</span> Navigate to Crash Site
+      <section class="mt-8" v-if="crashEvents.length > 0">
+        <div class="relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100/50 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border-l-8 border-red-500">
+          <div class="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full -mr-48 -mt-48"></div>
+          <h3 class="relative font-bold text-2xl mb-6 text-red-600 flex items-center gap-3">
+            <div class="bg-gradient-to-br from-red-500 to-red-600 p-3 rounded-2xl shadow-lg animate-pulse">
+              <span class="material-icons text-3xl text-white">warning</span>
+            </div>
+            <span>Crash Site Locations</span>
           </h3>
-          <div class="max-h-64 overflow-y-auto space-y-4 bg-white shadow rounded-lg p-4">
-            <div v-for="(event, index) in crashEvents" :key="index" class="border-b pb-2 last:border-b-0">
-              <p><strong>Impact:</strong> {{ event.impactStrength }} g</p>
-              <p><strong>Location:</strong> {{ event.location }}</p>
-              <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
-                class="mt-2 inline-block px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition">
-                See Location
-              </a>
-              <button @click="deleteCrashEvent(index)"
-                class="inline-block mt-2 ml-2 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition">
-                Delete
-              </button>
-              <button v-if="isCrashActive(index)" @click="clearCrashAlert(index)"
-                class="inline-block mt-2 ml-2 px-3 py-1 bg-gray-600 text-white text-sm font-medium rounded hover:bg-gray-700 transition">
-                Clear Crash
-              </button>
+          <div class="relative max-h-64 overflow-y-auto space-y-4 custom-scrollbar">
+            <div v-for="(event, index) in crashEvents" :key="index" 
+              class="group relative overflow-hidden p-6 border-2 border-red-300 rounded-2xl bg-white hover:shadow-xl transition-all duration-300">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+              <div class="relative">
+                <div class="space-y-2 mb-4">
+                  <p class="text-sm flex items-center gap-2">
+                    <span class="material-icons text-red-600 text-lg">flash_on</span>
+                    <span><strong class="text-red-700">Impact:</strong> <span class="text-gray-700 font-semibold">{{ event.impactStrength }} g</span></span>
+                  </p>
+                  <p class="text-sm flex items-start gap-2">
+                    <span class="material-icons text-red-600 text-lg">location_on</span>
+                    <span><strong class="text-red-700">Location:</strong> <span class="text-gray-700">{{ event.location }}</span></span>
+                  </p>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">location_on</span>
+                    See Location
+                  </a>
+                  <button @click="deleteCrashEvent(index)"
+                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white text-sm font-semibold rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">delete</span>
+                    Delete
+                  </button>
+                  <button v-if="isCrashActive(index)" @click="clearCrashAlert(index)"
+                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-sm font-semibold rounded-xl hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">clear</span>
+                    Clear Alert
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -168,8 +452,12 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-[#ADBBD4] text-center py-4 text-[#3D52A0] text-sm border-t mt-auto">
-      © 2025 VIGILERT. All rights reserved.
+    <footer class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#4a5fb8] to-[#3D52A0] text-center py-6 text-white border-t-4 border-white/20 mt-auto backdrop-blur-sm">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
+      <div class="relative">
+        <p class="font-semibold text-sm tracking-wide">© 2025 VIGILERT. All rights reserved.</p>
+        <p class="text-xs text-white/70 mt-1">Smart Helmet Safety System</p>
+      </div>
     </footer>
   </div>
 </template>
@@ -209,6 +497,19 @@ const recentTrips = ref([]);
 const crashEvents = ref([]);
 const isOverSpeed = ref(false);
 const showAlerts = ref(true);
+
+// New states for enhanced features
+const helmetPaired = ref(false);
+const motorcyclePaired = ref(false);
+const deviceBattery = ref(85);
+const gsmConnected = ref(true);
+const gpsConnected = ref(true);
+const electricalDiagnostics = ref({
+  headlight: true,
+  taillight: true,
+  brakeLight: true,
+  signalLights: true
+});
 
 // Crash UI
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
@@ -311,6 +612,62 @@ onMounted(() => {
   onValue(speedLimitRef, (snapshot) => {
     const data = snapshot.val();
     if (data !== null) speedLimit.value = data;
+  });
+
+  // Listen for helmet pairing status
+  const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet/status`);
+  onValue(helmetStatusRef, (snapshot) => {
+    const data = snapshot.val();
+    helmetPaired.value = data === 'On' || data === 'connected';
+  });
+
+  // Listen for motorcycle pairing status
+  const motorcycleStatusRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle/status`);
+  onValue(motorcycleStatusRef, (snapshot) => {
+    const data = snapshot.val();
+    motorcyclePaired.value = data === 'On' || data === 'connected';
+  });
+
+  // Listen for device health
+  const deviceHealthRef = dbRef(database, `helmet_public/${userId}/deviceHealth`);
+  onValue(deviceHealthRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      deviceBattery.value = data.battery || 85;
+      gsmConnected.value = data.gsm !== false;
+      gpsConnected.value = data.gps !== false;
+    }
+  });
+
+  // Listen for electrical diagnostics
+  const electricalRef = dbRef(database, `helmet_public/${userId}/electrical`);
+  onValue(electricalRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      electricalDiagnostics.value = {
+        headlight: data.headlight !== false,
+        taillight: data.taillight !== false,
+        brakeLight: data.brakeLight !== false,
+        signalLights: data.signalLights !== false
+      };
+      
+      // Check for any faults and alert
+      const faults = [];
+      if (!data.headlight) faults.push('Headlight');
+      if (!data.taillight) faults.push('Taillight');
+      if (!data.brakeLight) faults.push('Brake Light');
+      if (!data.signalLights) faults.push('Signal Lights');
+      
+      if (faults.length > 0) {
+        alerts.value.unshift({
+          type: 'warning',
+          message: 'Electrical Fault Detected',
+          details: `Faulty components: ${faults.join(', ')}`,
+          time: new Date().toLocaleTimeString()
+        });
+        if (alerts.value.length > 5) alerts.value.pop();
+      }
+    }
   });
 
   initializeCrashListener();
@@ -436,6 +793,43 @@ const deleteCrashEvent = (index) => {
   crashEvents.value.splice(index, 1);
 };
 
+// Trigger SOS Alert
+const triggerSOS = async () => {
+  const confirmed = confirm('⚠️ EMERGENCY SOS\n\nThis will send an emergency alert to all your emergency contacts with your current location.\n\nAre you sure you want to trigger SOS?');
+  
+  if (!confirmed) return;
+  
+  try {
+    // Play alert sound
+    playSound();
+    
+    // Add to alerts
+    alerts.value.unshift({
+      type: 'danger',
+      message: '🆘 EMERGENCY SOS TRIGGERED',
+      details: `Location: ${location.value.lat ? `${location.value.lat.toFixed(6)}, ${location.value.lng.toFixed(6)}` : 'Unknown'}`,
+      time: new Date().toLocaleTimeString()
+    });
+    
+    // Log SOS event to Firebase
+    const sosRef = dbRef(database, `helmet_public/${userId}/sos/${Date.now()}`);
+    await set(sosRef, {
+      timestamp: Date.now(),
+      location: {
+        lat: location.value.lat,
+        lng: location.value.lng
+      },
+      triggeredBy: 'manual',
+      status: 'active'
+    });
+    
+    alert('✅ SOS Alert Sent!\n\nEmergency contacts have been notified with your location.');
+  } catch (error) {
+    console.error('Failed to trigger SOS:', error);
+    alert('❌ Failed to send SOS alert. Please try again or call emergency services directly.');
+  }
+};
+
 // Initialize crash event listener
 const initializeCrashListener = () => {
   onChildAdded(crashRef, (snapshot) => {
@@ -466,3 +860,92 @@ const initializeCrashListener = () => {
   });
 };
 </script>
+
+<style scoped>
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: linear-gradient(to bottom, #EDE8F5, #f5f3f7);
+  border-radius: 10px;
+  margin: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #7091E6, #5571c6);
+  border-radius: 10px;
+  border: 2px solid #EDE8F5;
+  transition: all 0.3s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #3D52A0, #2a3a70);
+  border-color: #d5d0e0;
+}
+
+/* Range Slider Custom Styling */
+input[type="range"].slider-thumb::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3D52A0, #2a3a70);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(61, 82, 160, 0.4);
+  border: 3px solid white;
+  transition: all 0.3s ease;
+}
+
+input[type="range"].slider-thumb::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 6px 20px rgba(61, 82, 160, 0.6);
+}
+
+input[type="range"].slider-thumb::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3D52A0, #2a3a70);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(61, 82, 160, 0.4);
+  border: 3px solid white;
+  transition: all 0.3s ease;
+}
+
+input[type="range"].slider-thumb::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 6px 20px rgba(61, 82, 160, 0.6);
+}
+
+/* Glassmorphism effect */
+.backdrop-blur-md {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.backdrop-blur-lg {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Smooth animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.group:hover .material-icons {
+  animation: float 2s ease-in-out infinite;
+}
+
+/* Shadow utilities */
+.shadow-3xl {
+  box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.3);
+}
+</style>

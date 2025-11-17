@@ -4,7 +4,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          // Optimize component rendering
+          hoistStatic: true,
+          cacheHandlers: true,
+        },
+      },
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
@@ -32,17 +40,37 @@ export default defineConfig({
     }),
   ],
   build: {
+    // Optimize chunk size
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
           // Separate Vue runtime and core libraries
-          vue: ['vue', 'vue-router'],
+          'vue-core': ['vue', 'vue-router', 'pinia'],
+          // Firebase
+          'firebase': ['firebase/app', 'firebase/auth', 'firebase/database'],
           // Leaflet maps library
-          leaflet: ['leaflet'],
-          // Vendor libraries (add more as needed)
-          vendor: ['axios', 'lodash'],
+          'leaflet': ['leaflet'],
         },
       },
+    },
+    // Enable minification
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+  },
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ['vue', 'vue-router', 'pinia', 'firebase/app', 'firebase/auth', 'firebase/database'],
+  },
+  // Server configuration for faster HMR
+  server: {
+    hmr: {
+      overlay: false,
     },
   },
 });

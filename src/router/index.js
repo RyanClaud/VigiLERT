@@ -2,57 +2,64 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { watch } from 'vue';
 
+// Prefetch commonly used routes
 const routes = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('../views/Home.vue'),
+    component: () => import(/* webpackChunkName: "home" */ '../views/Home.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/login',
     name: 'Login',
-    component: () => import('../views/Login.vue')
+    component: () => import(/* webpackChunkName: "auth" */ '../views/Login.vue')
   },
   {
     path: '/register',
     name: 'Register',
-    component: () => import('../views/Register.vue')
+    component: () => import(/* webpackChunkName: "auth" */ '../views/Register.vue')
   },
   {
     path: '/dashboard',
     name: 'Dashboard',
-    component: () => import('../views/Dashboard.vue'),
+    component: () => import(/* webpackChunkName: "dashboard" */ '../views/Dashboard.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/trip-history',
     name: 'TripHistory',
-    component: () => import('../views/TripHistory.vue'),
+    component: () => import(/* webpackChunkName: "trips" */ '../views/TripHistory.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/emergency-contacts',
     name: 'EmergencyContacts',
-    component: () => import('../views/EmergencyContacts.vue'),
+    component: () => import(/* webpackChunkName: "contacts" */ '../views/EmergencyContacts.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/emergency-login',
     name: 'EmergencyContactLogin',
-    component: () => import('../views/EmergencyContactLogin.vue')
+    component: () => import(/* webpackChunkName: "emergency" */ '../views/EmergencyContactLogin.vue')
   },
-
   {
     path: '/emergency-dashboard/:userId',
     name: 'EmergencyContactDashboard',
-    component: () => import('../views/EmergencyContactDashboard.vue')
+    component: () => import(/* webpackChunkName: "emergency" */ '../views/EmergencyContactDashboard.vue')
   }
 ];
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    } else {
+      return { top: 0, behavior: 'instant' };
+    }
+  }
 });
 
 router.beforeEach(async (to, from, next) => {

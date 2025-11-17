@@ -1,3 +1,57 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+/* Mobile Performance Optimizations */
+@layer base {
+  /* Optimize font rendering */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Optimize mobile scrolling */
+  html {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: auto; /* Instant scroll for better performance */
+  }
+
+  /* Optimize touch interactions */
+  @media (max-width: 640px) {
+    * {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+
+    /* Faster transitions on mobile */
+    button,
+    a,
+    [role="button"] {
+      transition-duration: 0.15s !important;
+    }
+
+    /* Optimize animations */
+    @media (prefers-reduced-motion: no-preference) {
+      * {
+        animation-duration: 0.15s !important;
+      }
+    }
+  }
+
+  /* Hardware acceleration for smooth animations */
+  .transform,
+  .transition,
+  [class*="transition-"],
+  [class*="animate-"] {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+}
+
+/* Optimize Material Icons rendering */
+.material-icons {
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
+  text-rendering: optimizeLegibility;
+} 

@@ -203,6 +203,7 @@ let lastCrashTimestamp = null;
 
 const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
 
+
 // Helpers
 const formatLatLng = (lat, lng) => {
   return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
