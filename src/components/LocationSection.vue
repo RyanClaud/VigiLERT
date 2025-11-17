@@ -17,15 +17,27 @@
             <span class="text-xs text-gray-500">Live tracking active</span>
           </div>
         </div>
-        <a 
-          v-if="location.lat && location.lng"
-          :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" 
-          target="_blank"
-          class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
-        >
-          <span class="material-icons text-lg">open_in_new</span>
-          Open in Maps
-        </a>
+        <div class="flex flex-col gap-2">
+          <button
+            @click="getUserLocation"
+            :disabled="isGettingLocation"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold rounded-xl hover:from-green-600 hover:to-green-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span class="material-icons text-lg" :class="{ 'animate-spin': isGettingLocation }">
+              {{ isGettingLocation ? 'refresh' : 'gps_fixed' }}
+            </span>
+            {{ isGettingLocation ? 'Getting...' : 'Get My Location' }}
+          </button>
+          <a 
+            v-if="location.lat && location.lng"
+            :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" 
+            target="_blank"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+          >
+            <span class="material-icons text-lg">open_in_new</span>
+            Open in Maps
+          </a>
+        </div>
       </div>
     </div>
 
@@ -64,6 +76,8 @@ const props = defineProps({
   }
 });
 
+const emit = defineEmits(['update-location']);
+
 function formatLatLng(lat, lng) {
   return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
 }
@@ -71,6 +85,62 @@ function formatLatLng(lat, lng) {
 let mapInstance = null;
 let marker = null;
 const isMapReady = ref(false);
+const isGettingLocation = ref(false);
+
+// Function to get user's current location
+const getUserLocation = () => {
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported by your browser');
+    return;
+  }
+
+  isGettingLocation.value = true;
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      
+      // Emit the new location to parent component
+      emit('update-location', { lat, lng });
+      
+      // Update map immediately
+      if (mapInstance && marker) {
+        mapInstance.setView([lat, lng], 15);
+        marker.setLatLng([lat, lng]);
+        marker.bindPopup(`<b>Your Current Location</b><br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`).openPopup();
+      }
+      
+      isGettingLocation.value = false;
+    },
+    (error) => {
+      console.error('Error getting location:', error);
+      let errorMessage = 'Unable to get your location. ';
+      
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMessage += 'Please allow location access in your browser settings.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMessage += 'Location information is unavailable.';
+          break;
+        case error.TIMEOUT:
+          errorMessage += 'Location request timed out.';
+          break;
+        default:
+          errorMessage += 'An unknown error occurred.';
+      }
+      
+      alert(errorMessage);
+      isGettingLocation.value = false;
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+};
 
 // Function to create a red marker icon
 function createRedMarkerIcon() {

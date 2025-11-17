@@ -139,7 +139,10 @@
             <div class="mt-auto">
               <p class="text-sm opacity-80 mb-1">Current Speed</p>
               <p class="text-2xl font-bold">{{ currentSpeedText }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ isOverSpeed ? 'Over speed limit!' : 'Within limit' }}</p>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="material-icons text-xs opacity-70">{{ gpsSpeedSource === 'phone' ? 'smartphone' : 'router' }}</span>
+                <p class="text-xs opacity-70">{{ isOverSpeed ? 'Over speed limit!' : gpsSpeedSource === 'phone' ? 'Phone GPS' : 'GPS Module' }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -301,6 +304,46 @@
         </div>
       </div>
 
+      <!-- GPS Speed Monitoring Control -->
+      <div class="relative overflow-hidden bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-3xl shadow-2xl p-8 mb-8 transition-all duration-500 hover:shadow-3xl group">
+        <div class="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        <div class="relative">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="flex items-center gap-4">
+              <div class="bg-white/30 backdrop-blur-sm p-3 rounded-xl">
+                <span class="material-icons text-4xl text-white">speed</span>
+              </div>
+              <div>
+                <h3 class="font-bold text-white text-xl mb-1">Real-Time GPS Speed Monitoring</h3>
+                <p class="text-sm text-white/80">
+                  {{ isGPSSpeedActive ? 'Active - Using phone GPS for speed tracking' : 'Inactive - Using GPS module data' }}
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="w-2 h-2 rounded-full" :class="isGPSSpeedActive ? 'bg-green-400 animate-pulse' : 'bg-gray-300'"></span>
+                  <span class="text-xs text-white/70 font-semibold">
+                    Source: {{ gpsSpeedSource === 'phone' ? 'Phone GPS' : 'GPS Module' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              @click="toggleGPSSpeedMonitoring"
+              :class="[
+                'inline-flex items-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
+                isGPSSpeedActive 
+                  ? 'bg-red-500 hover:bg-red-600 text-white' 
+                  : 'bg-white hover:bg-gray-100 text-blue-600'
+              ]"
+            >
+              <span class="material-icons text-2xl">
+                {{ isGPSSpeedActive ? 'gps_off' : 'gps_fixed' }}
+              </span>
+              <span>{{ isGPSSpeedActive ? 'Stop Monitoring' : 'Start Monitoring' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Tabs -->
       <div class="mb-6">
         <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-4 border border-white/50">
@@ -311,7 +354,7 @@
       <!-- Tab Content -->
       <div class="relative">
         <div v-if="activeTab === 'My Location'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50 transition-all duration-300">
-          <LocationSection :location="location" :user="user" />
+          <LocationSection :location="location" :user="user" @update-location="handleLocationUpdate" />
         </div>
         <div v-else-if="activeTab === 'Speed Data'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50 transition-all duration-300">
           <SpeedDataSection
@@ -463,7 +506,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
 import { ref as dbRef, set, onValue, onChildAdded, remove } from 'firebase/database';
@@ -514,6 +557,11 @@ const electricalDiagnostics = ref({
 // Crash UI
 const crashDisplayStatus = ref('Stable'); // Stable | Alerting
 const crashDisplayMessage = ref('Vehicle Stable');
+
+// GPS Speed Monitoring
+const isGPSSpeedActive = ref(false);
+const gpsSpeedSource = ref('module'); // 'module' or 'phone'
+let gpsWatchId = null;
 
 let crashInterval = null;
 let flashCount = 0;
@@ -793,6 +841,155 @@ const deleteCrashEvent = (index) => {
   crashEvents.value.splice(index, 1);
 };
 
+// Start continuous GPS speed monitoring
+const startGPSSpeedMonitoring = () => {
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported by your browser');
+    return;
+  }
+
+  if (gpsWatchId !== null) {
+    // Already monitoring
+    return;
+  }
+
+  isGPSSpeedActive.value = true;
+  gpsSpeedSource.value = 'phone';
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const speed = position.coords.speed; // Speed in meters per second
+      
+      // Update location
+      location.value = { lat, lng };
+      
+      // Convert speed from m/s to km/h
+      if (speed !== null && speed !== undefined) {
+        const speedKmh = speed * 3.6; // Convert m/s to km/h
+        const finalSpeed = speedKmh < 0.5 ? 0 : speedKmh; // Filter out very small values
+        
+        currentSpeed.value = finalSpeed;
+        speedHistory.value.push(finalSpeed);
+        if (speedHistory.value.length > 10) speedHistory.value.shift();
+        
+        // Check for overspeed
+        if (finalSpeed > speedLimit.value && !isOverSpeed.value) {
+          isOverSpeed.value = true;
+          handleOverspeed({ speed: finalSpeed, limit: speedLimit.value });
+        } else if (finalSpeed <= speedLimit.value) {
+          isOverSpeed.value = false;
+        }
+      }
+      
+      // Update Firebase with GPS phone data
+      const locationRef = dbRef(database, `helmet_public/${userId}/live`);
+      set(locationRef, {
+        locationLat: lat,
+        locationLng: lng,
+        speed: currentSpeed.value,
+        timestamp: Date.now(),
+        source: 'phone_gps'
+      }).catch(error => {
+        console.error('Failed to update location:', error);
+      });
+    },
+    (error) => {
+      console.error('GPS monitoring error:', error);
+      stopGPSSpeedMonitoring();
+      
+      let errorMessage = 'GPS monitoring failed. ';
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMessage += 'Please allow location access.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMessage += 'Location unavailable.';
+          break;
+        case error.TIMEOUT:
+          errorMessage += 'Request timed out.';
+          break;
+      }
+      
+      alerts.value.unshift({
+        type: 'warning',
+        message: 'GPS Monitoring Stopped',
+        details: errorMessage,
+        time: new Date().toLocaleTimeString()
+      });
+      if (alerts.value.length > 5) alerts.value.pop();
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+
+  alerts.value.unshift({
+    type: 'success',
+    message: 'GPS Speed Monitoring Active',
+    details: 'Real-time speed tracking from phone GPS',
+    time: new Date().toLocaleTimeString()
+  });
+  if (alerts.value.length > 5) alerts.value.pop();
+};
+
+// Stop GPS speed monitoring
+const stopGPSSpeedMonitoring = () => {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    isGPSSpeedActive.value = false;
+    gpsSpeedSource.value = 'module';
+    
+    alerts.value.unshift({
+      type: 'info',
+      message: 'GPS Speed Monitoring Stopped',
+      details: 'Switched back to module data',
+      time: new Date().toLocaleTimeString()
+    });
+    if (alerts.value.length > 5) alerts.value.pop();
+  }
+};
+
+// Toggle GPS speed monitoring
+const toggleGPSSpeedMonitoring = () => {
+  if (isGPSSpeedActive.value) {
+    stopGPSSpeedMonitoring();
+  } else {
+    startGPSSpeedMonitoring();
+  }
+};
+
+// Handle location update from GPS (one-time update)
+const handleLocationUpdate = async (newLocation) => {
+  location.value = newLocation;
+  
+  // Update location in Firebase
+  try {
+    const locationRef = dbRef(database, `helmet_public/${userId}/live`);
+    await set(locationRef, {
+      locationLat: newLocation.lat,
+      locationLng: newLocation.lng,
+      speed: currentSpeed.value,
+      timestamp: Date.now(),
+      source: 'phone_gps_manual'
+    });
+    
+    alerts.value.unshift({
+      type: 'success',
+      message: 'Location Updated',
+      details: `New location: ${newLocation.lat.toFixed(6)}, ${newLocation.lng.toFixed(6)}`,
+      time: new Date().toLocaleTimeString()
+    });
+    if (alerts.value.length > 5) alerts.value.pop();
+  } catch (error) {
+    console.error('Failed to update location:', error);
+  }
+};
+
 // Trigger SOS Alert
 const triggerSOS = async () => {
   const confirmed = confirm('⚠️ EMERGENCY SOS\n\nThis will send an emergency alert to all your emergency contacts with your current location.\n\nAre you sure you want to trigger SOS?');
@@ -859,6 +1056,20 @@ const initializeCrashListener = () => {
     console.error("Firebase crash listener error:", error);
   });
 };
+
+// Cleanup on component unmount
+onBeforeUnmount(() => {
+  // Stop GPS monitoring if active
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  
+  // Clear crash interval if active
+  if (crashInterval) {
+    clearInterval(crashInterval);
+  }
+});
 </script>
 
 <style scoped>
