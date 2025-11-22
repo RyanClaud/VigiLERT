@@ -1622,6 +1622,13 @@ const initializeCrashListener = () => {
     };
     
     crashEvents.value.push(crashEvent);
+    
+    // ✅ FIX: Keep only the latest 5 crash markers to prevent map clutter
+    if (crashEvents.value.length > 5) {
+      crashEvents.value = crashEvents.value.slice(-5); // Keep only last 5
+      console.log('[CRASH] Keeping only latest 5 crash markers');
+    }
+    
     console.log('[CRASH] Crash added to array. Total crashes:', crashEvents.value.length);
     
     // Add alert notification

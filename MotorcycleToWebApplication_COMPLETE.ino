@@ -412,10 +412,18 @@ void loop() {
     }
   }
 
-  // Clear crash state when acceleration returns to normal
-  if (currentTotalAccel < ACCEL_THRESHOLD && currentRoll > -10 && currentRoll < 10 && crashDetected) {
-    crashDetected = false;
-    Serial.println("[INFO] Crash state cleared - acceleration normal.");
+  // ✅ FIX: Clear crash state when bike returns to normal position
+  // This allows detection of new crashes
+  if (crashDetected) {
+    // Check if bike is back to normal (upright and stable)
+    bool isUpright = (currentRoll > -30 && currentRoll < 30);
+    bool isStable = (currentTotalAccel < ACCEL_THRESHOLD - 2.0); // Below threshold with margin
+    
+    if (isUpright && isStable) {
+      crashDetected = false;
+      Serial.println("[INFO] ✓ Crash state cleared - bike upright and stable.");
+      Serial.println("[INFO] Ready to detect new crashes.");
+    }
   }
 
   // Unauthorized movement
