@@ -89,9 +89,9 @@ float previousTotalAccel = 9.81; // Initialize with gravity
 unsigned long lastCrashCheck = 0;
 const unsigned long CRASH_CHECK_INTERVAL = 100; // Check every 100ms
 
-// ✅ FIX: Prevent multiple crash markers - cooldown period
+// ✅ FIX: Prevent multiple crash markers - shorter cooldown for faster detection
 unsigned long lastCrashTime = 0;
-const unsigned long CRASH_COOLDOWN = 30000; // 30 seconds between crashes
+const unsigned long CRASH_COOLDOWN = 5000; // 5 seconds between crashes (reduced from 30s)
 
 // Firebase paths
 const String tripsPath = "/helmet_public/" + userUID + "/trips.json?auth=" + firebaseAuth;
@@ -404,7 +404,7 @@ void loop() {
       
       Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       Serial.println("✓ CRASH EVENT SENT TO FIREBASE!");
-      Serial.println("✓ Cooldown active for 30 seconds");
+      Serial.println("✓ Cooldown active for 5 seconds");
       Serial.println("✓ CHECK DASHBOARD FOR:");
       Serial.println("  • Red crash marker on map");
       Serial.println("  • Crash alert notification");

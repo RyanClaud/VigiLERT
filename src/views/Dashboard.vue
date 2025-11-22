@@ -256,46 +256,7 @@
         </div>
       </div>
 
-      <!-- ✅ DEBUG PANEL - Real-time Data Monitor -->
-      <div class="relative overflow-hidden bg-gradient-to-br from-yellow-50 to-orange-50 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-8 border-4 border-yellow-400">
-        <div class="flex items-center gap-3 mb-4">
-          <span class="material-icons text-3xl text-yellow-600">bug_report</span>
-          <h3 class="text-xl font-bold text-yellow-800">🔍 Real-Time Data Monitor (Debug)</h3>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-sm">
-          <div class="bg-white p-4 rounded-xl border-2 border-yellow-300">
-            <p class="font-bold text-gray-700 mb-2">🍺 Alcohol Detection</p>
-            <p class="text-xs"><span class="font-semibold">Status:</span> <span :class="alcoholStatus === 'Danger' ? 'text-red-600 font-bold' : 'text-green-600'">{{ alcoholStatus }}</span></p>
-            <p class="text-xs"><span class="font-semibold">Subtitle:</span> {{ alcoholSubtitle }}</p>
-            <p class="text-xs"><span class="font-semibold">Sensor Value:</span> {{ sensorData.alcohol.value }}</p>
-            <p class="text-xs"><span class="font-semibold">Last Update:</span> {{ new Date(sensorData.alcohol.lastUpdate).toLocaleTimeString() }}</p>
-          </div>
-          <div class="bg-white p-4 rounded-xl border-2 border-blue-300">
-            <p class="font-bold text-gray-700 mb-2">👤 Rider Status</p>
-            <p class="text-xs"><span class="font-semibold">Status:</span> <span :class="riderStatus === 'Active' ? 'text-green-600' : 'text-red-600'">{{ riderStatus }}</span></p>
-            <p class="text-xs"><span class="font-semibold">Subtitle:</span> {{ riderSubtitle }}</p>
-            <p class="text-xs"><span class="font-semibold">Helmet Paired:</span> {{ helmetPaired ? '✓ Yes' : '✗ No' }}</p>
-            <p class="text-xs"><span class="font-semibold">Motorcycle Paired:</span> {{ motorcyclePaired ? '✓ Yes' : '✗ No' }}</p>
-          </div>
-          <div class="bg-white p-4 rounded-xl border-2 border-purple-300">
-            <p class="font-bold text-gray-700 mb-2">👁️ Alertness</p>
-            <p class="text-xs"><span class="font-semibold">Status:</span> <span :class="alertnessStatus === 'Normal' ? 'text-green-600' : 'text-orange-600'">{{ alertnessStatus }}</span></p>
-            <p class="text-xs"><span class="font-semibold">Subtitle:</span> {{ alertnessSubtitle }}</p>
-          </div>
-        </div>
-        <div class="mt-4 bg-white p-4 rounded-xl border-2 border-green-300">
-          <p class="font-bold text-gray-700 mb-2">📊 Live Data from Firebase</p>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <p><span class="font-semibold">Speed:</span> {{ currentSpeed.toFixed(1) }} kph</p>
-            <p><span class="font-semibold">Battery:</span> {{ sensorData.battery.voltage }}</p>
-            <p><span class="font-semibold">GSM:</span> {{ sensorData.gsm.signal }}</p>
-            <p><span class="font-semibold">GPS Sats:</span> {{ sensorData.gps.satellites }}</p>
-          </div>
-        </div>
-        <p class="text-xs text-yellow-700 mt-3 text-center">
-          ⚠️ This panel shows real-time reactive data. If values don't match Firebase, check browser console for listener logs.
-        </p>
-      </div>
+      <!-- ✅ DEBUG PANEL REMOVED - Cleaner dashboard interface -->
 
       <!-- Electrical Diagnostics Panel -->
       <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-8 border border-white/50">
