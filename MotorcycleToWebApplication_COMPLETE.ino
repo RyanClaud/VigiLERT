@@ -320,29 +320,41 @@ void loop() {
     lastMPUCheck = millis();
   }
 
-  // ✅ FIX: Only send crash events to /crashes path (for map markers)
+  // ✅ FIX: Only send crash events when ACTUAL crash detected (not vibrations)
   if ((currentTotalAccel >= ACCEL_THRESHOLD || currentRoll < -47 || currentRoll > 40) && !crashDetected) {
     Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
     Serial.printf("Impact: %.2f g | Roll: %.1f° | Threshold: %.2f g\n", 
                   currentTotalAccel, currentRoll, ACCEL_THRESHOLD);
     
-    // ✅ ONLY send crash event to /crashes path (creates map marker)
-    if (gps.location.isValid()) {
-      Serial.printf("📍 Sending crash to Firebase WITH GPS: %.6f, %.6f\n", 
-                    gps.location.lat(), gps.location.lng());
-      Serial.println("⚠️ This will create a marker on the dashboard map!");
-      sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), currentTotalAccel, currentRoll);
+    // ✅ Wait 500ms to confirm it's not just a bump/vibration
+    delay(500);
+    
+    // ✅ Re-check acceleration to confirm crash
+    mpu.getEvent(&accel, &gyro, &temp);
+    float confirmAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
+                             accel.acceleration.y * accel.acceleration.y +
+                             accel.acceleration.z * accel.acceleration.z);
+    
+    // ✅ Only send if still above threshold (real crash, not vibration)
+    if (confirmAccel >= ACCEL_THRESHOLD * 0.7) { // 70% of threshold for confirmation
+      // ✅ ONLY send crash event to /crashes path (creates map marker)
+      if (gps.location.isValid()) {
+        Serial.printf("📍 Sending CONFIRMED crash to Firebase WITH GPS: %.6f, %.6f\n", 
+                      gps.location.lat(), gps.location.lng());
+        Serial.println("⚠️ This will create a marker on the dashboard map!");
+        sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), currentTotalAccel, currentRoll);
+      } else {
+        Serial.println("⚠️ Sending CONFIRMED crash to Firebase WITHOUT GPS (no map marker)");
+        sendCrashEventToFirebaseNoGPS(currentTotalAccel, currentRoll);
+      }
+      
+      crashDetected = true;
+      triggerAlert();
+      
+      Serial.println("✓ Crash event sent to Firebase!");
     } else {
-      Serial.println("⚠️ Sending crash to Firebase WITHOUT GPS (no map marker)");
-      sendCrashEventToFirebaseNoGPS(currentTotalAccel, currentRoll);
+      Serial.println("⚠️ False alarm - just a bump/vibration, not a crash");
     }
-    
-    crashDetected = true;
-    triggerAlert();
-    // ✅ Removed: Don't update helmetStatus here (causes conflicts with helmet module)
-    // updateHelmetStatusInFirebase(isHelmetOn, "Crash Alert", 0.0);
-    
-    Serial.println("✓ Crash event sent to Firebase!");
   }
 
   if (currentTotalAccel < ACCEL_THRESHOLD && currentRoll > -10 && currentRoll < 10 && crashDetected) {

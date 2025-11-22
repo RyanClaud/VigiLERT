@@ -80,7 +80,7 @@ void loop() {
   sendAlcoholToFirebase(alcoholValue, alcoholDetected);
   sendHelmetStatusToFirebase(true);
 
-  // Send heartbeat every 2 seconds
+  // Send heartbeat every 5 seconds
   if (millis() - lastHeartbeat >= heartbeatInterval) {
     sendHelmetHeartbeat(true);
     lastHeartbeat = millis();
