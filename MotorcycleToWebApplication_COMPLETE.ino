@@ -258,7 +258,16 @@ void loop() {
   currentTotalAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
                            accel.acceleration.y * accel.acceleration.y +
                            accel.acceleration.z * accel.acceleration.z);
+  
+  // ✅ FIX: Calculate ROLL (left/right lean) for motorcycle crash detection
+  // Roll = rotation around X-axis (left/right lean)
+  // Pitch = rotation around Y-axis (forward/backward tilt)
   currentRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+  float currentPitch = atan2(-accel.acceleration.x, sqrt(accel.acceleration.y * accel.acceleration.y + 
+                                                          accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
+  
+  // ✅ For motorcycle: Use absolute roll angle (left or right lean)
+  float leanAngle = abs(currentRoll);
 
   // ✅ Periodic GSM signal check
   if (millis() - lastGSMCheck > GSM_CHECK_INTERVAL) {
@@ -291,8 +300,8 @@ void loop() {
   // ✅ Enhanced Serial monitoring with detailed GPS info
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 1000) {
-    Serial.printf("\n[SENSOR] Accel: %.2f | Roll: %.1f° | Battery: %.2fV | Helmet: %s",
-                  currentTotalAccel, currentRoll, batteryVoltage, helmetSwitchState ? "ON" : "OFF");
+    Serial.printf("\n[SENSOR] Accel: %.2f | Lean: %.1f° | Pitch: %.1f° | Battery: %.2fV | Helmet: %s",
+                  currentTotalAccel, leanAngle, currentPitch, batteryVoltage, helmetSwitchState ? "ON" : "OFF");
     
     // Detailed GPS information
     if (gps.location.isValid()) {
@@ -338,20 +347,20 @@ void loop() {
     // Calculate CHANGE in acceleration (jerk detection)
     float accelChange = abs(currentTotalAccel - previousTotalAccel);
     
-    // ✅ Detect crash based on SUDDEN CHANGE AND/OR severe roll (combined conditions)
+    // ✅ FIX: Detect crash based on LEFT/RIGHT LEAN (motorcycle falling over)
     bool suddenImpact = (accelChange > 5.0);
-    bool severeRoll = (currentRoll < -60 || currentRoll > 60); // Increased threshold to 60°
+    bool severeLean = (leanAngle > 60); // Motorcycle leaning >60° left or right
     bool moderateImpact = (accelChange > 3.0);
     
-    // ✅ Crash if: (High impact) OR (Moderate impact + Severe roll)
-    if ((suddenImpact || (moderateImpact && severeRoll)) && !crashDetected) {
+    // ✅ Crash if: (High impact) OR (Moderate impact + Severe lean)
+    if ((suddenImpact || (moderateImpact && severeLean)) && !crashDetected) {
       Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
-      Serial.printf("Sudden change: %.2f g | Roll: %.1f° | Speed: %.1f km/h\n", 
-                    accelChange, currentRoll, gps.speed.kmph());
+      Serial.printf("Sudden change: %.2f g | Lean: %.1f° | Pitch: %.1f° | Speed: %.1f km/h\n", 
+                    accelChange, leanAngle, currentPitch, gps.speed.kmph());
       Serial.printf("Current accel: %.2f g | Previous: %.2f g\n", 
                     currentTotalAccel, previousTotalAccel);
-      Serial.printf("Conditions: Impact=%.2fg (>5.0?) | Roll=%.1f° (>60?) | Moderate=%.2fg (>3.0?)\n",
-                    accelChange, abs(currentRoll), accelChange);
+      Serial.printf("Conditions: Impact=%.2fg (>5.0?) | Lean=%.1f° (>60?) | Moderate=%.2fg (>3.0?)\n",
+                    accelChange, leanAngle, accelChange);
       
       // ✅ Wait 500ms and re-check to confirm it's not just a bump
       delay(500);
@@ -367,21 +376,31 @@ void loop() {
       
       // ✅ Only send if still showing significant change (real crash, not vibration)
       if (confirmChange > 3.0) {
+        Serial.println("✅ CRASH CONFIRMED! Sending to Firebase...");
+        
         // ✅ ONLY send crash event to /crashes path (creates map marker)
         if (gps.location.isValid()) {
-          Serial.printf("📍 Sending CONFIRMED crash to Firebase WITH GPS: %.6f, %.6f\n", 
+          Serial.printf("📍 Sending crash WITH GPS: %.6f, %.6f\n", 
                         gps.location.lat(), gps.location.lng());
-          Serial.println("⚠️ This will create a marker on the dashboard map!");
-          sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), accelChange, currentRoll);
+          Serial.printf("   Lean: %.1f° | Impact: %.2f g\n", leanAngle, accelChange);
+          Serial.println("⚠️ This will create a RED MARKER on the dashboard map!");
+          sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), accelChange, leanAngle);
         } else {
-          Serial.println("⚠️ Sending CONFIRMED crash to Firebase WITHOUT GPS (no map marker)");
-          sendCrashEventToFirebaseNoGPS(accelChange, currentRoll);
+          Serial.println("⚠️ Sending crash WITHOUT GPS (no map marker)");
+          Serial.printf("   Lean: %.1f° | Impact: %.2f g\n", leanAngle, accelChange);
+          sendCrashEventToFirebaseNoGPS(accelChange, leanAngle);
         }
         
         crashDetected = true;
         triggerAlert();
         
-        Serial.println("✓ Crash event sent to Firebase!");
+        Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        Serial.println("✓ CRASH EVENT SENT TO FIREBASE!");
+        Serial.println("✓ CHECK DASHBOARD FOR:");
+        Serial.println("  • Red crash marker on map");
+        Serial.println("  • Crash alert notification");
+        Serial.println("  • Recent Alerts section");
+        Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       } else {
         Serial.println("⚠️ False alarm - just a bump/vibration, not a crash");
         Serial.printf("   (Confirmation change %.2f g < 3.0 g threshold)\n", confirmChange);
@@ -392,10 +411,10 @@ void loop() {
     previousTotalAccel = currentTotalAccel;
   }
 
-  // Clear crash state when acceleration is stable
-  if (abs(currentTotalAccel - previousTotalAccel) < 1.0 && currentRoll > -10 && currentRoll < 10 && crashDetected) {
+  // Clear crash state when acceleration is stable and bike is upright
+  if (abs(currentTotalAccel - previousTotalAccel) < 1.0 && leanAngle < 30 && crashDetected) {
     crashDetected = false;
-    Serial.println("[INFO] Crash state cleared - acceleration stable.");
+    Serial.println("[INFO] Crash state cleared - bike upright and stable.");
   }
 
   // Unauthorized movement
@@ -865,9 +884,8 @@ void sendAlertSMS() {
   sendSMS("ALERT! Unauthorized movement detected!");
 }
 
-void sendCrashEventToFirebase(float lat, float lng, float impact, float roll) {
-  Serial.println("\n[FIREBASE] Sending crash event WITH GPS...");
-  Serial.println("📍 This will create a CRASH MARKER on the dashboard map!");
+void sendCrashEventToFirebase(float lat, float lng, float impact, float leanAngle) {
+  Serial.println("\n[FIREBASE] Preparing crash event WITH GPS...");
   
   StaticJsonDocument<256> doc;
   doc["timestamp"] = gpsToUnixTime() * 1000UL;
@@ -875,53 +893,66 @@ void sendCrashEventToFirebase(float lat, float lng, float impact, float roll) {
   doc["lng"] = lng;
   doc["hasGPS"] = true;
   doc["impactStrength"] = impact;
-  doc["roll"] = roll;
-  doc["type"] = "crash"; // ✅ Mark as crash event for map filtering
+  doc["roll"] = leanAngle;  // Lean angle (left/right)
+  doc["type"] = "crash";    // Mark as crash event
   
   String payload;
   serializeJson(doc, payload);
   
-  Serial.println("[FIREBASE] Crash payload: " + payload);
+  Serial.println("[FIREBASE] Crash payload:");
+  Serial.println(payload);
+  Serial.println("[FIREBASE] Sending to: " + firebaseHost + crashPath);
   
   HTTPClient http;
   http.begin(firebaseHost + crashPath);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(payload);
   
+  Serial.printf("[FIREBASE] HTTP Response Code: %d\n", code);
+  
   if (code == HTTP_CODE_OK || code == HTTP_CODE_CREATED) {
-    Serial.printf("[FIREBASE] ✓ Crash sent successfully! HTTP: %d\n", code);
-    Serial.println("✓ Crash location will appear on dashboard map!");
+    Serial.println("[FIREBASE] ✓✓✓ CRASH SENT SUCCESSFULLY! ✓✓✓");
+    Serial.println("[FIREBASE] Dashboard should now show:");
+    Serial.println("           • Red marker at GPS location");
+    Serial.println("           • Crash alert notification");
+    Serial.println("           • Impact and lean angle details");
   } else {
-    Serial.printf("[FIREBASE] ✗ Crash send failed! HTTP: %d\n", code);
+    Serial.printf("[FIREBASE] ✗✗✗ CRASH SEND FAILED! ✗✗✗\n");
+    Serial.printf("[FIREBASE] Error code: %d\n", code);
+    Serial.println("[FIREBASE] Check WiFi connection and Firebase URL");
   }
   
   http.end();
 }
 
-void sendCrashEventToFirebaseNoGPS(float impact, float roll) {
-  Serial.println("\n[FIREBASE] Sending crash event WITHOUT GPS...");
+void sendCrashEventToFirebaseNoGPS(float impact, float leanAngle) {
+  Serial.println("\n[FIREBASE] Preparing crash event WITHOUT GPS...");
   Serial.println("⚠️ No GPS fix - crash will be recorded but won't show on map");
   
   StaticJsonDocument<256> doc;
   doc["timestamp"] = gpsToUnixTime() * 1000UL;
   doc["hasGPS"] = false;
   doc["impactStrength"] = impact;
-  doc["roll"] = roll;
-  doc["type"] = "crash"; // ✅ Mark as crash event
+  doc["roll"] = leanAngle;  // Lean angle (left/right)
+  doc["type"] = "crash";    // Mark as crash event
   
   String payload;
   serializeJson(doc, payload);
   
-  Serial.println("[FIREBASE] Crash payload: " + payload);
+  Serial.println("[FIREBASE] Crash payload:");
+  Serial.println(payload);
   
   HTTPClient http;
   http.begin(firebaseHost + crashPath);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(payload);
   
+  Serial.printf("[FIREBASE] HTTP Response Code: %d\n", code);
+  
   if (code == HTTP_CODE_OK || code == HTTP_CODE_CREATED) {
-    Serial.printf("[FIREBASE] ✓ Crash sent successfully! HTTP: %d\n", code);
+    Serial.println("[FIREBASE] ✓ Crash sent successfully!");
     Serial.println("⚠️ Crash recorded but won't show on map (no GPS coordinates)");
+    Serial.println("   Dashboard will show crash in alerts list");
   } else {
     Serial.printf("[FIREBASE] ✗ Crash send failed! HTTP: %d\n", code);
   }
