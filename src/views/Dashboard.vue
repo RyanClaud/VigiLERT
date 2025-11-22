@@ -27,7 +27,7 @@
     </div>
 
     <!-- ⚠️ HELMET REMOVED WARNING BANNER -->
-    <div v-if="riderStatus === 'Inactive' && previousHelmetState !== null" 
+    <div v-if="!helmetPaired && previousHelmetState === true" 
          class="mx-4 md:mx-8 mb-6 relative overflow-hidden bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-2xl shadow-2xl border-4 border-red-300 animate-pulse">
       <div class="absolute inset-0 bg-gradient-to-r from-red-400/20 to-red-600/20 animate-pulse"></div>
       <div class="relative p-6 flex items-center gap-4">
@@ -639,11 +639,27 @@ const isOverSpeed = ref(false);
 const showAlerts = ref(true);
 
 // New states for enhanced features
+// ✅ STABLE states (used for display - debounced)
 const helmetPaired = ref(false);
 const motorcyclePaired = ref(false);
+
+// ✅ RAW states (immediate sensor readings - not displayed)
+const helmetRawConnected = ref(false);
+const motorcycleRawConnected = ref(false);
+
 const deviceBattery = ref(85);
 const gsmConnected = ref(true);
 const gpsConnected = ref(true);
+
+// ✅ Debouncing timers
+const helmetDisconnectTimer = ref(null);
+const motorcycleDisconnectTimer = ref(null);
+const helmetReconnectTimer = ref(null);
+const motorcycleReconnectTimer = ref(null);
+const DISCONNECT_DELAY = 10000; // 10 seconds before showing disconnected
+const RECONNECT_DELAY = 2000; // 2 seconds before showing reconnected
+let helmetAlertShown = false;
+let motorcycleAlertShown = false;
 const electricalDiagnostics = ref({
   headlight: true,
   taillight: true,
@@ -834,45 +850,125 @@ onMounted(() => {
     if (data !== null) speedLimit.value = data;
   });
 
-  // Listen for helmet pairing status with heartbeat check
+  // ✅ STABLE: Listen for helmet pairing status with proper debouncing
   const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
   onValue(helmetStatusRef, (snapshot) => {
     const data = snapshot.val();
-    console.log('[DEBUG] Helmet device data from Firebase:', data);
     
+    // Determine raw connection status
+    let rawConnected = false;
     if (data && data.status === 'On' && data.lastHeartbeat) {
-      // Check if heartbeat is recent (within last 10 seconds)
       const now = Date.now();
       const lastBeat = data.lastHeartbeat;
-      const timeSinceLastBeat = now - lastBeat;
       
-      // Consider connected if heartbeat within 10 seconds
-      helmetPaired.value = timeSinceLastBeat < 10000;
-      console.log(`[DEBUG] Helmet: ${helmetPaired.value ? 'CONNECTED' : 'DISCONNECTED'} (last beat: ${timeSinceLastBeat}ms ago)`);
+      if (lastBeat < 1577836800000) {
+        rawConnected = true;
+      } else {
+        rawConnected = (now - lastBeat) < 10000;
+      }
+    }
+    
+    helmetRawConnected.value = rawConnected;
+    console.log(`[HELMET] Raw status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    
+    // Clear any existing timers
+    if (helmetDisconnectTimer.value) clearTimeout(helmetDisconnectTimer.value);
+    if (helmetReconnectTimer.value) clearTimeout(helmetReconnectTimer.value);
+    
+    if (rawConnected) {
+      // Device is connected
+      if (!helmetPaired.value) {
+        // Was disconnected, now connected - wait 2s before showing connected
+        console.log('[HELMET] Reconnection detected, waiting 2s to stabilize...');
+        helmetReconnectTimer.value = setTimeout(() => {
+          helmetPaired.value = true;
+          helmetAlertShown = false;
+          console.log('[HELMET] ✓ Stable connection confirmed');
+        }, RECONNECT_DELAY);
+      }
     } else {
-      helmetPaired.value = false;
-      console.log('[DEBUG] Helmet: DISCONNECTED (no data or status Off)');
+      // Device appears disconnected
+      if (helmetPaired.value) {
+        // Was connected, now disconnected - wait 10s before showing disconnected
+        console.log('[HELMET] Disconnection detected, waiting 10s to confirm...');
+        helmetDisconnectTimer.value = setTimeout(() => {
+          helmetPaired.value = false;
+          console.log('[HELMET] ✗ Sustained disconnection confirmed');
+          
+          if (!helmetAlertShown) {
+            alerts.value.unshift({
+              type: 'danger',
+              message: '⚠️ Helmet Device Disconnected!',
+              details: 'Helmet module has been offline for 10 seconds.',
+              time: new Date().toLocaleTimeString()
+            });
+            playSound();
+            helmetAlertShown = true;
+            if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+          }
+        }, DISCONNECT_DELAY);
+      }
     }
   });
 
-  // Listen for motorcycle pairing status with heartbeat check
+  // ✅ STABLE: Listen for motorcycle pairing status with proper debouncing
   const motorcycleStatusRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
   onValue(motorcycleStatusRef, (snapshot) => {
     const data = snapshot.val();
-    console.log('[DEBUG] Motorcycle device data from Firebase:', data);
     
+    // Determine raw connection status
+    let rawConnected = false;
     if (data && data.status === 'On' && data.lastHeartbeat) {
-      // Check if heartbeat is recent (within last 10 seconds)
       const now = Date.now();
       const lastBeat = data.lastHeartbeat;
-      const timeSinceLastBeat = now - lastBeat;
       
-      // Consider connected if heartbeat within 10 seconds
-      motorcyclePaired.value = timeSinceLastBeat < 10000;
-      console.log(`[DEBUG] Motorcycle: ${motorcyclePaired.value ? 'CONNECTED' : 'DISCONNECTED'} (last beat: ${timeSinceLastBeat}ms ago)`);
+      if (lastBeat < 1577836800000) {
+        rawConnected = true;
+      } else {
+        rawConnected = (now - lastBeat) < 10000;
+      }
+    }
+    
+    motorcycleRawConnected.value = rawConnected;
+    console.log(`[MOTORCYCLE] Raw status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    
+    // Clear any existing timers
+    if (motorcycleDisconnectTimer.value) clearTimeout(motorcycleDisconnectTimer.value);
+    if (motorcycleReconnectTimer.value) clearTimeout(motorcycleReconnectTimer.value);
+    
+    if (rawConnected) {
+      // Device is connected
+      if (!motorcyclePaired.value) {
+        // Was disconnected, now connected - wait 2s before showing connected
+        console.log('[MOTORCYCLE] Reconnection detected, waiting 2s to stabilize...');
+        motorcycleReconnectTimer.value = setTimeout(() => {
+          motorcyclePaired.value = true;
+          motorcycleAlertShown = false;
+          console.log('[MOTORCYCLE] ✓ Stable connection confirmed');
+        }, RECONNECT_DELAY);
+      }
     } else {
-      motorcyclePaired.value = false;
-      console.log('[DEBUG] Motorcycle: DISCONNECTED (no data or status Off)');
+      // Device appears disconnected
+      if (motorcyclePaired.value) {
+        // Was connected, now disconnected - wait 10s before showing disconnected
+        console.log('[MOTORCYCLE] Disconnection detected, waiting 10s to confirm...');
+        motorcycleDisconnectTimer.value = setTimeout(() => {
+          motorcyclePaired.value = false;
+          console.log('[MOTORCYCLE] ✗ Sustained disconnection confirmed');
+          
+          if (!motorcycleAlertShown) {
+            alerts.value.unshift({
+              type: 'danger',
+              message: '⚠️ Motorcycle Device Disconnected!',
+              details: 'Motorcycle module has been offline for 10 seconds.',
+              time: new Date().toLocaleTimeString()
+            });
+            playSound();
+            motorcycleAlertShown = true;
+            if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+          }
+        }, DISCONNECT_DELAY);
+      }
     }
   });
 
@@ -960,13 +1056,43 @@ onMounted(() => {
         console.log(`[UPDATE] alcoholStatus AFTER update: ${alcoholStatus.value}`);
         console.log(`[UPDATE] alcoholSubtitle AFTER update: ${alcoholSubtitle.value}`);
         
+        // ✅ NEW: Check for severe intoxication (> 4000) and trigger alertness warning
+        const severeThreshold = 4000;
+        if (sensorValue >= severeThreshold) {
+          console.log('⚠️⚠️⚠️ SEVERE INTOXICATION DETECTED! ⚠️⚠️⚠️');
+          console.log(`   Value ${sensorValue} exceeds severe threshold ${severeThreshold}`);
+          console.log('   Triggering drowsiness/alertness warning!');
+          
+          // Update alertness status
+          alertnessStatus.value = 'Drowsy';
+          alertnessSubtitle.value = `Severe intoxication detected! Value: ${sensorValue}`;
+          
+          console.log(`[ALERTNESS] Status updated to: ${alertnessStatus.value}`);
+          console.log(`[ALERTNESS] Subtitle: ${alertnessSubtitle.value}`);
+          
+          // Add severe intoxication alert
+          alerts.value.unshift({
+            type: 'danger',
+            message: '⚠️ SEVERE INTOXICATION - DROWSINESS RISK!',
+            details: `Alcohol level ${sensorValue} indicates high drowsiness risk. DO NOT RIDE!`,
+            time: timestamp
+          });
+          playSound();
+        } else {
+          // Moderate alcohol level - reset alertness to normal
+          alertnessStatus.value = 'Normal';
+          alertnessSubtitle.value = 'No drowsiness detected';
+          console.log(`[ALERTNESS] Moderate alcohol level - alertness normal`);
+        }
+        
         // Verify the update stuck
         setTimeout(() => {
           console.log(`[VERIFY] alcoholStatus 100ms later: ${alcoholStatus.value}`);
           console.log(`[VERIFY] alcoholSubtitle 100ms later: ${alcoholSubtitle.value}`);
+          console.log(`[VERIFY] alertnessStatus 100ms later: ${alertnessStatus.value}`);
         }, 100);
         
-        // Add alert
+        // Add alcohol alert
         alerts.value.unshift({
           type: 'danger',
           message: '🚨 Alcohol Detected!',
@@ -982,8 +1108,13 @@ onMounted(() => {
         alcoholStatus.value = 'Safe';
         alcoholSubtitle.value = `No alcohol detected (Value: ${sensorValue})`;
         
+        // ✅ Reset alertness when alcohol is safe
+        alertnessStatus.value = 'Normal';
+        alertnessSubtitle.value = 'No drowsiness detected';
+        
         console.log(`[UPDATE] alcoholStatus AFTER update: ${alcoholStatus.value}`);
         console.log(`[UPDATE] alcoholSubtitle AFTER update: ${alcoholSubtitle.value}`);
+        console.log(`[UPDATE] alertnessStatus AFTER update: ${alertnessStatus.value}`);
       }
       
       console.log('[SUCCESS] Alcohol card should now update on dashboard');
@@ -1125,10 +1256,21 @@ onMounted(() => {
       // Update previous state
       previousHelmetState.value = isConnected;
       
-      riderStatus.value = isConnected ? 'Active' : 'Inactive';
-      riderSubtitle.value = isConnected ? 'Helmet connected' : 'Helmet not connected';
+      // ✅ FIX: Rider status should be Active ONLY when BOTH devices are on
+      const bothDevicesOn = helmetPaired.value && motorcyclePaired.value;
+      riderStatus.value = bothDevicesOn ? 'Active' : 'Inactive';
       
-      console.log(`[DEBUG] Helmet Connected: ${isConnected}, Rider Status: ${riderStatus.value}`);
+      if (bothDevicesOn) {
+        riderSubtitle.value = 'Helmet connected';
+      } else if (!helmetPaired.value && !motorcyclePaired.value) {
+        riderSubtitle.value = 'Both devices disconnected';
+      } else if (!helmetPaired.value) {
+        riderSubtitle.value = 'Helmet not connected';
+      } else {
+        riderSubtitle.value = 'Motorcycle not connected';
+      }
+      
+      console.log(`[DEBUG] Helmet: ${helmetPaired.value}, Motorcycle: ${motorcyclePaired.value}, Rider Status: ${riderStatus.value}`);
       
       // ✅ Update alertness status
       alertnessStatus.value = data.alertnessStatus || 'Normal';

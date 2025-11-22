@@ -261,6 +261,15 @@ void loop() {
     lastHelmetModuleCheck = millis();
   }
 
+  // ✅ FIX: Standardized heartbeat timing (reduced to 5 seconds to prevent flickering)
+  static unsigned long lastMotorcycleHeartbeat = 0;
+  const unsigned long MOTORCYCLE_HEARTBEAT_INTERVAL = 5000; // 5 seconds
+  if (millis() - lastMotorcycleHeartbeat > MOTORCYCLE_HEARTBEAT_INTERVAL) {
+    Serial.println("\n[HEARTBEAT] Sending motorcycle heartbeat to Firebase...");
+    updateMotorcycleDeviceStatus(true);
+    lastMotorcycleHeartbeat = millis();
+  }
+
   // ✅ Periodic GPS diagnostics (every 30 seconds)
   static unsigned long lastGPSDiag = 0;
   if (millis() - lastGPSDiag > 30000) {
@@ -311,24 +320,27 @@ void loop() {
     lastMPUCheck = millis();
   }
 
-  // ✅ Enhanced Crash detection with debugging
+  // ✅ FIX: Only send crash events to /crashes path (for map markers)
   if ((currentTotalAccel >= ACCEL_THRESHOLD || currentRoll < -47 || currentRoll > 40) && !crashDetected) {
     Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
     Serial.printf("Impact: %.2f g | Roll: %.1f° | Threshold: %.2f g\n", 
                   currentTotalAccel, currentRoll, ACCEL_THRESHOLD);
     
+    // ✅ ONLY send crash event to /crashes path (creates map marker)
     if (gps.location.isValid()) {
-      Serial.printf("Sending crash to Firebase with GPS: %.6f, %.6f\n", 
+      Serial.printf("📍 Sending crash to Firebase WITH GPS: %.6f, %.6f\n", 
                     gps.location.lat(), gps.location.lng());
+      Serial.println("⚠️ This will create a marker on the dashboard map!");
       sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), currentTotalAccel, currentRoll);
     } else {
-      Serial.println("Sending crash to Firebase WITHOUT GPS");
+      Serial.println("⚠️ Sending crash to Firebase WITHOUT GPS (no map marker)");
       sendCrashEventToFirebaseNoGPS(currentTotalAccel, currentRoll);
     }
     
     crashDetected = true;
     triggerAlert();
-    updateHelmetStatusInFirebase(isHelmetOn, "Crash Alert", 0.0);
+    // ✅ Removed: Don't update helmetStatus here (causes conflicts with helmet module)
+    // updateHelmetStatusInFirebase(isHelmetOn, "Crash Alert", 0.0);
     
     Serial.println("✓ Crash event sent to Firebase!");
   }
@@ -336,7 +348,8 @@ void loop() {
   if (currentTotalAccel < ACCEL_THRESHOLD && currentRoll > -10 && currentRoll < 10 && crashDetected) {
     crashDetected = false;
     Serial.println("[INFO] Crash state cleared.");
-    updateHelmetStatusInFirebase(isHelmetOn, "Normal", 0.0);
+    // ✅ Removed: Don't update helmetStatus here (causes conflicts with helmet module)
+    // updateHelmetStatusInFirebase(isHelmetOn, "Normal", 0.0);
   }
 
   // Unauthorized movement
@@ -610,7 +623,9 @@ void checkHelmetModuleStatus() {
 }
 
 void updateMotorcycleDeviceStatus(bool isOn) {
-  unsigned long timestamp = gpsToUnixTime() * 1000UL;
+  // ✅ FIX: Use a base Unix timestamp + millis for consistent heartbeat
+  // This ensures the timestamp is always increasing and comparable
+  unsigned long timestamp = 1700000000000UL + millis();
   
   StaticJsonDocument<128> doc;
   doc["status"] = isOn ? "On" : "Off";
@@ -624,7 +639,14 @@ void updateMotorcycleDeviceStatus(bool isOn) {
   String url = firebaseHost + "/helmet_public/" + userUID + "/devices/motorcycle.json?auth=" + firebaseAuth;
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  http.PUT(payload);
+  int code = http.PUT(payload);
+  
+  if (code == HTTP_CODE_OK) {
+    Serial.printf("[FIREBASE] Motorcycle heartbeat sent: %lu\n", timestamp);
+  } else {
+    Serial.printf("[FIREBASE] Motorcycle heartbeat failed: %d\n", code);
+  }
+  
   http.end();
 }
 
@@ -799,6 +821,7 @@ void sendAlertSMS() {
 
 void sendCrashEventToFirebase(float lat, float lng, float impact, float roll) {
   Serial.println("\n[FIREBASE] Sending crash event WITH GPS...");
+  Serial.println("📍 This will create a CRASH MARKER on the dashboard map!");
   
   StaticJsonDocument<256> doc;
   doc["timestamp"] = gpsToUnixTime() * 1000UL;
@@ -807,6 +830,7 @@ void sendCrashEventToFirebase(float lat, float lng, float impact, float roll) {
   doc["hasGPS"] = true;
   doc["impactStrength"] = impact;
   doc["roll"] = roll;
+  doc["type"] = "crash"; // ✅ Mark as crash event for map filtering
   
   String payload;
   serializeJson(doc, payload);
@@ -820,6 +844,7 @@ void sendCrashEventToFirebase(float lat, float lng, float impact, float roll) {
   
   if (code == HTTP_CODE_OK || code == HTTP_CODE_CREATED) {
     Serial.printf("[FIREBASE] ✓ Crash sent successfully! HTTP: %d\n", code);
+    Serial.println("✓ Crash location will appear on dashboard map!");
   } else {
     Serial.printf("[FIREBASE] ✗ Crash send failed! HTTP: %d\n", code);
   }
@@ -829,12 +854,14 @@ void sendCrashEventToFirebase(float lat, float lng, float impact, float roll) {
 
 void sendCrashEventToFirebaseNoGPS(float impact, float roll) {
   Serial.println("\n[FIREBASE] Sending crash event WITHOUT GPS...");
+  Serial.println("⚠️ No GPS fix - crash will be recorded but won't show on map");
   
   StaticJsonDocument<256> doc;
   doc["timestamp"] = gpsToUnixTime() * 1000UL;
   doc["hasGPS"] = false;
   doc["impactStrength"] = impact;
   doc["roll"] = roll;
+  doc["type"] = "crash"; // ✅ Mark as crash event
   
   String payload;
   serializeJson(doc, payload);
@@ -848,6 +875,7 @@ void sendCrashEventToFirebaseNoGPS(float impact, float roll) {
   
   if (code == HTTP_CODE_OK || code == HTTP_CODE_CREATED) {
     Serial.printf("[FIREBASE] ✓ Crash sent successfully! HTTP: %d\n", code);
+    Serial.println("⚠️ Crash recorded but won't show on map (no GPS coordinates)");
   } else {
     Serial.printf("[FIREBASE] ✗ Crash send failed! HTTP: %d\n", code);
   }
@@ -926,7 +954,8 @@ void handleHelmetState(bool currentHelmetState, float voltage, bool h, bool t, b
     startNewTrip();
     isHelmetOn = true;
     crashDetected = false;
-    updateHelmetStatusInFirebase(true, "Normal", 0.0);
+    // ✅ Removed: Only helmet module should update helmetStatus to avoid conflicts
+    // updateHelmetStatusInFirebase(true, "Normal", 0.0);
     Serial.println("[HELMET] Helmet PUT ON");
   }
   
@@ -942,7 +971,8 @@ void handleHelmetState(bool currentHelmetState, float voltage, bool h, bool t, b
     isHelmetOn = false;
     lastHelmetOffMillis = millis();
     crashDetected = false;
-    updateHelmetStatusInFirebase(false, "Normal", 0.0);
+    // ✅ Removed: Only helmet module should update helmetStatus to avoid conflicts
+    // updateHelmetStatusInFirebase(false, "Normal", 0.0);
     Serial.println("[HELMET] Helmet REMOVED");
     
     // Stop engine if helmet is removed while running

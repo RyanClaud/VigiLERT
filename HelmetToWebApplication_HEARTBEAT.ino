@@ -5,9 +5,9 @@
 #include <HardwareSerial.h>
 #include <TimeLib.h>
 
-// WiFi Credentials
-const char* ssid = "DPWH";
-const char* password = "12345678900";
+// ✅ FIX: Use same WiFi network as motorcycle to eliminate latency differences
+const char* ssid = "Kupal";
+const char* password = "DEEABE7H406";
 
 // Firebase Config
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
@@ -28,9 +28,9 @@ const long beepInterval = 20;
 const int beepDuration = 1500;
 const int beepFrequency = 1200;
 
-// Heartbeat timing
+// ✅ FIX: Standardized heartbeat timing
 unsigned long lastHeartbeat = 0;
-const long heartbeatInterval = 2000; // Send heartbeat every 2 seconds
+const long heartbeatInterval = 5000; // Send heartbeat every 5 seconds (reduced Firebase load)
 
 // GPS Setup
 TinyGPSPlus gps;
@@ -86,7 +86,8 @@ void loop() {
     lastHeartbeat = millis();
   }
 
-  delay(1000);
+  // ✅ FIX: Match heartbeat interval to reduce Firebase load and prevent flickering
+  delay(5000);
 }
 
 void connectToWiFi() {
