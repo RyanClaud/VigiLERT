@@ -89,6 +89,10 @@ float previousTotalAccel = 9.81; // Initialize with gravity
 unsigned long lastCrashCheck = 0;
 const unsigned long CRASH_CHECK_INTERVAL = 100; // Check every 100ms
 
+// ✅ FIX: Prevent multiple crash markers - cooldown period
+unsigned long lastCrashTime = 0;
+const unsigned long CRASH_COOLDOWN = 30000; // 30 seconds between crashes
+
 // Firebase paths
 const String tripsPath = "/helmet_public/" + userUID + "/trips.json?auth=" + firebaseAuth;
 const String livePath = "/helmet_public/" + userUID + "/live.json?auth=" + firebaseAuth;
@@ -215,10 +219,39 @@ void loop() {
         Serial.println("✓ MPU6050 is working!");
       }
     }
+    else if (cmd == "ORIENT" || cmd == "ORIENTATION") {
+      Serial.println("\n🧭 MPU6050 ORIENTATION TEST");
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      Serial.println("Tilt the motorcycle LEFT, RIGHT, FORWARD, BACKWARD");
+      Serial.println("Watch which values change the most:");
+      Serial.println("");
+      
+      for (int i = 0; i < 20; i++) {
+        mpu.getEvent(&accel, &gyro, &temp);
+        
+        float totalAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
+                               accel.acceleration.y * accel.acceleration.y +
+                               accel.acceleration.z * accel.acceleration.z);
+        
+        float roll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+        float pitch = atan2(-accel.acceleration.x, sqrt(accel.acceleration.y * accel.acceleration.y + 
+                                                        accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
+        
+        Serial.printf("X: %6.2f | Y: %6.2f | Z: %6.2f | Roll: %6.1f° | Pitch: %6.1f° | Total: %.2f\n",
+                      accel.acceleration.x, accel.acceleration.y, accel.acceleration.z,
+                      roll, pitch, totalAccel);
+        delay(500);
+      }
+      
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      Serial.println("Which axis changed the most when tilting LEFT/RIGHT?");
+      Serial.println("That's the axis we should use for lean detection!");
+    }
     else if (cmd == "HELP") {
       Serial.println("\n📋 AVAILABLE COMMANDS:");
       Serial.println("  CRASH or TEST CRASH - Trigger test crash event");
       Serial.println("  MPU or MPU TEST     - Test MPU6050 sensor");
+      Serial.println("  ORIENT              - Test sensor orientation");
       Serial.println("  GPS                 - Show GPS diagnostics");
       Serial.println("  HELP                - Show this help");
     }
@@ -340,81 +373,49 @@ void loop() {
     lastMPUCheck = millis();
   }
 
-  // ✅ FIX: Crash detection based on SUDDEN CHANGE in acceleration (not absolute value)
-  if (millis() - lastCrashCheck > CRASH_CHECK_INTERVAL) {
-    lastCrashCheck = millis();
+  // ✅ SIMPLE CRASH DETECTION: Based on total acceleration threshold (WORKING VERSION)
+  // Detect when total acceleration exceeds threshold (indicates impact or severe tilt)
+  if ((currentTotalAccel >= ACCEL_THRESHOLD || currentRoll < -47 || currentRoll > 40) && !crashDetected) {
     
-    // Calculate CHANGE in acceleration (jerk detection)
-    float accelChange = abs(currentTotalAccel - previousTotalAccel);
-    
-    // ✅ FIX: Detect crash based on LEFT/RIGHT LEAN (motorcycle falling over)
-    bool suddenImpact = (accelChange > 5.0);
-    bool severeLean = (leanAngle > 60); // Motorcycle leaning >60° left or right
-    bool moderateImpact = (accelChange > 3.0);
-    
-    // ✅ Crash if: (High impact) OR (Moderate impact + Severe lean)
-    if ((suddenImpact || (moderateImpact && severeLean)) && !crashDetected) {
+    // ✅ FIX: Check cooldown period to prevent multiple crash markers
+    unsigned long timeSinceLastCrash = millis() - lastCrashTime;
+    if (timeSinceLastCrash < CRASH_COOLDOWN) {
+      Serial.printf("[CRASH] Cooldown active - %lu seconds remaining\n", 
+                    (CRASH_COOLDOWN - timeSinceLastCrash) / 1000);
+      // Skip this crash detection
+    } else {
       Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
-      Serial.printf("Sudden change: %.2f g | Lean: %.1f° | Pitch: %.1f° | Speed: %.1f km/h\n", 
-                    accelChange, leanAngle, currentPitch, gps.speed.kmph());
-      Serial.printf("Current accel: %.2f g | Previous: %.2f g\n", 
-                    currentTotalAccel, previousTotalAccel);
-      Serial.printf("Conditions: Impact=%.2fg (>5.0?) | Lean=%.1f° (>60?) | Moderate=%.2fg (>3.0?)\n",
-                    accelChange, leanAngle, accelChange);
+      Serial.printf("Impact: %.2f g | Roll: %.1f° | Threshold: %.2f g\n", 
+                    currentTotalAccel, currentRoll, ACCEL_THRESHOLD);
       
-      // ✅ Wait 500ms and re-check to confirm it's not just a bump
-      delay(500);
-      
-      // ✅ Re-check acceleration to confirm crash
-      mpu.getEvent(&accel, &gyro, &temp);
-      float confirmAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
-                               accel.acceleration.y * accel.acceleration.y +
-                               accel.acceleration.z * accel.acceleration.z);
-      float confirmChange = abs(confirmAccel - previousTotalAccel);
-      
-      Serial.printf("Confirmation check: Change = %.2f g\n", confirmChange);
-      
-      // ✅ Only send if still showing significant change (real crash, not vibration)
-      if (confirmChange > 3.0) {
-        Serial.println("✅ CRASH CONFIRMED! Sending to Firebase...");
-        
-        // ✅ ONLY send crash event to /crashes path (creates map marker)
-        if (gps.location.isValid()) {
-          Serial.printf("📍 Sending crash WITH GPS: %.6f, %.6f\n", 
-                        gps.location.lat(), gps.location.lng());
-          Serial.printf("   Lean: %.1f° | Impact: %.2f g\n", leanAngle, accelChange);
-          Serial.println("⚠️ This will create a RED MARKER on the dashboard map!");
-          sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), accelChange, leanAngle);
-        } else {
-          Serial.println("⚠️ Sending crash WITHOUT GPS (no map marker)");
-          Serial.printf("   Lean: %.1f° | Impact: %.2f g\n", leanAngle, accelChange);
-          sendCrashEventToFirebaseNoGPS(accelChange, leanAngle);
-        }
-        
-        crashDetected = true;
-        triggerAlert();
-        
-        Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        Serial.println("✓ CRASH EVENT SENT TO FIREBASE!");
-        Serial.println("✓ CHECK DASHBOARD FOR:");
-        Serial.println("  • Red crash marker on map");
-        Serial.println("  • Crash alert notification");
-        Serial.println("  • Recent Alerts section");
-        Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      // ✅ Send crash event to Firebase (ONLY ONCE due to cooldown)
+      if (gps.location.isValid()) {
+        Serial.printf("📍 Sending crash WITH GPS: %.6f, %.6f\n", 
+                      gps.location.lat(), gps.location.lng());
+        sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), currentTotalAccel, currentRoll);
       } else {
-        Serial.println("⚠️ False alarm - just a bump/vibration, not a crash");
-        Serial.printf("   (Confirmation change %.2f g < 3.0 g threshold)\n", confirmChange);
+        Serial.println("⚠️ Sending crash WITHOUT GPS");
+        sendCrashEventToFirebaseNoGPS(currentTotalAccel, currentRoll);
       }
+      
+      crashDetected = true;
+      lastCrashTime = millis(); // ✅ Record crash time for cooldown
+      triggerAlert();
+      
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      Serial.println("✓ CRASH EVENT SENT TO FIREBASE!");
+      Serial.println("✓ Cooldown active for 30 seconds");
+      Serial.println("✓ CHECK DASHBOARD FOR:");
+      Serial.println("  • Red crash marker on map");
+      Serial.println("  • Crash alert notification");
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
-    
-    // Update previous acceleration for next comparison
-    previousTotalAccel = currentTotalAccel;
   }
 
-  // Clear crash state when acceleration is stable and bike is upright
-  if (abs(currentTotalAccel - previousTotalAccel) < 1.0 && leanAngle < 30 && crashDetected) {
+  // Clear crash state when acceleration returns to normal
+  if (currentTotalAccel < ACCEL_THRESHOLD && currentRoll > -10 && currentRoll < 10 && crashDetected) {
     crashDetected = false;
-    Serial.println("[INFO] Crash state cleared - bike upright and stable.");
+    Serial.println("[INFO] Crash state cleared - acceleration normal.");
   }
 
   // Unauthorized movement
