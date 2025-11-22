@@ -409,6 +409,18 @@ void loop() {
       Serial.println("  • Red crash marker on map");
       Serial.println("  • Crash alert notification");
       Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      // ✅ SAFETY FEATURE: Auto-shutdown engine after crash
+      if (engineRunning) {
+        Serial.println("\n⚠️ SAFETY PROTOCOL ACTIVATED!");
+        Serial.println("⚠️ Engine will shut down in 2 seconds...");
+        delay(2000); // Wait 2 seconds
+        stopEngine();
+        Serial.println("✓ Engine automatically shut down for safety");
+        Serial.println("✓ This prevents fire hazards and further damage");
+      } else {
+        Serial.println("\n[INFO] Engine was already off - no shutdown needed");
+      }
     }
   }
 
