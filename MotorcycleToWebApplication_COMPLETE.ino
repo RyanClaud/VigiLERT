@@ -184,16 +184,22 @@ void loop() {
       float testRoll = currentRoll;
       
       if (gps.location.isValid()) {
-        Serial.printf("Sending test crash with GPS: %.6f, %.6f\n", 
+        Serial.printf("📍 Sending test crash WITH GPS: %.6f, %.6f\n", 
                       gps.location.lat(), gps.location.lng());
+        Serial.printf("   Impact: %.2f g | Roll: %.1f°\n", testAccel, testRoll);
         sendCrashEventToFirebase(gps.location.lat(), gps.location.lng(), testAccel, testRoll);
       } else {
-        Serial.println("Sending test crash WITHOUT GPS");
+        Serial.println("⚠️ Sending test crash WITHOUT GPS");
+        Serial.printf("   Impact: %.2f g | Roll: %.1f°\n", testAccel, testRoll);
         sendCrashEventToFirebaseNoGPS(testAccel, testRoll);
       }
       
       triggerAlert();
-      Serial.println("✓ Test crash sent to Firebase! Check dashboard.");
+      Serial.println("✓ Test crash sent to Firebase!");
+      Serial.println("✓ Check dashboard for crash marker and alert!");
+      
+      // Mark as crash detected to prevent auto-detection during test
+      crashDetected = true;
     }
     else if (cmd == "MPU TEST" || cmd == "MPU") {
       Serial.println("\n🧪 MPU6050 TEST:");
@@ -332,13 +338,20 @@ void loop() {
     // Calculate CHANGE in acceleration (jerk detection)
     float accelChange = abs(currentTotalAccel - previousTotalAccel);
     
-    // ✅ Detect crash based on SUDDEN CHANGE or severe roll
-    if ((accelChange > 5.0 || currentRoll < -45 || currentRoll > 45) && !crashDetected) {
+    // ✅ Detect crash based on SUDDEN CHANGE AND/OR severe roll (combined conditions)
+    bool suddenImpact = (accelChange > 5.0);
+    bool severeRoll = (currentRoll < -60 || currentRoll > 60); // Increased threshold to 60°
+    bool moderateImpact = (accelChange > 3.0);
+    
+    // ✅ Crash if: (High impact) OR (Moderate impact + Severe roll)
+    if ((suddenImpact || (moderateImpact && severeRoll)) && !crashDetected) {
       Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
       Serial.printf("Sudden change: %.2f g | Roll: %.1f° | Speed: %.1f km/h\n", 
                     accelChange, currentRoll, gps.speed.kmph());
       Serial.printf("Current accel: %.2f g | Previous: %.2f g\n", 
                     currentTotalAccel, previousTotalAccel);
+      Serial.printf("Conditions: Impact=%.2fg (>5.0?) | Roll=%.1f° (>60?) | Moderate=%.2fg (>3.0?)\n",
+                    accelChange, abs(currentRoll), accelChange);
       
       // ✅ Wait 500ms and re-check to confirm it's not just a bump
       delay(500);
