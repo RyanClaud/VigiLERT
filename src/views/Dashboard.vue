@@ -604,7 +604,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue, onChildAdded, remove } from 'firebase/database';
+import { ref as dbRef, set, onValue, onChildAdded, remove, get } from 'firebase/database';
 
 // Components
 import TabGroup from '../components/TabGroup.vue';
@@ -1642,40 +1642,105 @@ const initializeCrashListener = () => {
   });
 };
 
-// Periodic heartbeat check (every 5 seconds)
-let heartbeatCheckInterval = null;
-
-const checkDeviceHeartbeats = () => {
-  // Re-check helmet
+// ✅ BEST SOLUTION: Real-time Firebase listeners for device status
+const setupDeviceListeners = () => {
+  console.log('[DEVICE LISTENERS] Setting up real-time device status monitoring...');
+  
+  // ✅ Helmet real-time listener
   const helmetRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
+    console.log('[HELMET] Firebase update received:', data);
+    
     if (data && data.status === 'On' && data.lastHeartbeat) {
-      const timeSinceLastBeat = Date.now() - data.lastHeartbeat;
-      helmetPaired.value = timeSinceLastBeat < 10000;
+      const now = Date.now();
+      const timeSinceLastBeat = now - data.lastHeartbeat;
+      
+      console.log(`[HELMET] Time since last beat: ${timeSinceLastBeat}ms (${(timeSinceLastBeat/1000).toFixed(1)}s)`);
+      
+      // ✅ Device is connected if heartbeat is less than 10 seconds old
+      const isConnected = timeSinceLastBeat < 10000;
+      
+      if (isConnected !== helmetPaired.value) {
+        console.log(`[HELMET] Status changed: ${helmetPaired.value} → ${isConnected}`);
+        helmetPaired.value = isConnected;
+      }
     } else {
-      helmetPaired.value = false;
+      console.log('[HELMET] No valid data or status is Off');
+      if (helmetPaired.value) {
+        console.log('[HELMET] Marking as disconnected');
+        helmetPaired.value = false;
+      }
     }
-  }, { onlyOnce: true });
+  }); // ✅ NO onlyOnce - listen continuously for real-time updates!
   
-  // Re-check motorcycle
+  // ✅ Motorcycle real-time listener
   const motorcycleRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
   onValue(motorcycleRef, (snapshot) => {
     const data = snapshot.val();
+    console.log('[MOTORCYCLE] Firebase update received:', data);
+    
     if (data && data.status === 'On' && data.lastHeartbeat) {
-      const timeSinceLastBeat = Date.now() - data.lastHeartbeat;
-      motorcyclePaired.value = timeSinceLastBeat < 10000;
+      const now = Date.now();
+      const timeSinceLastBeat = now - data.lastHeartbeat;
+      
+      console.log(`[MOTORCYCLE] Time since last beat: ${timeSinceLastBeat}ms (${(timeSinceLastBeat/1000).toFixed(1)}s)`);
+      
+      const isConnected = timeSinceLastBeat < 10000;
+      
+      if (isConnected !== motorcyclePaired.value) {
+        console.log(`[MOTORCYCLE] Status changed: ${motorcyclePaired.value} → ${isConnected}`);
+        motorcyclePaired.value = isConnected;
+      }
     } else {
-      motorcyclePaired.value = false;
+      console.log('[MOTORCYCLE] No valid data or status is Off');
+      if (motorcyclePaired.value) {
+        console.log('[MOTORCYCLE] Marking as disconnected');
+        motorcyclePaired.value = false;
+      }
     }
-  }, { onlyOnce: true });
+  }); // ✅ NO onlyOnce - listen continuously for real-time updates!
+};
+
+// ✅ Backup timeout check (runs every 2 seconds to catch stale heartbeats)
+let heartbeatCheckInterval = null;
+
+const checkDeviceTimeouts = () => {
+  const helmetRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
+  get(helmetRef).then((snapshot) => {
+    const data = snapshot.val();
+    if (data && data.lastHeartbeat) {
+      const timeSinceLastBeat = Date.now() - data.lastHeartbeat;
+      if (timeSinceLastBeat > 10000 && helmetPaired.value) {
+        console.log(`[HELMET] Timeout detected (${(timeSinceLastBeat/1000).toFixed(1)}s) - marking as disconnected`);
+        helmetPaired.value = false;
+      }
+    }
+  });
+  
+  const motorcycleRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
+  get(motorcycleRef).then((snapshot) => {
+    const data = snapshot.val();
+    if (data && data.lastHeartbeat) {
+      const timeSinceLastBeat = Date.now() - data.lastHeartbeat;
+      if (timeSinceLastBeat > 10000 && motorcyclePaired.value) {
+        console.log(`[MOTORCYCLE] Timeout detected (${(timeSinceLastBeat/1000).toFixed(1)}s) - marking as disconnected`);
+        motorcyclePaired.value = false;
+      }
+    }
+  });
 };
 
 onMounted(() => {
   // ... existing onMounted code ...
   
-  // Start periodic heartbeat check
-  heartbeatCheckInterval = setInterval(checkDeviceHeartbeats, 5000);
+  // ✅ Setup real-time device listeners (instant updates)
+  setupDeviceListeners();
+  
+  // ✅ Start backup timeout check (every 2 seconds)
+  heartbeatCheckInterval = setInterval(checkDeviceTimeouts, 2000);
+  
+  console.log('[DASHBOARD] Device monitoring initialized with real-time listeners + 2s timeout checks');
 });
 
 // Cleanup on component unmount
