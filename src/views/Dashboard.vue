@@ -1621,15 +1621,11 @@ const initializeCrashListener = () => {
       hasGPS: event.hasGPS || false
     };
     
-    crashEvents.value.push(crashEvent);
+    // ✅ FIX: Keep ONLY the latest crash marker (replace old ones)
+    crashEvents.value = [crashEvent]; // Replace entire array with just the new crash
     
-    // ✅ FIX: Keep only the latest 5 crash markers to prevent map clutter
-    if (crashEvents.value.length > 5) {
-      crashEvents.value = crashEvents.value.slice(-5); // Keep only last 5
-      console.log('[CRASH] Keeping only latest 5 crash markers');
-    }
-    
-    console.log('[CRASH] Crash added to array. Total crashes:', crashEvents.value.length);
+    console.log('[CRASH] ✓ Showing ONLY latest crash marker');
+    console.log('[CRASH] Previous markers removed, displaying current crash only');
     
     // Add alert notification
     alerts.value.unshift({
