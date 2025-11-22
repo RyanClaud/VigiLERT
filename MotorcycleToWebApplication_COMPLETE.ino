@@ -314,9 +314,9 @@ void loop() {
     lastHelmetModuleCheck = millis();
   }
 
-  // ✅ FIX: Standardized heartbeat timing (reduced to 5 seconds to prevent flickering)
+  // ✅ REAL-TIME: Faster heartbeat for real-time status monitoring
   static unsigned long lastMotorcycleHeartbeat = 0;
-  const unsigned long MOTORCYCLE_HEARTBEAT_INTERVAL = 5000; // 5 seconds
+  const unsigned long MOTORCYCLE_HEARTBEAT_INTERVAL = 2000; // 2 seconds for real-time updates
   if (millis() - lastMotorcycleHeartbeat > MOTORCYCLE_HEARTBEAT_INTERVAL) {
     Serial.println("\n[HEARTBEAT] Sending motorcycle heartbeat to Firebase...");
     updateMotorcycleDeviceStatus(true);
@@ -436,14 +436,21 @@ void loop() {
   // Helmet state & trip management
   handleHelmetState(helmetSwitchState, batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn);
 
-  // ✅ Firebase live updates with ALL sensor data
-  if (gps.location.isValid()) {
-    float speedKmph = gps.speed.kmph();
-    sendLiveToFirebase(gps.location.lat(), gps.location.lng(), speedKmph, batteryVoltage,
-                       headlightOn, taillightOn, leftSignalOn, rightSignalOn, helmetSwitchState);
-    if (speedKmph > maxRecordedSpeed) maxRecordedSpeed = speedKmph;
-  } else {
-    sendLiveToFirebaseNoGPS(batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn, helmetSwitchState);
+  // ✅ REAL-TIME: Firebase live updates with throttling for optimal performance
+  static unsigned long lastFirebaseUpdate = 0;
+  const unsigned long FIREBASE_UPDATE_INTERVAL = 500; // Update every 500ms (2x per second)
+  
+  if (millis() - lastFirebaseUpdate >= FIREBASE_UPDATE_INTERVAL) {
+    lastFirebaseUpdate = millis();
+    
+    if (gps.location.isValid()) {
+      float speedKmph = gps.speed.kmph();
+      sendLiveToFirebase(gps.location.lat(), gps.location.lng(), speedKmph, batteryVoltage,
+                         headlightOn, taillightOn, leftSignalOn, rightSignalOn, helmetSwitchState);
+      if (speedKmph > maxRecordedSpeed) maxRecordedSpeed = speedKmph;
+    } else {
+      sendLiveToFirebaseNoGPS(batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn, helmetSwitchState);
+    }
   }
 
   // Periodic speed limit update
@@ -452,7 +459,8 @@ void loop() {
     lastSpeedCheck = millis();
   }
 
-  delay(200);
+  // ✅ REAL-TIME: Minimal delay for faster updates (50ms instead of 200ms)
+  delay(50);
 }
 
 // ======= ✅ NEW: GPS DIAGNOSTICS =======

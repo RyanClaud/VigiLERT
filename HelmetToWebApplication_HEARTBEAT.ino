@@ -28,9 +28,9 @@ const long beepInterval = 20;
 const int beepDuration = 1500;
 const int beepFrequency = 1200;
 
-// ✅ FIX: Standardized heartbeat timing
+// ✅ REAL-TIME: Faster heartbeat for real-time monitoring
 unsigned long lastHeartbeat = 0;
-const long heartbeatInterval = 5000; // Send heartbeat every 5 seconds (reduced Firebase load)
+const long heartbeatInterval = 2000; // Send heartbeat every 2 seconds for real-time updates
 
 // GPS Setup
 TinyGPSPlus gps;
@@ -80,14 +80,14 @@ void loop() {
   sendAlcoholToFirebase(alcoholValue, alcoholDetected);
   sendHelmetStatusToFirebase(true);
 
-  // Send heartbeat every 5 seconds
+  // ✅ REAL-TIME: Send heartbeat every 2 seconds for faster status updates
   if (millis() - lastHeartbeat >= heartbeatInterval) {
     sendHelmetHeartbeat(true);
     lastHeartbeat = millis();
   }
 
-  // ✅ FIX: Match heartbeat interval to reduce Firebase load and prevent flickering
-  delay(5000);
+  // ✅ REAL-TIME: Faster updates for real-time monitoring (1 second instead of 5)
+  delay(1000);
 }
 
 void connectToWiFi() {
