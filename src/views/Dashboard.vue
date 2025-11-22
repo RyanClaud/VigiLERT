@@ -643,6 +643,10 @@ const showAlerts = ref(true);
 const helmetPaired = ref(false);
 const motorcyclePaired = ref(false);
 
+// ✅ FIX: Track when we last received Firebase updates (not Arduino timestamps!)
+const lastHelmetUpdate = ref(0);
+const lastMotorcycleUpdate = ref(0);
+
 // ✅ RAW states (immediate sensor readings - not displayed)
 const helmetRawConnected = ref(false);
 const motorcycleRawConnected = ref(false);
@@ -1652,23 +1656,18 @@ const setupDeviceListeners = () => {
     const data = snapshot.val();
     console.log('[HELMET] Firebase update received:', data);
     
-    if (data && data.status === 'On' && data.lastHeartbeat) {
-      const now = Date.now();
-      const timeSinceLastBeat = now - data.lastHeartbeat;
+    if (data && data.status === 'On') {
+      // ✅ FIX: Record when we received this update (not Arduino timestamp!)
+      lastHelmetUpdate.value = Date.now();
       
-      console.log(`[HELMET] Time since last beat: ${timeSinceLastBeat}ms (${(timeSinceLastBeat/1000).toFixed(1)}s)`);
-      
-      // ✅ Device is connected if heartbeat is less than 10 seconds old
-      const isConnected = timeSinceLastBeat < 10000;
-      
-      if (isConnected !== helmetPaired.value) {
-        console.log(`[HELMET] Status changed: ${helmetPaired.value} → ${isConnected}`);
-        helmetPaired.value = isConnected;
+      if (!helmetPaired.value) {
+        console.log('[HELMET] Heartbeat received, marking as CONNECTED');
+        helmetPaired.value = true;
       }
     } else {
-      console.log('[HELMET] No valid data or status is Off');
+      console.log('[HELMET] Status is Off or no data');
       if (helmetPaired.value) {
-        console.log('[HELMET] Marking as disconnected');
+        console.log('[HELMET] Marking as DISCONNECTED');
         helmetPaired.value = false;
       }
     }
@@ -1680,55 +1679,50 @@ const setupDeviceListeners = () => {
     const data = snapshot.val();
     console.log('[MOTORCYCLE] Firebase update received:', data);
     
-    if (data && data.status === 'On' && data.lastHeartbeat) {
-      const now = Date.now();
-      const timeSinceLastBeat = now - data.lastHeartbeat;
+    if (data && data.status === 'On') {
+      // ✅ FIX: Record when we received this update (not Arduino timestamp!)
+      lastMotorcycleUpdate.value = Date.now();
       
-      console.log(`[MOTORCYCLE] Time since last beat: ${timeSinceLastBeat}ms (${(timeSinceLastBeat/1000).toFixed(1)}s)`);
-      
-      const isConnected = timeSinceLastBeat < 10000;
-      
-      if (isConnected !== motorcyclePaired.value) {
-        console.log(`[MOTORCYCLE] Status changed: ${motorcyclePaired.value} → ${isConnected}`);
-        motorcyclePaired.value = isConnected;
+      if (!motorcyclePaired.value) {
+        console.log('[MOTORCYCLE] Heartbeat received, marking as CONNECTED');
+        motorcyclePaired.value = true;
       }
     } else {
-      console.log('[MOTORCYCLE] No valid data or status is Off');
+      console.log('[MOTORCYCLE] Status is Off or no data');
       if (motorcyclePaired.value) {
-        console.log('[MOTORCYCLE] Marking as disconnected');
+        console.log('[MOTORCYCLE] Marking as DISCONNECTED');
         motorcyclePaired.value = false;
       }
     }
   }); // ✅ NO onlyOnce - listen continuously for real-time updates!
 };
 
-// ✅ Backup timeout check (runs every 2 seconds to catch stale heartbeats)
+// ✅ FIX: Timeout check based on when we last received Firebase updates
 let heartbeatCheckInterval = null;
 
 const checkDeviceTimeouts = () => {
-  const helmetRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
-  get(helmetRef).then((snapshot) => {
-    const data = snapshot.val();
-    if (data && data.lastHeartbeat) {
-      const timeSinceLastBeat = Date.now() - data.lastHeartbeat;
-      if (timeSinceLastBeat > 10000 && helmetPaired.value) {
-        console.log(`[HELMET] Timeout detected (${(timeSinceLastBeat/1000).toFixed(1)}s) - marking as disconnected`);
-        helmetPaired.value = false;
-      }
-    }
-  });
+  const now = Date.now();
   
-  const motorcycleRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
-  get(motorcycleRef).then((snapshot) => {
-    const data = snapshot.val();
-    if (data && data.lastHeartbeat) {
-      const timeSinceLastBeat = Date.now() - data.lastHeartbeat;
-      if (timeSinceLastBeat > 10000 && motorcyclePaired.value) {
-        console.log(`[MOTORCYCLE] Timeout detected (${(timeSinceLastBeat/1000).toFixed(1)}s) - marking as disconnected`);
-        motorcyclePaired.value = false;
-      }
-    }
-  });
+  // ✅ Check time since last Firebase update (not Arduino timestamp!)
+  const timeSinceHelmetUpdate = now - lastHelmetUpdate.value;
+  const timeSinceMotorcycleUpdate = now - lastMotorcycleUpdate.value;
+  
+  // Helmet timeout check
+  if (lastHelmetUpdate.value > 0 && timeSinceHelmetUpdate > 10000 && helmetPaired.value) {
+    console.log(`[HELMET] ⚠️ No update for ${(timeSinceHelmetUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
+    helmetPaired.value = false;
+  }
+  
+  // Motorcycle timeout check
+  if (lastMotorcycleUpdate.value > 0 && timeSinceMotorcycleUpdate > 10000 && motorcyclePaired.value) {
+    console.log(`[MOTORCYCLE] ⚠️ No update for ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
+    motorcyclePaired.value = false;
+  }
+  
+  // Debug logging every 10 seconds
+  if (now % 10000 < 2000) {
+    console.log(`[TIMEOUT CHECK] Helmet: ${(timeSinceHelmetUpdate/1000).toFixed(1)}s ago | Motorcycle: ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s ago`);
+  }
 };
 
 onMounted(() => {
