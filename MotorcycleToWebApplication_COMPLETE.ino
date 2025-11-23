@@ -749,11 +749,21 @@ unsigned long gpsToUnixTime() {
 void checkHelmetModuleStatus() {
   HTTPClient http;
   String url = firebaseHost + "/helmet_public/" + userUID + "/devices/helmet.json?auth=" + firebaseAuth;
+  
+  Serial.println("\n[HELMET CHECK] ═══════════════════════════════");
+  Serial.println("[HELMET CHECK] Fetching helmet status from Firebase...");
+  Serial.println("[HELMET CHECK] URL: " + url);
+  
   http.begin(url);
   int code = http.GET();
   
+  Serial.printf("[HELMET CHECK] HTTP Response Code: %d\n", code);
+  
   if (code == HTTP_CODE_OK) {
     String response = http.getString();
+    Serial.println("[HELMET CHECK] Raw Firebase Response:");
+    Serial.println(response);
+    
     StaticJsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, response);
     
@@ -776,13 +786,26 @@ void checkHelmetModuleStatus() {
       // Helmet is active if status is "On" AND heartbeat is recent (< 15 seconds)
       isHelmetModuleActive = (status == "On" && timeSinceHeartbeat < 15000);
       
-      // Debug output
-      Serial.printf("[HELMET CHECK] Status: %s | Last HB: %lu | Now: %lu | Diff: %lu ms | Active: %s\n",
-                    status.c_str(), lastHeartbeat, now, timeSinceHeartbeat,
-                    isHelmetModuleActive ? "YES" : "NO");
+      // Enhanced debug output
+      Serial.println("[HELMET CHECK] ─────────────────────────────────");
+      Serial.printf("[HELMET CHECK] Status Field: '%s'\n", status.c_str());
+      Serial.printf("[HELMET CHECK] Last Heartbeat: %lu\n", lastHeartbeat);
+      Serial.printf("[HELMET CHECK] Current Time: %lu\n", now);
+      Serial.printf("[HELMET CHECK] Time Difference: %lu ms (%.1f seconds)\n", 
+                    timeSinceHeartbeat, timeSinceHeartbeat / 1000.0);
+      Serial.printf("[HELMET CHECK] Threshold: 15000 ms (15 seconds)\n");
+      Serial.printf("[HELMET CHECK] Status Check: %s\n", status == "On" ? "PASS" : "FAIL");
+      Serial.printf("[HELMET CHECK] Heartbeat Check: %s\n", timeSinceHeartbeat < 15000 ? "PASS" : "FAIL");
+      Serial.printf("[HELMET CHECK] Final Result: %s\n", isHelmetModuleActive ? "✓ ACTIVE" : "✗ INACTIVE");
+      Serial.println("[HELMET CHECK] ═══════════════════════════════\n");
+    } else {
+      Serial.println("[HELMET CHECK] ✗ JSON Parse Error!");
+      Serial.printf("[HELMET CHECK] Error: %s\n", error.c_str());
+      isHelmetModuleActive = false;
     }
   } else {
-    Serial.printf("[HELMET CHECK] Firebase GET failed: %d\n", code);
+    Serial.printf("[HELMET CHECK] ✗ Firebase GET failed: %d\n", code);
+    Serial.println("[HELMET CHECK] Check WiFi connection and Firebase URL");
     isHelmetModuleActive = false;
   }
   

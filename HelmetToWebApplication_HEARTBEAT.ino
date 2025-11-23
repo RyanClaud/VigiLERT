@@ -122,10 +122,17 @@ void sendHelmetHeartbeat(bool isActive) {
   int code = http.PUT(payload);
   
   if (code == HTTP_CODE_OK) {
-    Serial.printf("[FIREBASE] ✓ Helmet heartbeat sent: %s at %lu\n", isActive ? "On" : "Off", timestamp);
-    Serial.println("[FIREBASE] Motorcycle module should detect this heartbeat");
+    Serial.println("\n[HEARTBEAT] ═══════════════════════════════");
+    Serial.printf("[HEARTBEAT] ✓ Helmet heartbeat sent successfully!\n");
+    Serial.printf("[HEARTBEAT] Status: %s\n", isActive ? "On" : "Off");
+    Serial.printf("[HEARTBEAT] Timestamp: %lu\n", timestamp);
+    Serial.printf("[HEARTBEAT] Payload: %s\n", payload.c_str());
+    Serial.println("[HEARTBEAT] Motorcycle module should detect this");
+    Serial.println("[HEARTBEAT] ═══════════════════════════════\n");
   } else {
-    Serial.printf("[FIREBASE] ✗ Helmet heartbeat failed: %d\n", code);
+    Serial.println("\n[HEARTBEAT] ✗✗✗ FAILED! ✗✗✗");
+    Serial.printf("[HEARTBEAT] HTTP Code: %d\n", code);
+    Serial.println("[HEARTBEAT] Check WiFi and Firebase URL\n");
   }
   http.end();
 }
