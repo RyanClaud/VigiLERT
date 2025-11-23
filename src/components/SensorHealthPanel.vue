@@ -129,36 +129,38 @@
         </div>
       </div>
 
-      <!-- Heart Rate Sensor -->
+      <!-- Engine Status -->
       <div :class="['p-5 rounded-2xl border-2 transition-all duration-300 hover:scale-105', 
-        getSensorStatus('heartRate').isActive ? 'bg-green-50 border-green-500' : 'bg-gray-50 border-gray-300']">
+        sensorData.engineRunning ? 'bg-green-50 border-green-500' : 'bg-gray-50 border-gray-300']">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
-            <div :class="['p-2 rounded-xl', getSensorStatus('heartRate').isActive ? 'bg-red-500 animate-pulse' : 'bg-gray-400']">
-              <span class="material-icons text-white text-2xl">favorite</span>
+            <div :class="['p-2 rounded-xl', sensorData.engineRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400']">
+              <span class="material-icons text-white text-2xl">power_settings_new</span>
             </div>
             <div>
-              <h4 class="font-bold text-gray-800">Heart Rate</h4>
-              <p class="text-xs text-gray-500">Vital Signs Monitor</p>
+              <h4 class="font-bold text-gray-800">Engine Status</h4>
+              <p class="text-xs text-gray-500">Relay Control Monitor</p>
             </div>
           </div>
-          <div :class="['w-3 h-3 rounded-full', getSensorStatus('heartRate').isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400']"></div>
+          <div :class="['w-3 h-3 rounded-full', sensorData.engineRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400']"></div>
         </div>
         <div class="space-y-2">
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Status:</span>
-            <span :class="['font-semibold', getSensorStatus('heartRate').isActive ? 'text-green-600' : 'text-gray-500']">
-              {{ getSensorStatus('heartRate').status }}
+            <span :class="['font-semibold', sensorData.engineRunning ? 'text-green-600' : 'text-gray-500']">
+              {{ sensorData.engineRunning ? 'Running' : 'Stopped' }}
             </span>
           </div>
           <div class="flex justify-between text-sm">
-            <span class="text-gray-600">BPM:</span>
-            <span class="font-bold text-xl text-red-600">{{ sensorData.heartRate?.bpm || '--' }}</span>
+            <span class="text-gray-600">Relay:</span>
+            <span :class="['font-bold text-xl', sensorData.engineRunning ? 'text-green-600' : 'text-gray-500']">
+              {{ sensorData.engineRunning ? 'ON' : 'OFF' }}
+            </span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Condition:</span>
-            <span :class="['font-semibold', getHeartRateStatus()]">
-              {{ getHeartRateLabel() }}
+            <span :class="['font-semibold', sensorData.engineRunning ? 'text-green-600' : 'text-gray-500']">
+              {{ sensorData.engineRunning ? 'Active' : 'Inactive' }}
             </span>
           </div>
         </div>
@@ -263,21 +265,8 @@ const getSensorStatus = (sensor) => {
   };
 };
 
-const getHeartRateStatus = () => {
-  const bpm = props.sensorData.heartRate?.bpm || 0;
-  if (bpm === 0) return 'text-gray-500';
-  if (bpm < 60) return 'text-blue-600';
-  if (bpm > 100) return 'text-red-600';
-  return 'text-green-600';
-};
-
-const getHeartRateLabel = () => {
-  const bpm = props.sensorData.heartRate?.bpm || 0;
-  if (bpm === 0) return 'No data';
-  if (bpm < 60) return 'Low';
-  if (bpm > 100) return 'High';
-  return 'Normal';
-};
+// ✅ Heart rate functions removed - replaced with Engine Status
+// Engine status is now directly read from sensorData.engineRunning
 </script>
 
 <style scoped>

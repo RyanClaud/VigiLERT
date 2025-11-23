@@ -16,20 +16,20 @@ VigiLERT ESP32 Motorcycle Module - COMPLETE VERSION
 #include <TimeLib.h>
 
 // ======= USER CONFIG =======
-const char* ssid = "Kupal";
-const char* password = "DEEABE7H406";
+const char* ssid = "DPWH";
+const char* password = "12345678900";
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
 const String userUID = "MnzBjTBslZNijOkq732PE91hHa23";
 const String firebaseAuth = "";
 
 // ======= PIN ASSIGNMENTS =======
 const int batteryPin = 34;
-const int helmetSwitchPin = 39;
+// const int helmetSwitchPin = 39; // ❌ REMOVED - No physical helmet switch on motorcycle
 const int headlightPin = 32;
 const int taillightPin = 33;
-const int leftSignalPin = 25;
-const int rightSignalPin = 26;
-const int relayPin = 27;
+const int leftSignalPin = 32;  // Moved from 25
+const int rightSignalPin = 33;  // Moved from 26  
+const int relayPin = 25;  // Changed from 27 to 25 (proven to work)
 const int vibrationPin = 14;
 const int buzzerPin = 12;
 const int lightIndicatorPin = 13;
@@ -135,7 +135,7 @@ void setup() {
   gsmSerial.begin(9600, SERIAL_8N1, GSM_RX, GSM_TX);
   Serial.println("[SETUP] GSM Serial started.");
 
-  pinMode(helmetSwitchPin, INPUT_PULLUP);
+  // pinMode(helmetSwitchPin, INPUT_PULLUP); // ❌ REMOVED - No physical helmet switch
   pinMode(headlightPin, INPUT);
   pinMode(taillightPin, INPUT);
   pinMode(leftSignalPin, INPUT);
@@ -145,9 +145,15 @@ void setup() {
   pinMode(buzzerPin, OUTPUT);
   pinMode(lightIndicatorPin, OUTPUT);
 
+  // ✅ CRITICAL: Force relay OFF at startup
   digitalWrite(relayPin, LOW);
   digitalWrite(buzzerPin, LOW);
   digitalWrite(lightIndicatorPin, LOW);
+  
+  // ✅ Verify relay is actually LOW
+  delay(100);
+  Serial.printf("\n[SETUP] Relay pin initialized to: %d (should be 0 = LOW)\n", digitalRead(relayPin));
+  Serial.println("[SETUP] Engine is BLOCKED until safety conditions met\n");
 
   connectToWiFi();
   setupOTA();
@@ -279,7 +285,7 @@ void loop() {
   handleGSM();
 
   // Sensor readings
-  bool helmetSwitchState = (digitalRead(helmetSwitchPin) == LOW);
+  // bool helmetSwitchState = (digitalRead(helmetSwitchPin) == LOW); // ❌ REMOVED
   bool headlightOn = digitalRead(headlightPin);
   bool taillightOn = digitalRead(taillightPin);
   bool leftSignalOn = digitalRead(leftSignalPin);
@@ -314,11 +320,49 @@ void loop() {
     lastHelmetModuleCheck = millis();
   }
 
-  // ✅ REAL-TIME: Faster heartbeat for real-time status monitoring
+  // ✅ SAFETY INTERLOCK: Continuously enforce safety conditions
+  // If engine is running but safety conditions are no longer met, shut it down
+  if (engineRunning && !canStartEngine()) {
+    Serial.println("\n⚠️⚠️⚠️ SAFETY VIOLATION DETECTED! ⚠️⚠️⚠️");
+    Serial.println("Safety conditions no longer met - shutting down engine!");
+    stopEngine();
+  }
+  
+  // ✅ SAFETY INTERLOCK: Aggressively keep relay OFF if safety conditions not met
+  // This prevents manual bypass of the relay
+  static unsigned long lastSafetyCheck = 0;
+  if (millis() - lastSafetyCheck > 100) { // Check every 100ms
+    if (!engineRunning) {
+      // Force relay LOW when engine is not supposed to be running
+      digitalWrite(relayPin, LOW);
+      
+      // Debug output every 5 seconds
+      static unsigned long lastDebug = 0;
+      if (millis() - lastDebug > 5000) {
+        Serial.println("\n[SAFETY] Forcing relay LOW - engine not running");
+        Serial.printf("[SAFETY] Relay pin state: %d (should be 0)\n", digitalRead(relayPin));
+        lastDebug = millis();
+      }
+      
+      // Blink LED to indicate system is locked
+      if (!canStartEngine()) {
+        static unsigned long lastBlink = 0;
+        if (millis() - lastBlink > 500) {
+          digitalWrite(lightIndicatorPin, !digitalRead(lightIndicatorPin));
+          lastBlink = millis();
+        }
+      } else {
+        // Solid LED when ready to start
+        digitalWrite(lightIndicatorPin, HIGH);
+      }
+    }
+    lastSafetyCheck = millis();
+  }
+
+  // ✅ REAL-TIME: Ultra-fast heartbeat for real-time status monitoring
   static unsigned long lastMotorcycleHeartbeat = 0;
-  const unsigned long MOTORCYCLE_HEARTBEAT_INTERVAL = 2000; // 2 seconds for real-time updates
+  const unsigned long MOTORCYCLE_HEARTBEAT_INTERVAL = 1000; // 1 second for ultra-fast updates
   if (millis() - lastMotorcycleHeartbeat > MOTORCYCLE_HEARTBEAT_INTERVAL) {
-    Serial.println("\n[HEARTBEAT] Sending motorcycle heartbeat to Firebase...");
     updateMotorcycleDeviceStatus(true);
     lastMotorcycleHeartbeat = millis();
   }
@@ -330,11 +374,12 @@ void loop() {
     lastGPSDiag = millis();
   }
 
-  // ✅ Enhanced Serial monitoring with detailed GPS info
+  // ✅ Enhanced Serial monitoring with detailed GPS info and SAFETY STATUS
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 1000) {
-    Serial.printf("\n[SENSOR] Accel: %.2f | Lean: %.1f° | Pitch: %.1f° | Battery: %.2fV | Helmet: %s",
-                  currentTotalAccel, leanAngle, currentPitch, batteryVoltage, helmetSwitchState ? "ON" : "OFF");
+    Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    Serial.printf("[SENSOR] Accel: %.2f | Lean: %.1f° | Pitch: %.1f° | Battery: %.2fV",
+                  currentTotalAccel, leanAngle, currentPitch, batteryVoltage);
     
     // Detailed GPS information
     if (gps.location.isValid()) {
@@ -358,6 +403,15 @@ void loop() {
     
     Serial.printf(" | GSM: %d%% | Engine: %s", 
                   gsmSignalStrength, engineRunning ? "RUNNING" : "STOPPED");
+    
+    // ✅ SAFETY STATUS DISPLAY (Firebase Communication Only)
+    Serial.println("\n[SAFETY STATUS - Firebase Communication]");
+    Serial.printf("  Helmet Module Active: %s (via Firebase)\n", isHelmetModuleActive ? "✓ YES" : "✗ NO");
+    Serial.printf("  Alcohol Status: %s (via Firebase)\n", isAlcoholSafe() ? "✓ SAFE" : "✗ DANGER");
+    Serial.printf("  Relay State: %s\n", digitalRead(relayPin) ? "HIGH (Engine Allowed)" : "LOW (Engine Blocked)");
+    Serial.printf("  Can Start Engine: %s\n", canStartEngine() ? "✓ YES" : "✗ NO");
+    Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
     lastPrint = millis();
   }
 
@@ -388,6 +442,15 @@ void loop() {
       Serial.printf("Impact: %.2f g | Roll: %.1f° | Threshold: %.2f g\n", 
                     currentTotalAccel, currentRoll, ACCEL_THRESHOLD);
       
+      // 🚨🚨🚨 IMMEDIATE RELAY SHUTDOWN - HIGHEST PRIORITY! 🚨🚨🚨
+      Serial.println("\n🚨 EMERGENCY SHUTDOWN - Cutting relay power NOW!");
+      digitalWrite(relayPin, LOW);  // Force relay OFF immediately
+      engineRunning = false;        // Update engine state
+      delay(100);                   // Give relay time to respond
+      Serial.printf("🚨 Relay GPIO %d forced to: %d (should be 0 = LOW/OFF)\n", 
+                    relayPin, digitalRead(relayPin));
+      Serial.println("🚨 Engine power CUT - relay should be OFF!");
+      
       // ✅ Send crash event to Firebase (ONLY ONCE due to cooldown)
       if (gps.location.isValid()) {
         Serial.printf("📍 Sending crash WITH GPS: %.6f, %.6f\n", 
@@ -404,23 +467,12 @@ void loop() {
       
       Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       Serial.println("✓ CRASH EVENT SENT TO FIREBASE!");
+      Serial.println("✓ RELAY FORCED OFF IMMEDIATELY!");
       Serial.println("✓ Cooldown active for 5 seconds");
       Serial.println("✓ CHECK DASHBOARD FOR:");
       Serial.println("  • Red crash marker on map");
       Serial.println("  • Crash alert notification");
       Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      
-      // ✅ SAFETY FEATURE: Auto-shutdown engine after crash
-      if (engineRunning) {
-        Serial.println("\n⚠️ SAFETY PROTOCOL ACTIVATED!");
-        Serial.println("⚠️ Engine will shut down in 2 seconds...");
-        delay(2000); // Wait 2 seconds
-        stopEngine();
-        Serial.println("✓ Engine automatically shut down for safety");
-        Serial.println("✓ This prevents fire hazards and further damage");
-      } else {
-        Serial.println("\n[INFO] Engine was already off - no shutdown needed");
-      }
     }
   }
 
@@ -445,12 +497,12 @@ void loop() {
     sendAlertSMS();
   }
 
-  // Helmet state & trip management
-  handleHelmetState(helmetSwitchState, batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn);
+  // Helmet state & trip management (now uses Firebase helmet module status)
+  handleHelmetState(isHelmetModuleActive, batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn);
 
-  // ✅ REAL-TIME: Firebase live updates with throttling for optimal performance
+  // ✅ REAL-TIME: Ultra-fast Firebase live updates
   static unsigned long lastFirebaseUpdate = 0;
-  const unsigned long FIREBASE_UPDATE_INTERVAL = 500; // Update every 500ms (2x per second)
+  const unsigned long FIREBASE_UPDATE_INTERVAL = 300; // Update every 300ms (3.3x per second)
   
   if (millis() - lastFirebaseUpdate >= FIREBASE_UPDATE_INTERVAL) {
     lastFirebaseUpdate = millis();
@@ -458,10 +510,10 @@ void loop() {
     if (gps.location.isValid()) {
       float speedKmph = gps.speed.kmph();
       sendLiveToFirebase(gps.location.lat(), gps.location.lng(), speedKmph, batteryVoltage,
-                         headlightOn, taillightOn, leftSignalOn, rightSignalOn, helmetSwitchState);
+                         headlightOn, taillightOn, leftSignalOn, rightSignalOn, isHelmetModuleActive);
       if (speedKmph > maxRecordedSpeed) maxRecordedSpeed = speedKmph;
     } else {
-      sendLiveToFirebaseNoGPS(batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn, helmetSwitchState);
+      sendLiveToFirebaseNoGPS(batteryVoltage, headlightOn, taillightOn, leftSignalOn, rightSignalOn, isHelmetModuleActive);
     }
   }
 
@@ -471,8 +523,8 @@ void loop() {
     lastSpeedCheck = millis();
   }
 
-  // ✅ REAL-TIME: Minimal delay for faster updates (50ms instead of 200ms)
-  delay(50);
+  // ✅ REAL-TIME: Ultra-minimal delay for fastest updates (20ms)
+  delay(20);
 }
 
 // ======= ✅ NEW: GPS DIAGNOSTICS =======
@@ -564,7 +616,8 @@ int getGSMSignalStrength() {
 }
 
 // ======= ✅ ENHANCED: SEND LIVE DATA WITH ALL SENSORS =======
-void sendLiveToFirebase(float lat, float lng, float speed, float v, bool h, bool t, bool l, bool r, bool helmetSwitch) {
+// ✅ FIXED: Parameter renamed from helmetSwitch to helmetModuleActive (Firebase communication only)
+void sendLiveToFirebase(float lat, float lng, float speed, float v, bool h, bool t, bool l, bool r, bool helmetModuleActive) {
   StaticJsonDocument<1024> doc; // Increased size for more data
   
   // GPS data
@@ -604,8 +657,8 @@ void sendLiveToFirebase(float lat, float lng, float speed, float v, bool h, bool
   // ✅ NEW: Engine status
   doc["engineRunning"] = engineRunning;
   
-  // ✅ NEW: Helmet switch state
-  doc["helmetSwitch"] = helmetSwitch;
+  // ✅ FIXED: Helmet module status from Firebase (not physical switch)
+  doc["helmetModuleActive"] = helmetModuleActive;
   
   // Timestamp
   doc["timestamp"] = millis();
@@ -627,7 +680,8 @@ void sendLiveToFirebase(float lat, float lng, float speed, float v, bool h, bool
 }
 
 // ✅ ENHANCED: SEND LIVE DATA WITHOUT GPS
-void sendLiveToFirebaseNoGPS(float v, bool h, bool t, bool l, bool r, bool helmetSwitch) {
+// ✅ FIXED: Parameter renamed from helmetSwitch to helmetModuleActive (Firebase communication only)
+void sendLiveToFirebaseNoGPS(float v, bool h, bool t, bool l, bool r, bool helmetModuleActive) {
   StaticJsonDocument<1024> doc;
   
   // Battery
@@ -658,8 +712,8 @@ void sendLiveToFirebaseNoGPS(float v, bool h, bool t, bool l, bool r, bool helme
   // ✅ NEW: Engine status
   doc["engineRunning"] = engineRunning;
   
-  // ✅ NEW: Helmet switch state
-  doc["helmetSwitch"] = helmetSwitch;
+  // ✅ FIXED: Helmet module status from Firebase (not physical switch)
+  doc["helmetModuleActive"] = helmetModuleActive;
   
   // Timestamp
   doc["timestamp"] = millis();
@@ -706,11 +760,30 @@ void checkHelmetModuleStatus() {
     if (!error) {
       String status = doc["status"] | "Off";
       unsigned long lastHeartbeat = doc["lastHeartbeat"] | 0;
-      unsigned long now = gpsToUnixTime() * 1000UL;
-      unsigned long timeSinceHeartbeat = now - lastHeartbeat;
       
+      // ✅ FIXED: Use millis-based timestamp instead of GPS time
+      // Both modules use: 1700000000000UL + millis()
+      unsigned long now = 1700000000000UL + millis();
+      
+      // Calculate time difference
+      unsigned long timeSinceHeartbeat;
+      if (now > lastHeartbeat) {
+        timeSinceHeartbeat = now - lastHeartbeat;
+      } else {
+        timeSinceHeartbeat = 999999; // Very old if timestamp is in future
+      }
+      
+      // Helmet is active if status is "On" AND heartbeat is recent (< 15 seconds)
       isHelmetModuleActive = (status == "On" && timeSinceHeartbeat < 15000);
+      
+      // Debug output
+      Serial.printf("[HELMET CHECK] Status: %s | Last HB: %lu | Now: %lu | Diff: %lu ms | Active: %s\n",
+                    status.c_str(), lastHeartbeat, now, timeSinceHeartbeat,
+                    isHelmetModuleActive ? "YES" : "NO");
     }
+  } else {
+    Serial.printf("[HELMET CHECK] Firebase GET failed: %d\n", code);
+    isHelmetModuleActive = false;
   }
   
   http.end();
@@ -744,29 +817,70 @@ void updateMotorcycleDeviceStatus(bool isOn) {
   http.end();
 }
 
+// ✅ SAFETY FEATURE 2: Check alcohol status from Firebase
+bool isAlcoholSafe() {
+  HTTPClient http;
+  String url = firebaseHost + "/helmet_public/" + userUID + "/alcohol/status.json?auth=" + firebaseAuth;
+  http.begin(url);
+  int code = http.GET();
+  
+  if (code == HTTP_CODE_OK) {
+    String response = http.getString();
+    StaticJsonDocument<128> doc;
+    DeserializationError error = deserializeJson(doc, response);
+    
+    if (!error) {
+      String status = doc["status"] | "Safe";
+      http.end();
+      return (status == "Safe");
+    }
+  }
+  http.end();
+  return true; // Default to safe if can't read
+}
+
+// ✅ COMPREHENSIVE SAFETY CHECK: All 3 safety features using single relay
+// ✅ FIXED: Only uses Firebase communication - no physical helmet switch
 bool canStartEngine() {
-  bool helmetSwitchOn = (digitalRead(helmetSwitchPin) == LOW);
+  // SAFETY FEATURE 1: Both devices must be ON (via Firebase heartbeat)
   bool helmetModuleOn = isHelmetModuleActive;
   bool motorcycleOn = true;
   
-  Serial.println("\n[SAFETY CHECK] Engine Start Request:");
-  Serial.printf("  ✓ Motorcycle Module: %s\n", motorcycleOn ? "ON" : "OFF");
-  Serial.printf("  %s Helmet Module: %s\n", helmetModuleOn ? "✓" : "✗", helmetModuleOn ? "ON" : "OFF");
-  Serial.printf("  %s Helmet Switch: %s\n", helmetSwitchOn ? "✓" : "✗", helmetSwitchOn ? "ON" : "OFF");
+  // SAFETY FEATURE 2: No alcohol detected (via Firebase)
+  bool alcoholSafe = isAlcoholSafe();
   
-  return (motorcycleOn && helmetModuleOn && helmetSwitchOn);
+  Serial.println("\n╔════════════════════════════════════════╗");
+  Serial.println("║   SAFETY CHECK - Engine Start Request ║");
+  Serial.println("╠════════════════════════════════════════╣");
+  Serial.printf("║ %s Motorcycle Module: %-15s ║\n", motorcycleOn ? "✓" : "✗", motorcycleOn ? "ON" : "OFF");
+  Serial.printf("║ %s Helmet Module: %-19s ║\n", helmetModuleOn ? "✓" : "✗", helmetModuleOn ? "ON" : "OFF");
+  Serial.printf("║ %s Alcohol Test: %-20s ║\n", alcoholSafe ? "✓" : "✗", alcoholSafe ? "SAFE" : "DANGER");
+  Serial.println("╠════════════════════════════════════════╣");
+  Serial.println("║ Communication: Firebase Only           ║");
+  Serial.println("╚════════════════════════════════════════╝");
+  
+  if (!motorcycleOn) Serial.println("  ❌ BLOCKED: Motorcycle module is OFF");
+  if (!helmetModuleOn) Serial.println("  ❌ BLOCKED: Helmet module is OFF (no heartbeat)");
+  if (!alcoholSafe) Serial.println("  ❌ BLOCKED: Alcohol detected - unsafe to ride!");
+  
+  return (motorcycleOn && helmetModuleOn && alcoholSafe);
 }
 
 void startEngine() {
   if (!canStartEngine()) {
-    Serial.println("[SAFETY] Engine start BLOCKED!");
+    Serial.println("\n❌❌❌ [SAFETY] ENGINE START BLOCKED! ❌❌❌");
+    Serial.println("All safety requirements must be met:");
+    Serial.println("  1. Both devices must be ON (via Firebase heartbeat)");
+    Serial.println("  2. No alcohol detected (via Firebase status)");
+    Serial.println("  3. Communication: Firebase only - no physical connections\n");
     return;
   }
   
   digitalWrite(relayPin, HIGH);
   engineRunning = true;
   sendSMS("Engine Started");
-  Serial.println("[ENGINE] Started!");
+  Serial.println("\n✅ [ENGINE] Started successfully!");
+  Serial.println("✅ All safety checks passed\n");
 }
 
 void stopEngine() {
@@ -864,10 +978,10 @@ void handleIncomingSMS(String response) {
     else if (command == "STATUS") {
       String statusMsg = "Helmet Module: ";
       statusMsg += isHelmetModuleActive ? "ON" : "OFF";
-      statusMsg += " | Helmet Switch: ";
-      statusMsg += (digitalRead(helmetSwitchPin) == LOW) ? "ON" : "OFF";
       statusMsg += " | Engine: ";
       statusMsg += engineRunning ? "RUNNING" : "STOPPED";
+      statusMsg += " | Alcohol: ";
+      statusMsg += isAlcoholSafe() ? "SAFE" : "DANGER";
       sendSMS(statusMsg);
     }
   }

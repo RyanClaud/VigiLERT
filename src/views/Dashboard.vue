@@ -664,10 +664,7 @@ const sensorData = ref({
     signal: '85%',
     network: '4G'
   },
-  heartRate: {
-    bpm: 0,
-    lastUpdate: Date.now()
-  },
+  engineRunning: false, // ✅ Engine status from relay
   alcohol: {
     value: 0,
     lastUpdate: Date.now()
@@ -745,27 +742,45 @@ const playSound = () => {
 
 // Flash Crash Message
 const flashCrashMessage = () => {
+  console.log('[FLASH CRASH] 🚨🚨🚨 Starting crash alert animation...');
   clearInterval(crashInterval);
   flashCount = 0;
+  
+  // Set crash status immediately
   crashDisplayStatus.value = 'Alerting';
   crashDisplayMessage.value = 'Crash Detected';
+  
+  console.log('[FLASH CRASH] ✓ Status set to:', crashDisplayStatus.value);
+  console.log('[FLASH CRASH] ✓ Message set to:', crashDisplayMessage.value);
+  console.log('[FLASH CRASH] ✓ Card should now be RED and pulsing!');
+  
   playSound();
+  
+  // Add alert to list
   alerts.value.unshift({
     type: 'danger',
-    message: 'Crash Detected',
-    details: 'Impact Strength: High',
+    message: '🚨 CRASH DETECTED!',
+    details: 'Impact detected - Check vehicle status',
     time: new Date().toLocaleTimeString()
   });
   if (alerts.value.length > 5) alerts.value.pop();
+  
+  // Flash animation - stays visible longer (10 flashes = 20 seconds)
   crashInterval = setInterval(() => {
-    if (flashCount >= 3) {
+    console.log('[FLASH CRASH] Flash count:', flashCount, '/ 10');
+    
+    if (flashCount >= 10) {  // Flash 10 times (20 seconds total)
       clearInterval(crashInterval);
       crashDisplayStatus.value = 'Stable';
       crashDisplayMessage.value = 'Vehicle Stable';
+      console.log('[FLASH CRASH] ✓ Animation complete, returning to Stable');
+      return;
     }
-    crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
+    
+    // Toggle message
+    crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? '⚠️ CHECK VEHICLE' : 'Crash Detected';
     flashCount++;
-  }, 2000);
+  }, 2000);  // Flash every 2 seconds
 };
 
 // Handle Overspeed Event
@@ -1160,12 +1175,10 @@ onMounted(() => {
         gsmConnected.value = signalValue > 0;
       }
       
-      // ✅ Update heart rate data
-      if (liveData.heartRate) {
-        sensorData.value.heartRate = {
-          bpm: liveData.heartRate.bpm || 0,
-          lastUpdate: Date.now()
-        };
+      // ✅ Update engine status (relay state)
+      if (typeof liveData.engineRunning !== 'undefined') {
+        sensorData.value.engineRunning = liveData.engineRunning;
+        console.log('[ENGINE] Status updated:', liveData.engineRunning ? 'RUNNING' : 'STOPPED');
       }
       
       // ✅ Update battery data
@@ -1597,13 +1610,18 @@ const initializeCrashListener = () => {
     });
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
     
-    // Flash crash message for recent crashes
-    if (!lastCrashTimestamp || eventTime > lastCrashTimestamp) {
+    // Flash crash message for ALL crashes (always trigger animation)
+    console.log('[CRASH] Comparing timestamps - Last:', lastCrashTimestamp, 'New:', eventTime);
+    
+    // Always trigger for new crashes (check if timestamp is different)
+    if (!lastCrashTimestamp || eventTime !== lastCrashTimestamp) {
+      console.log('[CRASH] ✓ New crash detected, triggering animation...');
       lastCrashTimestamp = eventTime;
       localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
-      console.log('[CRASH] Triggering crash alert animation...');
       flashCrashMessage();
       playSound();
+    } else {
+      console.log('[CRASH] ⚠️ Duplicate crash (same timestamp), skipping animation');
     }
   }, (error) => {
     console.error("[CRASH] Firebase crash listener error:", error);
