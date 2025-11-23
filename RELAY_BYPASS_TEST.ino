@@ -44,12 +44,14 @@ void setup() {
   pinMode(relayPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
   
-  // Start with relay OFF
-  digitalWrite(relayPin, LOW);
+  // ✅ ACTIVE-LOW RELAY: HIGH = OFF, LOW = ON
+  // Start with relay OFF (HIGH for active-low)
+  digitalWrite(relayPin, HIGH);
   digitalWrite(ledPin, LOW);
   
   Serial.printf("Relay Pin: GPIO %d\n", relayPin);
-  Serial.printf("Initial State: %d (LOW/OFF)\n\n", digitalRead(relayPin));
+  Serial.printf("Relay Type: ACTIVE-LOW (HIGH=OFF, LOW=ON)\n");
+  Serial.printf("Initial State: %d (HIGH/OFF)\n\n", digitalRead(relayPin));
   
   // Setup MPU6050
   Wire.begin(21, 22);
@@ -106,12 +108,12 @@ void loop() {
       
       // IMMEDIATE RELAY SHUTDOWN
       Serial.println("🚨 EMERGENCY SHUTDOWN - Cutting relay NOW!");
-      digitalWrite(relayPin, LOW);
+      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
       digitalWrite(ledPin, LOW);
       delay(100);
       
-      Serial.printf("🚨 Relay GPIO %d = %d (should be 0)\n", relayPin, digitalRead(relayPin));
-      Serial.println("🚨 Relay should be OFF!\n");
+      Serial.printf("🚨 Relay GPIO %d = %d (should be 1 = HIGH/OFF)\n", relayPin, digitalRead(relayPin));
+      Serial.println("🚨 Relay LEDs (DS1/DS2) should turn OFF now!\n");
       
       crashDetected = true;
       
@@ -139,14 +141,14 @@ void loop() {
     
     if (cmd == "ON") {
       Serial.println("\n[COMMAND] Turning relay ON...");
-      digitalWrite(relayPin, HIGH);
+      digitalWrite(relayPin, LOW);   // ✅ ACTIVE-LOW: LOW = ON
       digitalWrite(ledPin, HIGH);
       delay(100);
       showStatus();
     }
     else if (cmd == "OFF") {
       Serial.println("\n[COMMAND] Turning relay OFF...");
-      digitalWrite(relayPin, LOW);
+      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
       digitalWrite(ledPin, LOW);
       delay(100);
       showStatus();
@@ -154,10 +156,11 @@ void loop() {
     else if (cmd == "CRASH") {
       Serial.println("\n🚨 MANUAL CRASH TEST");
       Serial.println("🚨 EMERGENCY SHUTDOWN - Cutting relay NOW!");
-      digitalWrite(relayPin, LOW);
+      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
       digitalWrite(ledPin, LOW);
       delay(100);
-      Serial.printf("🚨 Relay GPIO %d = %d (should be 0)\n", relayPin, digitalRead(relayPin));
+      Serial.printf("🚨 Relay GPIO %d = %d (should be 1 = HIGH/OFF)\n", relayPin, digitalRead(relayPin));
+      Serial.println("🚨 Relay LEDs should turn OFF now!");
       showStatus();
     }
     else if (cmd == "STATUS") {
@@ -199,8 +202,8 @@ void showStatus() {
   Serial.printf("║ GPIO Pin: %d                           ║\n", relayPin);
   Serial.printf("║ Digital State: %s                       ║\n", 
                 relayState ? "HIGH (1)" : "LOW (0) ");
-  Serial.printf("║ Relay Status: %s                        ║\n", 
-                relayState ? "ON      " : "OFF     ");
+  Serial.printf("║ Relay Status: %s (ACTIVE-LOW)          ║\n", 
+                relayState ? "OFF     " : "ON      ");
   Serial.printf("║ LED Status: %s                          ║\n", 
                 ledState ? "ON      " : "OFF     ");
   Serial.printf("║ MPU6050 Accel: %.2f g                   ║\n", currentTotalAccel);
