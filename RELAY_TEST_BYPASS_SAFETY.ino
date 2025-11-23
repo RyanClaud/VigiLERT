@@ -1,8 +1,8 @@
 /*
- * RELAY BYPASS TEST - Test relay without safety checks
- * This bypasses helmet/alcohol checks to test relay hardware directly
+ * RELAY TEST WITH SAFETY BYPASS
+ * This temporarily disables safety checks so you can test relay hardware
  * 
- * WARNING: This is for testing only! Do not use in production!
+ * ⚠️ WARNING: For testing only! Re-enable safety checks after testing!
  */
 
 #include <WiFi.h>
@@ -14,9 +14,10 @@
 const char* ssid = "DPWH";
 const char* password = "12345678900";
 
-// Pin Config
-const int relayPin = 5;   // GPIO 5 - PROVEN TO WORK!
-const int ledPin = 13;    // LED indicator
+// Pin Config - FIXED CONFLICTS
+const int relayPin = 13;  // GPIO 13 - PROVEN TO WORK!
+const int ledPin = 2;     // GPIO 2 (not GPIO 5 - conflicts with GSM)
+const int buzzerPin = 12; // GPIO 12
 
 // MPU6050
 Adafruit_MPU6050 mpu;
@@ -28,30 +29,34 @@ const float ACCEL_THRESHOLD = 15.0;
 float currentTotalAccel = 0.0;
 float currentRoll = 0.0;
 
+// Engine control
+bool engineRunning = false;
+
 void setup() {
   Serial.begin(115200);
   delay(100);
   
   Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║   RELAY BYPASS TEST                    ║");
-  Serial.println("║   (No Safety Checks)                   ║");
+  Serial.println("║   RELAY TEST - SAFETY BYPASS          ║");
+  Serial.println("║   ⚠️  ALL SAFETY CHECKS DISABLED!      ║");
   Serial.println("╠════════════════════════════════════════╣");
-  Serial.println("║ ⚠️  WARNING: Testing Mode Only!        ║");
-  Serial.println("║ This bypasses all safety checks        ║");
+  Serial.println("║ This is for testing relay hardware    ║");
+  Serial.println("║ Re-enable safety checks after test!   ║");
   Serial.println("╚════════════════════════════════════════╝\n");
   
   // Setup pins
   pinMode(relayPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
   
-  // ✅ ACTIVE-LOW RELAY: HIGH = OFF, LOW = ON
-  // Start with relay OFF (HIGH for active-low)
+  // ✅ ACTIVE-LOW RELAY: Start with HIGH (OFF)
   digitalWrite(relayPin, HIGH);
   digitalWrite(ledPin, LOW);
   
   Serial.printf("Relay Pin: GPIO %d\n", relayPin);
-  Serial.printf("Relay Type: ACTIVE-LOW (HIGH=OFF, LOW=ON)\n");
-  Serial.printf("Initial State: %d (HIGH/OFF)\n\n", digitalRead(relayPin));
+  Serial.printf("LED Pin: GPIO %d\n", ledPin);
+  Serial.println("Relay Type: ACTIVE-LOW (HIGH=OFF, LOW=ON)");
+  Serial.printf("Initial Relay State: %d (HIGH/OFF)\n\n", digitalRead(relayPin));
   
   // Setup MPU6050
   Wire.begin(21, 22);
@@ -64,24 +69,24 @@ void setup() {
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   }
   
-  // Connect WiFi (optional, for Firebase logging)
+  // Connect WiFi (optional)
   WiFi.begin(ssid, password);
   Serial.print("Connecting WiFi");
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+  while (WiFi.status() != WL_CONNECTED && attempts < 10) {
     Serial.print(".");
     delay(500);
     attempts++;
   }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✓ WiFi Connected: " + WiFi.localIP().toString());
+    Serial.println("\n✓ WiFi Connected");
   } else {
     Serial.println("\n⚠️ WiFi not connected (optional for this test)");
   }
   
   Serial.println("\n📋 COMMANDS:");
-  Serial.println("  ON     - Turn relay ON (engine allowed)");
-  Serial.println("  OFF    - Turn relay OFF (engine blocked)");
+  Serial.println("  START  - Start engine (relay ON)");
+  Serial.println("  STOP   - Stop engine (relay OFF)");
   Serial.println("  CRASH  - Simulate crash (relay OFF)");
   Serial.println("  STATUS - Show current state");
   Serial.println("  AUTO   - Enable auto crash detection");
@@ -101,24 +106,26 @@ void loop() {
   
   // Auto crash detection (if enabled)
   static bool autoDetect = true;
-  if (autoDetect && !crashDetected) {
+  if (autoDetect && !crashDetected && engineRunning) {
     if (currentTotalAccel >= ACCEL_THRESHOLD || abs(currentRoll) > 40) {
       Serial.println("\n🚨🚨🚨 CRASH DETECTED! 🚨🚨🚨");
       Serial.printf("Impact: %.2f g | Roll: %.1f°\n", currentTotalAccel, currentRoll);
       
       // IMMEDIATE RELAY SHUTDOWN
       Serial.println("🚨 EMERGENCY SHUTDOWN - Cutting relay NOW!");
-      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
+      digitalWrite(relayPin, HIGH);  // ACTIVE-LOW: HIGH = OFF
       digitalWrite(ledPin, LOW);
+      engineRunning = false;
       delay(100);
       
       Serial.printf("🚨 Relay GPIO %d = %d (should be 1 = HIGH/OFF)\n", relayPin, digitalRead(relayPin));
-      Serial.println("🚨 Relay LEDs (DS1/DS2) should turn OFF now!\n");
+      Serial.println("🚨 Relay LEDs should turn OFF!\n");
       
       crashDetected = true;
       
       // Alert
       for (int i = 0; i < 5; i++) {
+        tone(buzzerPin, 1500, 200);
         digitalWrite(ledPin, HIGH);
         delay(200);
         digitalWrite(ledPin, LOW);
@@ -139,28 +146,35 @@ void loop() {
     cmd.trim();
     cmd.toUpperCase();
     
-    if (cmd == "ON") {
-      Serial.println("\n[COMMAND] Turning relay ON...");
-      digitalWrite(relayPin, LOW);   // ✅ ACTIVE-LOW: LOW = ON
+    if (cmd == "START") {
+      Serial.println("\n[COMMAND] Starting engine...");
+      digitalWrite(relayPin, LOW);   // ACTIVE-LOW: LOW = ON
       digitalWrite(ledPin, HIGH);
+      engineRunning = true;
       delay(100);
+      Serial.printf("✓ Relay GPIO %d = %d (should be 0 = LOW/ON)\n", relayPin, digitalRead(relayPin));
+      Serial.println("✓ Engine started - relay LEDs should turn ON!");
       showStatus();
     }
-    else if (cmd == "OFF") {
-      Serial.println("\n[COMMAND] Turning relay OFF...");
-      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
+    else if (cmd == "STOP") {
+      Serial.println("\n[COMMAND] Stopping engine...");
+      digitalWrite(relayPin, HIGH);  // ACTIVE-LOW: HIGH = OFF
       digitalWrite(ledPin, LOW);
+      engineRunning = false;
       delay(100);
+      Serial.printf("✓ Relay GPIO %d = %d (should be 1 = HIGH/OFF)\n", relayPin, digitalRead(relayPin));
+      Serial.println("✓ Engine stopped - relay LEDs should turn OFF!");
       showStatus();
     }
     else if (cmd == "CRASH") {
       Serial.println("\n🚨 MANUAL CRASH TEST");
       Serial.println("🚨 EMERGENCY SHUTDOWN - Cutting relay NOW!");
-      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
+      digitalWrite(relayPin, HIGH);  // ACTIVE-LOW: HIGH = OFF
       digitalWrite(ledPin, LOW);
+      engineRunning = false;
       delay(100);
       Serial.printf("🚨 Relay GPIO %d = %d (should be 1 = HIGH/OFF)\n", relayPin, digitalRead(relayPin));
-      Serial.println("🚨 Relay LEDs should turn OFF now!");
+      Serial.println("🚨 Relay LEDs should turn OFF!");
       showStatus();
     }
     else if (cmd == "STATUS") {
@@ -175,16 +189,17 @@ void loop() {
       Serial.println("\n[MODE] Auto crash detection DISABLED");
     }
     else {
-      Serial.println("\nUnknown command. Type: ON, OFF, CRASH, STATUS, AUTO, MANUAL");
+      Serial.println("\nUnknown command. Type: START, STOP, CRASH, STATUS, AUTO, MANUAL");
     }
   }
   
-  // Status display every 2 seconds
+  // Status display every 3 seconds
   static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 2000) {
-    Serial.printf("[SENSOR] Accel: %.2f g | Roll: %.1f° | Relay: %s | Crash: %s\n",
+  if (millis() - lastPrint > 3000) {
+    Serial.printf("[SENSOR] Accel: %.2f g | Roll: %.1f° | Engine: %s | Relay: %s | Crash: %s\n",
                   currentTotalAccel, currentRoll,
-                  digitalRead(relayPin) ? "ON" : "OFF",
+                  engineRunning ? "RUNNING" : "STOPPED",
+                  digitalRead(relayPin) ? "OFF" : "ON",
                   crashDetected ? "YES" : "NO");
     lastPrint = millis();
   }
@@ -197,19 +212,21 @@ void showStatus() {
   int ledState = digitalRead(ledPin);
   
   Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║   RELAY STATUS                         ║");
+  Serial.println("║   CURRENT STATUS                       ║");
   Serial.println("╠════════════════════════════════════════╣");
-  Serial.printf("║ GPIO Pin: %d                           ║\n", relayPin);
-  Serial.printf("║ Digital State: %s                       ║\n", 
+  Serial.printf("║ Relay GPIO: %d                         ║\n", relayPin);
+  Serial.printf("║ Relay Digital: %s                       ║\n", 
                 relayState ? "HIGH (1)" : "LOW (0) ");
   Serial.printf("║ Relay Status: %s (ACTIVE-LOW)          ║\n", 
                 relayState ? "OFF     " : "ON      ");
+  Serial.printf("║ Engine Status: %s                      ║\n", 
+                engineRunning ? "RUNNING " : "STOPPED ");
   Serial.printf("║ LED Status: %s                          ║\n", 
                 ledState ? "ON      " : "OFF     ");
   Serial.printf("║ MPU6050 Accel: %.2f g                   ║\n", currentTotalAccel);
   Serial.printf("║ MPU6050 Roll: %.1f°                     ║\n", currentRoll);
   Serial.println("╠════════════════════════════════════════╣");
-  Serial.println("║ ⚠️  Safety checks BYPASSED             ║");
-  Serial.println("║ This is for testing only!              ║");
+  Serial.println("║ ⚠️  SAFETY CHECKS BYPASSED!            ║");
+  Serial.println("║ For testing only - re-enable safety!  ║");
   Serial.println("╚════════════════════════════════════════╝\n");
 }

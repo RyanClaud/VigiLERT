@@ -398,6 +398,76 @@
             </button>
           </div>
         </div>
+
+        <!-- Engine Control -->
+        <div class="bg-gradient-to-br from-green-500 via-green-600 to-green-700 rounded-3xl shadow-2xl p-6 md:p-8 text-white border-2 border-white/30 hover:shadow-3xl transition-all duration-300">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+              <div class="p-4 bg-white/20 rounded-2xl backdrop-blur-sm">
+                <span class="material-icons text-4xl">power_settings_new</span>
+              </div>
+              <div>
+                <h3 class="text-2xl font-bold mb-1">Engine Control</h3>
+                <p class="text-green-100 text-sm">
+                  Status: {{ engineRunning ? 'Running' : 'Stopped' }}
+                  <span v-if="alcoholDetected" class="text-red-200 font-bold"> • Alcohol Detected</span>
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-col items-end gap-2">
+              <div :class="['w-4 h-4 rounded-full', engineRunning ? 'bg-green-300 animate-pulse' : 'bg-gray-400']"></div>
+              <span class="text-xs text-green-100">{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Engine Start/Stop Button -->
+            <button
+              @click="toggleEngine"
+              :disabled="alcoholDetected && !engineRunning"
+              :class="[
+                'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
+                engineRunning 
+                  ? 'bg-red-500 hover:bg-red-600 text-white' 
+                  : alcoholDetected 
+                    ? 'bg-gray-500 cursor-not-allowed text-gray-300'
+                    : 'bg-white hover:bg-gray-100 text-green-600'
+              ]"
+            >
+              <span class="material-icons text-2xl">
+                {{ engineRunning ? 'stop' : 'play_arrow' }}
+              </span>
+              <span>{{ engineRunning ? 'Stop Engine' : 'Start Engine' }}</span>
+            </button>
+
+            <!-- Auto Control Toggle -->
+            <button
+              @click="toggleAutoControl"
+              :class="[
+                'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
+                autoEngineControl 
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  : 'bg-white/20 hover:bg-white/30 text-white border-2 border-white/30'
+              ]"
+            >
+              <span class="material-icons text-2xl">
+                {{ autoEngineControl ? 'smart_toy' : 'person' }}
+              </span>
+              <span>{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
+            </button>
+          </div>
+
+          <!-- Status Messages -->
+          <div v-if="alcoholDetected" class="mt-4 p-4 bg-red-500/20 border border-red-300/30 rounded-xl">
+            <div class="flex items-center gap-3">
+              <span class="material-icons text-red-200 animate-pulse">warning</span>
+              <div>
+                <p class="text-red-100 font-bold">Alcohol Detected!</p>
+                <p class="text-red-200 text-sm">Engine cannot start until alcohol clears</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Tabs -->
@@ -694,6 +764,11 @@ let speedCount = 0;
 
 // ✅ FIX: previousHelmetState must be a ref to be accessible in template
 const previousHelmetState = ref(null);
+
+// ✅ NEW: Engine Control States
+const engineRunning = ref(false);
+const autoEngineControl = ref(false);
+const alcoholDetected = ref(false);
 
 // Helpers
 const formatLatLng = (lat, lng) => {
@@ -1713,11 +1788,97 @@ onMounted(() => {
   // ✅ Setup real-time device listeners (instant updates)
   setupDeviceListeners();
   
+  // ✅ NEW: Setup engine control listeners
+  setupEngineStatusListener();
+  
   // ✅ Start backup timeout check (every 2 seconds)
   heartbeatCheckInterval = setInterval(checkDeviceTimeouts, 2000);
   
   console.log('[DASHBOARD] Device monitoring initialized with real-time listeners + 2s timeout checks');
+  console.log('[ENGINE] Engine control system initialized');
 });
+
+// ✅ NEW: Engine Control Methods
+const toggleEngine = async () => {
+  try {
+    if (alcoholDetected.value && !engineRunning.value) {
+      alert('⚠️ Cannot start engine: Alcohol detected!\n\nPlease wait for alcohol to clear before starting the engine.');
+      return;
+    }
+
+    // Toggle the button state in Firebase
+    const buttonRef = dbRef(database, `${userId}/engineControl/startButton`);
+    await set(buttonRef, true);
+    
+    console.log('[ENGINE] Button press sent to Firebase');
+    
+    // Provide immediate feedback
+    if (engineRunning.value) {
+      console.log('[ENGINE] Stopping engine...');
+    } else {
+      console.log('[ENGINE] Starting engine...');
+    }
+    
+  } catch (error) {
+    console.error('[ENGINE] Failed to toggle engine:', error);
+    alert('Failed to control engine. Please try again.');
+  }
+};
+
+const toggleAutoControl = async () => {
+  try {
+    autoEngineControl.value = !autoEngineControl.value;
+    
+    // Send auto control setting to Firebase
+    const autoRef = dbRef(database, `${userId}/engineControl/autoMode`);
+    await set(autoRef, autoEngineControl.value);
+    
+    console.log('[ENGINE] Auto control set to:', autoEngineControl.value);
+    
+    if (autoEngineControl.value) {
+      alert('✅ Automatic Engine Control Enabled\n\n• Engine will auto-stop when alcohol detected\n• Engine will auto-start when alcohol clears');
+    } else {
+      alert('🔧 Manual Engine Control Enabled\n\n• Use dashboard button to control engine\n• No automatic control based on alcohol detection');
+    }
+    
+  } catch (error) {
+    console.error('[ENGINE] Failed to toggle auto control:', error);
+  }
+};
+
+// ✅ NEW: Monitor engine status from Firebase
+const setupEngineStatusListener = () => {
+  // Monitor engine running status
+  const engineRef = dbRef(database, `helmet_public/${userId}/live/engineRunning`);
+  onValue(engineRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data !== null) {
+      engineRunning.value = data;
+      console.log('[ENGINE] Status updated:', data ? 'RUNNING' : 'STOPPED');
+    }
+  });
+  
+  // Monitor alcohol detection status
+  const alcoholRef = dbRef(database, `${userId}/alcohol/status/status`);
+  onValue(alcoholRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data !== null) {
+      const isAlcoholDetected = data === 'Danger' || data === 'danger' || data === 'DANGER';
+      alcoholDetected.value = isAlcoholDetected;
+      console.log('[ALCOHOL] Status updated:', isAlcoholDetected ? 'DETECTED' : 'SAFE');
+    }
+  });
+  
+  // Monitor auto control setting
+  const autoRef = dbRef(database, `${userId}/engineControl/autoMode`);
+  onValue(autoRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data !== null) {
+      autoEngineControl.value = data;
+      console.log('[ENGINE] Auto control updated:', data);
+    }
+  });
+};
 
 // Cleanup on component unmount
 onBeforeUnmount(() => {

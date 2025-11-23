@@ -29,10 +29,10 @@ const int headlightPin = 32;
 const int taillightPin = 33;
 const int leftSignalPin = 32;  // Moved from 25
 const int rightSignalPin = 33;  // Moved from 26  
-const int relayPin = 25;  // Changed from 27 to 25 (proven to work)
+const int relayPin = 13;   // ✅ GPIO 13 - PROVEN TO WORK!
 const int vibrationPin = 14;
 const int buzzerPin = 12;
-const int lightIndicatorPin = 13;
+const int lightIndicatorPin = 2;  // ✅ FIXED: GPIO 2 (GPIO 5 conflicts with GSM_TX)
 
 // GSM module pins (UART2)
 #define GSM_RX 4
@@ -146,18 +146,19 @@ void setup() {
   pinMode(lightIndicatorPin, OUTPUT);
 
   // ✅ CRITICAL: Force relay OFF at startup
-  // ✅ ACTIVE-LOW RELAY: HIGH = OFF, LOW = ON
-  digitalWrite(relayPin, HIGH);  // HIGH = OFF for active-low relay
+  // ✅ ACTIVE-HIGH RELAY: LOW = OFF, HIGH = ON (confirmed by simple test)
+  digitalWrite(relayPin, LOW);  // LOW = OFF for active-high relay
   digitalWrite(buzzerPin, LOW);
   digitalWrite(lightIndicatorPin, LOW);
   
-  // ✅ Verify relay is actually HIGH (OFF)
+  // ✅ Verify relay is actually LOW (OFF)
   delay(100);
   Serial.println("\n[SETUP] ═══════════════════════════════════");
-  Serial.println("[SETUP] RELAY TYPE: ACTIVE-LOW");
-  Serial.println("[SETUP] HIGH (1) = Relay OFF (Engine Blocked)");
-  Serial.println("[SETUP] LOW (0) = Relay ON (Engine Allowed)");
-  Serial.printf("[SETUP] Relay pin initialized to: %d (should be 1 = HIGH/OFF)\n", digitalRead(relayPin));
+  Serial.println("[SETUP] RELAY TYPE: ACTIVE-HIGH");
+  Serial.println("[SETUP] GPIO: 23 (Safe, no WiFi conflicts)");
+  Serial.println("[SETUP] LOW (0) = Relay OFF (Engine Blocked)");
+  Serial.println("[SETUP] HIGH (1) = Relay ON (Engine Allowed)");
+  Serial.printf("[SETUP] Relay pin initialized to: %d (should be 0 = LOW/OFF)\n", digitalRead(relayPin));
   Serial.println("[SETUP] Engine is BLOCKED until safety conditions met");
   Serial.println("[SETUP] ═══════════════════════════════════\n");
 
@@ -339,15 +340,16 @@ void loop() {
   static unsigned long lastSafetyCheck = 0;
   if (millis() - lastSafetyCheck > 100) { // Check every 100ms
     if (!engineRunning) {
-      // ✅ ACTIVE-LOW: Force relay HIGH (OFF) when engine not running
-      digitalWrite(relayPin, HIGH);
+      // ✅ ACTIVE-HIGH: Force relay LOW (OFF) when engine not running
+      digitalWrite(relayPin, LOW);
       
-      // Debug output every 5 seconds
+      // Debug output every 10 seconds (reduced spam)
       static unsigned long lastDebug = 0;
-      if (millis() - lastDebug > 5000) {
-        Serial.println("\n[SAFETY] Forcing relay HIGH (OFF) - engine not running");
-        Serial.printf("[SAFETY] Relay pin state: %d (should be 1 = HIGH/OFF)\n", digitalRead(relayPin));
-        Serial.println("[SAFETY] ACTIVE-LOW relay: HIGH=OFF, LOW=ON");
+      if (millis() - lastDebug > 10000) {
+        Serial.println("\n[SAFETY] Forcing relay LOW (OFF) - engine not running");
+        Serial.printf("[SAFETY] Relay pin state: %d (should be 0 = LOW/OFF)\n", digitalRead(relayPin));
+        Serial.println("[SAFETY] ACTIVE-HIGH relay: LOW=OFF, HIGH=ON");
+        Serial.printf("[SAFETY] Can Start Engine: %s\n", canStartEngine() ? "YES" : "NO");
         lastDebug = millis();
       }
       
@@ -451,10 +453,10 @@ void loop() {
       
       // 🚨🚨🚨 IMMEDIATE RELAY SHUTDOWN - HIGHEST PRIORITY! 🚨🚨🚨
       Serial.println("\n🚨 EMERGENCY SHUTDOWN - Cutting relay power NOW!");
-      digitalWrite(relayPin, HIGH);  // ✅ ACTIVE-LOW: HIGH = OFF
+      digitalWrite(relayPin, LOW);   // ✅ ACTIVE-HIGH: LOW = OFF
       engineRunning = false;         // Update engine state
       delay(100);                    // Give relay time to respond
-      Serial.printf("🚨 Relay GPIO %d forced to: %d (should be 1 = HIGH/OFF)\n", 
+      Serial.printf("🚨 Relay GPIO %d forced to: %d (should be 0 = LOW/OFF)\n", 
                     relayPin, digitalRead(relayPin));
       Serial.println("🚨 Engine power CUT - relay LEDs (DS1/DS2) should turn OFF!");
       
@@ -906,22 +908,23 @@ void startEngine() {
     return;
   }
   
-  // ✅ ACTIVE-LOW: LOW = ON
-  digitalWrite(relayPin, LOW);
+  // ✅ ACTIVE-HIGH: HIGH = ON
+  digitalWrite(relayPin, HIGH);
   engineRunning = true;
   sendSMS("Engine Started");
   Serial.println("\n✅ [ENGINE] Started successfully!");
   Serial.println("✅ All safety checks passed");
-  Serial.println("✅ Relay set to LOW (ON for active-low relay)\n");
+  Serial.println("✅ Relay set to HIGH (ON for active-high relay)");
+  Serial.printf("✅ Relay GPIO %d = %d (should be 1 = HIGH/ON)\n", relayPin, digitalRead(relayPin));
 }
 
 void stopEngine() {
-  // ✅ ACTIVE-LOW: HIGH = OFF
-  digitalWrite(relayPin, HIGH);
+  // ✅ ACTIVE-HIGH: LOW = OFF
+  digitalWrite(relayPin, LOW);
   engineRunning = false;
   sendSMS("Engine Stopped");
   Serial.println("[ENGINE] Stopped.");
-  Serial.println("[ENGINE] Relay set to HIGH (OFF for active-low relay)");
+  Serial.println("[ENGINE] Relay set to LOW (OFF for active-high relay)");
 }
 
 // ======= HELPER FUNCTIONS =======

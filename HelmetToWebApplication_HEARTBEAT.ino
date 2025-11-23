@@ -105,9 +105,10 @@ void sendHelmetHeartbeat(bool isActive) {
   StaticJsonDocument<128> doc;
   doc["status"] = isActive ? "On" : "Off";
   
-  // ✅ FIX: Always use millis-based timestamp for consistency with motorcycle module
-  // Both modules must use the same time format for heartbeat detection to work
-  unsigned long timestamp = 1700000000000UL + millis();
+  // ✅ FIX: Use 64-bit integer to prevent overflow
+  // unsigned long on ESP32 is only 32-bit (max ~4.3 billion)
+  // 1700000000000UL + millis() exceeds this and wraps around!
+  uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
   
   doc["lastHeartbeat"] = timestamp;
   doc["timestamp"] = timestamp;
@@ -141,7 +142,9 @@ void sendAlcoholToFirebase(int alcoholVal, bool alcoholStatus) {
   StaticJsonDocument<128> doc;
   doc["sensorValue"] = alcoholVal;
   doc["status"] = alcoholStatus ? "Danger" : "Safe";
-  doc["timestamp"] = millis();
+  // ✅ FIX: Use consistent timestamp format
+  uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
+  doc["timestamp"] = timestamp;
 
   String payload;
   serializeJson(doc, payload);
