@@ -74,6 +74,7 @@ const unsigned long BUTTON_CHECK_INTERVAL = 1000; // Check dashboard button ever
 // Firebase paths
 const String crashPath = "/helmet_public/" + userUID + "/crashes.json?auth=" + firebaseAuth;
 const String buttonPath = "/" + userUID + "/engineControl/startButton.json?auth=" + firebaseAuth;
+const String livePath = "/helmet_public/" + userUID + "/live.json?auth=" + firebaseAuth;
 // Try multiple possible alcohol paths
 const String alcoholPaths[] = {
   "/" + userUID + "/alcohol/status/status.json?auth=" + firebaseAuth,
@@ -145,6 +146,8 @@ void setup() {
   Serial.println("   Type 'AUTO ON' to enable automatic engine control");
   Serial.println("   Type 'AUTO OFF' to disable automatic engine control");
   Serial.println("   Type 'TEST AUTO' to test auto-start functionality");
+  Serial.println("   Type 'START ENGINE' to manually start engine");
+  Serial.println("   Type 'STOP ENGINE' to manually stop engine");
   Serial.println("   Type 'STATUS' for system status\n");
 }
 
@@ -218,6 +221,14 @@ void loop() {
       
       Serial.println("🧪 Conditions set - auto-start should trigger in next loop!");
       Serial.println("🧪 Watch for AUTO-START message...");
+    }
+    else if (cmd == "START ENGINE") {
+      Serial.println("\n🧪 MANUAL ENGINE START TEST...");
+      startEngine();
+    }
+    else if (cmd == "STOP ENGINE") {
+      Serial.println("\n🧪 MANUAL ENGINE STOP TEST...");
+      stopEngine();
     }
   }
 
@@ -324,6 +335,14 @@ void loop() {
     lastPrint = millis();
   }
 
+  // ✅ NEW: Send live data to Firebase for dashboard updates
+  static unsigned long lastFirebaseUpdate = 0;
+  const unsigned long FIREBASE_UPDATE_INTERVAL = 2000; // Update every 2 seconds
+  if (millis() - lastFirebaseUpdate > FIREBASE_UPDATE_INTERVAL) {
+    sendLiveToFirebase();
+    lastFirebaseUpdate = millis();
+  }
+
   delay(50);
 }
 
@@ -425,6 +444,58 @@ void sendCrashToFirebase(float impact, float roll) {
   // Simplified crash reporting
   Serial.printf("📡 Sending crash to Firebase: Impact=%.2f, Roll=%.1f\n", impact, roll);
   // Add actual Firebase code here if needed
+}
+
+// ✅ NEW: Send live engine status to Firebase for dashboard
+void sendLiveToFirebase() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return; // Skip if no WiFi
+  }
+  
+  StaticJsonDocument<512> doc;
+  
+  // Engine status (most important for dashboard)
+  doc["engineRunning"] = engineRunning;
+  
+  // MPU6050 data
+  doc["mpu6050"]["accelX"] = accel.acceleration.x;
+  doc["mpu6050"]["accelY"] = accel.acceleration.y;
+  doc["mpu6050"]["accelZ"] = accel.acceleration.z;
+  doc["mpu6050"]["totalAccel"] = currentTotalAccel;
+  doc["mpu6050"]["roll"] = currentRoll;
+  
+  // System status
+  doc["crashDetected"] = crashDetected;
+  doc["alcoholDetected"] = alcoholDetected;
+  doc["autoEngineControl"] = autoEngineControl;
+  doc["engineStartRequested"] = engineStartRequested;
+  
+  // Relay status
+  doc["relayState"] = digitalRead(relayPin);
+  doc["relayStatus"] = digitalRead(relayPin) ? "OFF" : "ON"; // ACTIVE-LOW logic
+  
+  // Timestamp
+  doc["timestamp"] = millis();
+  doc["lastUpdate"] = millis();
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  HTTPClient http;
+  http.begin(firebaseHost + livePath);
+  http.addHeader("Content-Type", "application/json");
+  
+  int httpCode = http.PUT(payload);
+  
+  if (httpCode == HTTP_CODE_OK) {
+    Serial.printf("[FIREBASE] ✅ Live data sent - Engine: %s, Relay: %s\n", 
+                  engineRunning ? "RUNNING" : "STOPPED",
+                  digitalRead(relayPin) ? "OFF" : "ON");
+  } else {
+    Serial.printf("[FIREBASE] ❌ Live data failed: %d\n", httpCode);
+  }
+  
+  http.end();
 }
 
 // ✅ NEW: WiFi connection function
@@ -703,7 +774,16 @@ void handleDashboardButton() {
 // ✅ NEW: Check dashboard button state from Firebase
 void checkDashboardButton() {
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[BUTTON] ❌ No WiFi - skipping button check");
     return; // Skip if no WiFi
+  }
+  
+  // Debug output every 30 seconds
+  static unsigned long lastButtonDebug = 0;
+  if (millis() - lastButtonDebug > 30000) {
+    Serial.println("[BUTTON] 🔍 Checking dashboard button...");
+    Serial.println("[BUTTON] Path: " + buttonPath);
+    lastButtonDebug = millis();
   }
   
   HTTPClient http;
@@ -714,6 +794,13 @@ void checkDashboardButton() {
   
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
+    
+    // Debug: Show button response every 30 seconds
+    static unsigned long lastResponseDebug = 0;
+    if (millis() - lastResponseDebug > 30000) {
+      Serial.println("[BUTTON] Response: '" + response + "'");
+      lastResponseDebug = millis();
+    }
     
     // Parse button state - look for "true" or "1" or "pressed"
     bool currentButtonState = (response.indexOf("true") != -1) || 

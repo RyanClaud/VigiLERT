@@ -324,6 +324,7 @@
           </div>
         </div>
       </div>
+        </div>
       </div>
 
       <!-- Speed Limit Control -->
@@ -424,9 +425,6 @@
                   Status: {{ engineRunning ? 'Running' : 'Stopped' }}
                   <span v-if="alcoholDetected" class="text-red-200 font-bold"> • Alcohol Detected</span>
                 </p>
-                <p class="text-green-200 text-xs mt-1">
-                  Last Update: {{ new Date().toLocaleTimeString() }}
-                </p>
               </div>
             </div>
             <div class="flex flex-col items-end gap-2">
@@ -469,17 +467,6 @@
                 {{ autoEngineControl ? 'smart_toy' : 'person' }}
               </span>
               <span>{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
-            </button>
-          </div>
-
-          <!-- Status Sync Button -->
-          <div class="mt-4">
-            <button
-              @click="syncEngineStatus"
-              class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm bg-white/10 hover:bg-white/20 text-white border border-white/30 transition-all duration-300"
-            >
-              <span class="material-icons text-lg">refresh</span>
-              <span>Sync Status</span>
             </button>
           </div>
 
@@ -656,7 +643,7 @@
     </footer>
 
     <!-- 🚀 FLOATING ACTION BUTTON (Mobile Only) -->
-    <div class="fixed bottom-28 right-6 z-40 md:hidden">
+    <div class="fixed bottom-24 right-4 z-40 md:hidden">
       <button @click="toggleEngine" 
               :disabled="alcoholDetected && !engineRunning"
               :class="[
@@ -1956,83 +1943,16 @@ const toggleAutoControl = async () => {
   }
 };
 
-// ✅ NEW: Manual engine status sync
-const syncEngineStatus = async () => {
-  console.log('[ENGINE] 🔄 Manual sync requested...');
-  
-  // Check multiple Firebase paths for engine status
-  const pathsToCheck = [
-    `helmet_public/${userId}/live/engineRunning`,
-    `${userId}/engineControl/engineRunning`, 
-    `helmet_public/${userId}/engineRunning`,
-    `${userId}/live/engineRunning`,
-    `helmet_public/${userId}/live`,
-    `${userId}/engineControl`
-  ];
-  
-  for (const path of pathsToCheck) {
-    try {
-      const ref = dbRef(database, path);
-      const snapshot = await get(ref);
-      const data = snapshot.val();
-      
-      console.log(`[ENGINE] Checking path: ${path}`);
-      console.log(`[ENGINE] Data found:`, data);
-      
-      if (data !== null) {
-        if (typeof data === 'boolean') {
-          engineRunning.value = data;
-          console.log(`[ENGINE] ✅ Engine status synced from ${path}:`, data ? 'RUNNING' : 'STOPPED');
-          break;
-        } else if (typeof data === 'object' && data.engineRunning !== undefined) {
-          engineRunning.value = data.engineRunning;
-          console.log(`[ENGINE] ✅ Engine status synced from ${path}.engineRunning:`, data.engineRunning ? 'RUNNING' : 'STOPPED');
-          break;
-        }
-      }
-    } catch (error) {
-      console.log(`[ENGINE] Error checking path ${path}:`, error);
-    }
-  }
-  
-  // Also sync alcohol status
-  try {
-    const alcoholRef = dbRef(database, `${userId}/alcohol/status/status`);
-    const alcoholSnapshot = await get(alcoholRef);
-    const alcoholData = alcoholSnapshot.val();
-    
-    if (alcoholData !== null) {
-      const isAlcoholDetected = alcoholData === 'Danger' || alcoholData === 'danger' || alcoholData === 'DANGER';
-      alcoholDetected.value = isAlcoholDetected;
-      console.log('[ALCOHOL] ✅ Status synced:', isAlcoholDetected ? 'DETECTED' : 'SAFE');
-    }
-  } catch (error) {
-    console.log('[ALCOHOL] Error syncing status:', error);
-  }
-  
-  console.log('[ENGINE] 🔄 Manual sync complete');
-};
-
-// ✅ NEW: Monitor engine status from Firebase - Multiple paths
+// ✅ NEW: Monitor engine status from Firebase
 const setupEngineStatusListener = () => {
-  // Monitor engine running status from multiple possible paths
-  const enginePaths = [
-    `helmet_public/${userId}/live/engineRunning`,
-    `${userId}/engineControl/engineRunning`,
-    `helmet_public/${userId}/engineRunning`,
-    `${userId}/live/engineRunning`
-  ];
-  
-  // Try each path and use the first one that has data
-  enginePaths.forEach((path, index) => {
-    const engineRef = dbRef(database, path);
-    onValue(engineRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data !== null) {
-        engineRunning.value = data;
-        console.log(`[ENGINE] Status updated from path ${index + 1} (${path}):`, data ? 'RUNNING' : 'STOPPED');
-      }
-    });
+  // Monitor engine running status
+  const engineRef = dbRef(database, `helmet_public/${userId}/live/engineRunning`);
+  onValue(engineRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data !== null) {
+      engineRunning.value = data;
+      console.log('[ENGINE] Status updated:', data ? 'RUNNING' : 'STOPPED');
+    }
   });
   
   // Monitor alcohol detection status
