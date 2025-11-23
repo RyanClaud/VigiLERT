@@ -105,21 +105,9 @@ void sendHelmetHeartbeat(bool isActive) {
   StaticJsonDocument<128> doc;
   doc["status"] = isActive ? "On" : "Off";
   
-  // Use GPS time if available, otherwise use millis as fallback
-  unsigned long timestamp;
-  if (gps.time.isValid() && gps.date.isValid()) {
-    tmElements_t tm;
-    tm.Year = gps.date.year() - 1970;
-    tm.Month = gps.date.month();
-    tm.Day = gps.date.day();
-    tm.Hour = gps.time.hour();
-    tm.Minute = gps.time.minute();
-    tm.Second = gps.time.second();
-    timestamp = makeTime(tm) * 1000UL; // Convert to milliseconds
-  } else {
-    // Fallback: Use epoch + millis (approximate)
-    timestamp = 1700000000000UL + millis(); // Rough Unix timestamp
-  }
+  // ✅ FIX: Always use millis-based timestamp for consistency with motorcycle module
+  // Both modules must use the same time format for heartbeat detection to work
+  unsigned long timestamp = 1700000000000UL + millis();
   
   doc["lastHeartbeat"] = timestamp;
   doc["timestamp"] = timestamp;
@@ -134,9 +122,10 @@ void sendHelmetHeartbeat(bool isActive) {
   int code = http.PUT(payload);
   
   if (code == HTTP_CODE_OK) {
-    Serial.printf("[FIREBASE] Helmet heartbeat sent: %s at %lu\n", isActive ? "On" : "Off", timestamp);
+    Serial.printf("[FIREBASE] ✓ Helmet heartbeat sent: %s at %lu\n", isActive ? "On" : "Off", timestamp);
+    Serial.println("[FIREBASE] Motorcycle module should detect this heartbeat");
   } else {
-    Serial.printf("[FIREBASE] Helmet heartbeat failed: %d\n", code);
+    Serial.printf("[FIREBASE] ✗ Helmet heartbeat failed: %d\n", code);
   }
   http.end();
 }
