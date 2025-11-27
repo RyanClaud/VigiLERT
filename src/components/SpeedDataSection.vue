@@ -28,85 +28,96 @@
       </div>
     </div>
 
-    <!-- Motorcycle Speedometer -->
+    <!-- Modern Digital Speedometer -->
     <div class="relative flex flex-col items-center">
-      <!-- Speedometer Gauge -->
-      <div class="relative w-80 h-80 md:w-96 md:h-96">
-        <!-- Outer Ring -->
-        <svg class="w-full h-full transform -rotate-180" viewBox="0 0 200 200">
-          <!-- Background Circle -->
-          <circle
-            cx="100"
-            cy="100"
-            r="85"
-            fill="none"
-            stroke="#E5E7EB"
-            stroke-width="12"
-          />
+      <!-- Main Speed Display Card -->
+      <div class="relative w-full max-w-2xl">
+        <!-- Large Speed Display -->
+        <div class="relative overflow-hidden bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-2xl p-8 md:p-12 border-4"
+             :class="isOverSpeed ? 'border-red-500' : 'border-blue-500'">
           
-          <!-- Speed Arc (0-180 degrees) -->
-          <circle
-            cx="100"
-            cy="100"
-            r="85"
-            fill="none"
-            :stroke="speedColor"
-            stroke-width="12"
-            stroke-linecap="round"
-            :stroke-dasharray="circumference"
-            :stroke-dashoffset="dashOffset"
-            class="transition-all duration-300"
-          />
-          
-          <!-- Speed Limit Marker -->
-          <line
-            :x1="limitMarkerX1"
-            :y1="limitMarkerY1"
-            :x2="limitMarkerX2"
-            :y2="limitMarkerY2"
-            stroke="#EF4444"
-            stroke-width="3"
-            stroke-linecap="round"
-          />
-        </svg>
-
-        <!-- Center Display -->
-        <div class="absolute inset-0 flex flex-col items-center justify-center">
-          <div class="text-center">
-            <!-- GPS Icon -->
-            <div class="mb-2">
-              <span class="material-icons text-2xl text-blue-500 animate-pulse">satellite_alt</span>
-            </div>
-            
-            <!-- Speed Display -->
-            <p class="text-7xl md:text-8xl font-black leading-none" 
-               :class="isOverSpeed ? 'text-red-600' : 'text-[#3D52A0]'">
-              {{ displaySpeed }}
-            </p>
-            <p class="text-2xl md:text-3xl font-bold text-[#7091E6] mt-2">km/h</p>
-            
-            <!-- Status Indicator -->
-            <div class="mt-4 flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm shadow-lg">
-              <span class="w-3 h-3 rounded-full animate-pulse" :class="isOverSpeed ? 'bg-red-500' : 'bg-green-500'"></span>
-              <p class="text-sm font-bold" :class="isOverSpeed ? 'text-red-600' : 'text-green-600'">
-                {{ isOverSpeed ? 'OVER LIMIT' : 'SAFE SPEED' }}
-              </p>
-            </div>
-            
-            <!-- GPS Source Label -->
-            <div class="mt-3 flex items-center justify-center gap-1 text-xs text-gray-500">
-              <span class="material-icons text-sm">router</span>
-              <span class="font-medium">GPS Module</span>
-            </div>
+          <!-- Background Pattern -->
+          <div class="absolute inset-0 opacity-5">
+            <div class="absolute inset-0" style="background-image: radial-gradient(circle, #3D52A0 1px, transparent 1px); background-size: 20px 20px;"></div>
           </div>
-        </div>
-
-        <!-- Speed Markers -->
-        <div class="absolute inset-0">
-          <div v-for="marker in speedMarkers" :key="marker.speed" 
-            class="absolute text-xs font-bold text-gray-600"
-            :style="marker.style">
-            {{ marker.speed }}
+          
+          <!-- Content -->
+          <div class="relative">
+            <!-- GPS Status -->
+            <div class="flex items-center justify-center gap-2 mb-6">
+              <span class="material-icons text-3xl text-blue-500 animate-pulse">satellite_alt</span>
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-sm font-bold text-gray-600">GPS TRACKING</span>
+              </div>
+            </div>
+            
+            <!-- Speed Number -->
+            <div class="text-center mb-6">
+              <div class="inline-block">
+                <p class="text-9xl md:text-[12rem] font-black leading-none tracking-tight"
+                   :class="isOverSpeed ? 'text-red-600' : 'text-[#3D52A0]'">
+                  {{ displaySpeed }}
+                </p>
+                <div class="flex items-center justify-center gap-2 mt-2">
+                  <div class="h-1 w-16 rounded-full" :class="isOverSpeed ? 'bg-red-500' : 'bg-blue-500'"></div>
+                  <p class="text-3xl md:text-4xl font-bold text-gray-600">km/h</p>
+                  <div class="h-1 w-16 rounded-full" :class="isOverSpeed ? 'bg-red-500' : 'bg-blue-500'"></div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Status Badge -->
+            <div class="flex justify-center mb-6">
+              <div class="inline-flex items-center gap-3 px-8 py-4 rounded-2xl shadow-lg"
+                   :class="isOverSpeed ? 'bg-red-500' : 'bg-green-500'">
+                <span class="material-icons text-3xl text-white">
+                  {{ isOverSpeed ? 'warning' : 'check_circle' }}
+                </span>
+                <div class="text-white">
+                  <p class="text-xl font-black">{{ isOverSpeed ? 'OVER LIMIT' : 'SAFE SPEED' }}</p>
+                  <p class="text-sm opacity-90">{{ isOverSpeed ? 'Slow down!' : 'Within speed limit' }}</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Speed Progress Bar -->
+            <div class="relative">
+              <div class="flex items-center justify-between text-xs font-bold text-gray-500 mb-2">
+                <span>0 km/h</span>
+                <span class="text-orange-500">LIMIT: {{ speedLimit }} km/h</span>
+                <span>120 km/h</span>
+              </div>
+              <div class="relative h-6 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                <!-- Progress Fill -->
+                <div class="absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out"
+                     :style="{ width: progressWidth }"
+                     :class="isOverSpeed ? 'bg-gradient-to-r from-red-500 to-red-600' : 'bg-gradient-to-r from-green-500 to-blue-500'">
+                  <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+                </div>
+                
+                <!-- Speed Limit Marker -->
+                <div class="absolute inset-y-0 w-1 bg-orange-500 shadow-lg"
+                     :style="{ left: limitMarkerPosition }">
+                  <div class="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-orange-500"></div>
+                </div>
+              </div>
+              
+              <!-- Speed Scale -->
+              <div class="flex justify-between mt-2">
+                <div v-for="mark in [0, 20, 40, 60, 80, 100, 120]" :key="mark"
+                     class="text-xs font-semibold"
+                     :class="mark === speedLimit ? 'text-orange-500' : 'text-gray-400'">
+                  {{ mark }}
+                </div>
+              </div>
+            </div>
+            
+            <!-- GPS Source -->
+            <div class="flex items-center justify-center gap-2 mt-6 text-sm text-gray-500">
+              <span class="material-icons text-lg">router</span>
+              <span class="font-semibold">Real-time GPS Module Data</span>
+            </div>
           </div>
         </div>
       </div>
@@ -224,69 +235,19 @@ const avgSpeed = computed(() => {
   return Math.round(sum / props.speedHistory.length);
 });
 
-// Speedometer calculations (0-180 degrees for 0-120 km/h)
+// Progress bar calculations
 const maxSpeedDisplay = 120; // Max speed on gauge
-const circumference = 2 * Math.PI * 85; // Circle circumference
-const halfCircumference = circumference / 2; // Half circle for 180 degrees
 
-const dashOffset = computed(() => {
-  const percentage = Math.min(props.currentSpeed / maxSpeedDisplay, 1);
-  return halfCircumference - (percentage * halfCircumference);
+// Progress bar width (0-100%)
+const progressWidth = computed(() => {
+  const percentage = Math.min((props.currentSpeed / maxSpeedDisplay) * 100, 100);
+  return `${percentage}%`;
 });
 
-// Speed limit marker position (red line)
-// With -rotate-180, the arc now starts at the correct position
-// 0 km/h should be at 0° (right side), 120 km/h at 180° (left side)
-const limitAngle = computed(() => {
-  const percentage = Math.min(props.speedLimit / maxSpeedDisplay, 1);
-  // Simple linear mapping: 0° at 0 km/h, 180° at 120 km/h
-  const angle = percentage * 180; // 0° at 0 km/h, 180° at 120 km/h
-  return angle;
-});
-
-const limitMarkerX1 = computed(() => {
-  // Convert angle to radians
-  const angleRad = limitAngle.value * (Math.PI / 180);
-  return 100 + 75 * Math.cos(angleRad);
-});
-
-const limitMarkerY1 = computed(() => {
-  const angleRad = limitAngle.value * (Math.PI / 180);
-  return 100 + 75 * Math.sin(angleRad);
-});
-
-const limitMarkerX2 = computed(() => {
-  const angleRad = limitAngle.value * (Math.PI / 180);
-  return 100 + 95 * Math.cos(angleRad);
-});
-
-const limitMarkerY2 = computed(() => {
-  const angleRad = limitAngle.value * (Math.PI / 180);
-  return 100 + 95 * Math.sin(angleRad);
-});
-
-// Speed markers around the gauge
-const speedMarkers = computed(() => {
-  const markers = [0, 20, 40, 60, 80, 100, 120];
-  return markers.map(speed => {
-    const percentage = speed / maxSpeedDisplay;
-    // Place numbers on top arc: 180° (left) to 360° (right)
-    // This makes them go from middle-left, up and around to middle-right
-    const angle = 180 + (percentage * 180); // 180° at 0, 360° at 120
-    const angleRad = angle * (Math.PI / 180);
-    const radius = 110;
-    const x = 100 + radius * Math.cos(angleRad);
-    const y = 100 + radius * Math.sin(angleRad);
-    
-    return {
-      speed,
-      style: {
-        left: `${(x / 200) * 100}%`,
-        top: `${(y / 200) * 100}%`,
-        transform: 'translate(-50%, -50%)'
-      }
-    };
-  });
+// Speed limit marker position on progress bar
+const limitMarkerPosition = computed(() => {
+  const percentage = Math.min((props.speedLimit / maxSpeedDisplay) * 100, 100);
+  return `${percentage}%`;
 });
 
 // Watch for overspeed and emit event
