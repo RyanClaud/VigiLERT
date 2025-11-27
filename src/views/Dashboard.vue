@@ -527,11 +527,20 @@
               <span class="material-icons text-3xl text-white">notifications_active</span>
             </div>
             <span>Recent Alerts</span>
+            <span v-if="alerts.length > 0" class="bg-red-500 text-white text-sm px-3 py-1 rounded-full">
+              {{ alerts.length }}
+            </span>
           </span>
-          <button @click="toggleAlerts"
-            class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-            {{ showAlerts ? 'Hide' : 'Show' }}
-          </button>
+          <div class="flex gap-2">
+            <button v-if="alerts.length > 0" @click="clearAllAlerts"
+              class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+              Clear All
+            </button>
+            <button @click="toggleAlerts"
+              class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+              {{ showAlerts ? 'Hide' : 'Show' }}
+            </button>
+          </div>
         </h3>
         <div v-if="showAlerts" class="relative max-h-64 overflow-y-auto custom-scrollbar">
           <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
@@ -1002,7 +1011,14 @@ const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
 const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol/status`);
 const speedLimitRef = dbRef(database, `helmet_public/${userId}/settings/speedLimit`);
 
+// ✅ Track app start time to ignore old crashes
+const appStartTime = ref(Date.now());
+
 onMounted(() => {
+  // ✅ Set app start time when component mounts
+  appStartTime.value = Date.now();
+  console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
+  
   const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
   if (storedLastCrashTime) lastCrashTimestamp = parseInt(storedLastCrashTime);
 
@@ -1503,12 +1519,39 @@ const isCrashActive = (index) => {
 // Clear crash alert manually
 const clearCrashAlert = (index) => {
   const event = crashEvents.value[index];
-  if (event && event.timestamp > lastCrashTimestamp) {
+  if (event) {
+    console.log('[CRASH] Clearing crash alert for event:', event);
     lastCrashTimestamp = event.timestamp;
     localStorage.setItem(`lastCrashTimestamp_${userId}`, event.timestamp.toString());
+    
+    // Stop any ongoing crash animation
+    if (crashInterval) {
+      clearInterval(crashInterval);
+      crashInterval = null;
+    }
+    
+    // Reset crash display to stable
     crashDisplayStatus.value = 'Stable';
     crashDisplayMessage.value = 'Vehicle Stable';
+    
+    console.log('[CRASH] ✓ Alert cleared, status reset to Stable');
   }
+};
+
+// ✅ NEW: Clear all alerts from the alerts list
+const clearAllAlerts = () => {
+  console.log('[ALERTS] Clearing all alerts');
+  alerts.value = [];
+  
+  // Also stop crash animation if running
+  if (crashInterval) {
+    clearInterval(crashInterval);
+    crashInterval = null;
+  }
+  
+  // Reset crash display
+  crashDisplayStatus.value = 'Stable';
+  crashDisplayMessage.value = 'Vehicle Stable';
 };
 
 // Delete Crash Event
@@ -1744,6 +1787,7 @@ const triggerSOS = async () => {
 // Initialize crash event listener
 const initializeCrashListener = () => {
   console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId}/crashes`);
+  console.log('[INIT] App start time:', new Date(appStartTime.value).toLocaleString());
   
   onChildAdded(crashRef, (snapshot) => {
     const event = snapshot.val();
@@ -1764,6 +1808,27 @@ const initializeCrashListener = () => {
     });
     
     const eventTime = event.timestamp;
+    
+    // ✅ FIX: Ignore crashes that happened BEFORE the app started
+    // This prevents old crashes from triggering alerts when you restart the app
+    if (eventTime < appStartTime.value) {
+      console.log('[CRASH] ⏭️ Skipping old crash from before app start');
+      console.log('[CRASH] Crash time:', new Date(eventTime).toLocaleString());
+      console.log('[CRASH] App start:', new Date(appStartTime.value).toLocaleString());
+      
+      // Still add to crash events array for map display (but no alert/sound)
+      const crashEvent = {
+        timestamp: eventTime,
+        impactStrength: event.impactStrength || "N/A",
+        roll: event.roll || event.leanAngle || 0,
+        location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
+        lat: event.lat,
+        lng: event.lng,
+        hasGPS: event.hasGPS || false
+      };
+      crashEvents.value = [crashEvent];
+      return; // Don't trigger alert/sound for old crashes
+    }
     
     // Add to crash events array (for map display)
     const crashEvent = {
