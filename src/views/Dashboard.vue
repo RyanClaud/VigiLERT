@@ -130,6 +130,90 @@
         </div>
       </div>
 
+      <!-- ⚡ ENGINE CONTROL (Moved to Top for Quick Access) -->
+      <div id="engine" class="bg-gradient-to-br from-green-500 via-green-600 to-green-700 rounded-3xl shadow-2xl p-6 md:p-8 text-white border-2 border-white/30 hover:shadow-3xl transition-all duration-300 mb-8">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center gap-4">
+            <div class="p-4 bg-white/20 rounded-2xl backdrop-blur-sm">
+              <span class="material-icons text-4xl">power_settings_new</span>
+            </div>
+            <div>
+              <h3 class="text-2xl font-bold mb-1">Engine Control</h3>
+              <p class="text-green-100 text-sm">
+                Status: {{ engineRunning ? 'Running' : 'Stopped' }}
+                <span v-if="alcoholDetected" class="text-red-200 font-bold"> • Alcohol Detected</span>
+              </p>
+              <p class="text-green-200 text-xs mt-1">
+                Last Update: {{ new Date().toLocaleTimeString() }}
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-col items-end gap-2">
+            <div :class="['w-4 h-4 rounded-full', engineRunning ? 'bg-green-300 animate-pulse' : 'bg-gray-400']"></div>
+            <span class="text-xs text-green-100">{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Engine Turn On/Off Button -->
+          <button
+            @click="toggleEngine"
+            :disabled="alcoholDetected && !engineRunning"
+            :class="[
+              'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
+              engineRunning 
+                ? 'bg-red-500 hover:bg-red-600 text-white' 
+                : alcoholDetected 
+                  ? 'bg-gray-500 cursor-not-allowed text-gray-300'
+                  : 'bg-white hover:bg-gray-100 text-green-600'
+            ]"
+          >
+            <span class="material-icons text-2xl">
+              {{ engineRunning ? 'stop' : 'play_arrow' }}
+            </span>
+            <span>{{ engineRunning ? 'Turn Off Engine' : 'Turn On Engine' }}</span>
+          </button>
+
+          <!-- Auto Control Toggle -->
+          <button
+            @click="toggleAutoControl"
+            :class="[
+              'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
+              autoEngineControl 
+                ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                : 'bg-white/20 hover:bg-white/30 text-white border-2 border-white/30'
+            ]"
+          >
+            <span class="material-icons text-2xl">
+              {{ autoEngineControl ? 'smart_toy' : 'person' }}
+            </span>
+            <span>{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
+          </button>
+        </div>
+
+        <!-- Status Sync Button -->
+        <div class="mt-4">
+          <button
+            @click="syncEngineStatus"
+            class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm bg-white/10 hover:bg-white/20 text-white border border-white/30 transition-all duration-300"
+          >
+            <span class="material-icons text-lg">refresh</span>
+            <span>Sync Status</span>
+          </button>
+        </div>
+
+        <!-- Status Messages -->
+        <div v-if="alcoholDetected" class="mt-4 p-4 bg-red-500/20 border border-red-300/30 rounded-xl">
+          <div class="flex items-center gap-3">
+            <span class="material-icons text-red-200 animate-pulse">warning</span>
+            <div>
+              <p class="text-red-100 font-bold">Alcohol Detected!</p>
+              <p class="text-red-200 text-sm">Engine cannot start until alcohol clears</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 📱 MOBILE: Collapsible Rider Status Cards -->
       <div class="mb-8">
         <button @click="showRiderCards = !showRiderCards" 
@@ -408,90 +492,6 @@
               </span>
               <span>{{ isGPSSpeedActive ? 'Stop Monitoring' : 'Start Monitoring' }}</span>
             </button>
-          </div>
-        </div>
-
-        <!-- Engine Control -->
-        <div id="engine" class="bg-gradient-to-br from-green-500 via-green-600 to-green-700 rounded-3xl shadow-2xl p-6 md:p-8 text-white border-2 border-white/30 hover:shadow-3xl transition-all duration-300">
-          <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-4">
-              <div class="p-4 bg-white/20 rounded-2xl backdrop-blur-sm">
-                <span class="material-icons text-4xl">power_settings_new</span>
-              </div>
-              <div>
-                <h3 class="text-2xl font-bold mb-1">Engine Control</h3>
-                <p class="text-green-100 text-sm">
-                  Status: {{ engineRunning ? 'Running' : 'Stopped' }}
-                  <span v-if="alcoholDetected" class="text-red-200 font-bold"> • Alcohol Detected</span>
-                </p>
-                <p class="text-green-200 text-xs mt-1">
-                  Last Update: {{ new Date().toLocaleTimeString() }}
-                </p>
-              </div>
-            </div>
-            <div class="flex flex-col items-end gap-2">
-              <div :class="['w-4 h-4 rounded-full', engineRunning ? 'bg-green-300 animate-pulse' : 'bg-gray-400']"></div>
-              <span class="text-xs text-green-100">{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
-            </div>
-          </div>
-          
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Engine Start/Stop Button -->
-            <button
-              @click="toggleEngine"
-              :disabled="alcoholDetected && !engineRunning"
-              :class="[
-                'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
-                engineRunning 
-                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                  : alcoholDetected 
-                    ? 'bg-gray-500 cursor-not-allowed text-gray-300'
-                    : 'bg-white hover:bg-gray-100 text-green-600'
-              ]"
-            >
-              <span class="material-icons text-2xl">
-                {{ engineRunning ? 'stop' : 'play_arrow' }}
-              </span>
-              <span>{{ engineRunning ? 'Stop Engine' : 'Start Engine' }}</span>
-            </button>
-
-            <!-- Auto Control Toggle -->
-            <button
-              @click="toggleAutoControl"
-              :class="[
-                'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
-                autoEngineControl 
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                  : 'bg-white/20 hover:bg-white/30 text-white border-2 border-white/30'
-              ]"
-            >
-              <span class="material-icons text-2xl">
-                {{ autoEngineControl ? 'smart_toy' : 'person' }}
-              </span>
-              <span>{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
-            </button>
-          </div>
-
-          <!-- Status Sync Button -->
-          <div class="mt-4">
-            <button
-              @click="syncEngineStatus"
-              class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm bg-white/10 hover:bg-white/20 text-white border border-white/30 transition-all duration-300"
-            >
-              <span class="material-icons text-lg">refresh</span>
-              <span>Sync Status</span>
-            </button>
-          </div>
-
-          <!-- Status Messages -->
-          <div v-if="alcoholDetected" class="mt-4 p-4 bg-red-500/20 border border-red-300/30 rounded-xl">
-            <div class="flex items-center gap-3">
-              <span class="material-icons text-red-200 animate-pulse">warning</span>
-              <div>
-                <p class="text-red-100 font-bold">Alcohol Detected!</p>
-                <p class="text-red-200 text-sm">Engine cannot start until alcohol clears</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
