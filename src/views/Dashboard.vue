@@ -1188,13 +1188,7 @@ onMounted(() => {
       if (!data.signalLights) faults.push('Signal Lights');
       
       if (faults.length > 0) {
-        alerts.value.unshift({
-          type: 'warning',
-          message: 'Electrical Fault Detected',
-          details: `Faulty components: ${faults.join(', ')}`,
-          time: new Date().toLocaleTimeString()
-        });
-        if (alerts.value.length > 5) alerts.value.pop();
+        addAlert('warning', 'Electrical Fault Detected', `Faulty components: ${faults.join(', ')}`);
       }
     }
   });
@@ -1619,8 +1613,37 @@ const clearAllAlerts = () => {
 };
 
 // Delete Crash Event
-const deleteCrashEvent = (index) => {
-  crashEvents.value.splice(index, 1);
+const deleteCrashEvent = async (index) => {
+  try {
+    const event = crashEvents.value[index];
+    if (!event) return;
+    
+    console.log('[CRASH] Deleting crash event:', event);
+    
+    // Remove from local array
+    crashEvents.value.splice(index, 1);
+    
+    // Also delete from Firebase to prevent it from reappearing
+    const crashesRef = dbRef(database, `helmet_public/${userId}/crashes`);
+    const snapshot = await get(crashesRef);
+    
+    if (snapshot.exists()) {
+      const crashes = snapshot.val();
+      // Find and delete the crash with matching timestamp
+      for (const [key, crash] of Object.entries(crashes)) {
+        if (crash.timestamp === event.timestamp) {
+          await remove(dbRef(database, `helmet_public/${userId}/crashes/${key}`));
+          console.log('[CRASH] ✓ Deleted crash from Firebase:', key);
+          break;
+        }
+      }
+    }
+    
+    console.log('[CRASH] ✓ Crash event deleted successfully');
+  } catch (error) {
+    console.error('[CRASH] Error deleting crash event:', error);
+    alert('Failed to delete crash event. Please try again.');
+  }
 };
 
 // Start continuous GPS speed monitoring
@@ -1873,12 +1896,15 @@ const initializeCrashListener = () => {
     
     const eventTime = event.timestamp;
     
-    // ✅ FIX: Ignore crashes that happened BEFORE the app started
+    // ✅ FIX: Ignore crashes that happened BEFORE the app started OR were dismissed
     // This prevents old crashes from triggering alerts when you restart the app
-    if (eventTime < appStartTime.value) {
-      console.log('[CRASH] ⏭️ Skipping old crash from before app start');
+    const shouldSkipCrash = eventTime < appStartTime.value || !shouldShowAlert(eventTime);
+    
+    if (shouldSkipCrash) {
+      console.log('[CRASH] ⏭️ Skipping crash (old or dismissed)');
       console.log('[CRASH] Crash time:', new Date(eventTime).toLocaleString());
       console.log('[CRASH] App start:', new Date(appStartTime.value).toLocaleString());
+      console.log('[CRASH] Dismissal time:', new Date(alertDismissalTime.value).toLocaleString());
       
       // Still add to crash events array for map display (but no alert/sound)
       const crashEvent = {
@@ -1891,7 +1917,7 @@ const initializeCrashListener = () => {
         hasGPS: event.hasGPS || false
       };
       crashEvents.value = [crashEvent];
-      return; // Don't trigger alert/sound for old crashes
+      return; // Don't trigger alert/sound for old/dismissed crashes
     }
     
     // Add to crash events array (for map display)
@@ -1911,12 +1937,13 @@ const initializeCrashListener = () => {
     console.log('[CRASH] ✓ Showing ONLY latest crash marker');
     console.log('[CRASH] Previous markers removed, displaying current crash only');
     
-    // Add alert notification
+    // Add alert notification (with timestamp for dismissal tracking)
     alerts.value.unshift({
       type: 'danger',
       message: '🚨 CRASH DETECTED!',
       details: `Impact: ${event.impactStrength || 'N/A'} g | Location: ${crashEvent.location}`,
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString(),
+      timestamp: eventTime
     });
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
     
