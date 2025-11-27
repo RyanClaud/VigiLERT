@@ -946,14 +946,20 @@ const flashCrashMessage = () => {
   
   playSound();
   
-  // Add alert to list
-  alerts.value.unshift({
-    type: 'danger',
-    message: '🚨 CRASH DETECTED!',
-    details: 'Impact detected - Check vehicle status',
-    time: new Date().toLocaleTimeString()
-  });
-  if (alerts.value.length > 5) alerts.value.pop();
+  // Add alert to list (only if not dismissed)
+  const alertTime = Date.now();
+  if (shouldShowAlert(alertTime)) {
+    alerts.value.unshift({
+      type: 'danger',
+      message: '🚨 CRASH DETECTED!',
+      details: 'Impact detected - Check vehicle status',
+      time: new Date().toLocaleTimeString(),
+      timestamp: alertTime
+    });
+    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+  } else {
+    console.log('[ALERTS] Crash alert dismissed (older than dismissal time)');
+  }
   
   // Flash animation - stays visible longer (10 flashes = 20 seconds)
   crashInterval = setInterval(() => {
@@ -975,14 +981,21 @@ const flashCrashMessage = () => {
 
 // Handle Overspeed Event
 const handleOverspeed = (payload) => {
+  const alertTime = Date.now();
+  if (!shouldShowAlert(alertTime)) {
+    console.log('[ALERTS] Overspeed alert dismissed');
+    return;
+  }
+  
   playSound(); // Triggers alert sound
   alerts.value.unshift({
     type: 'danger',
     message: 'Speed Limit Exceeded!',
     details: `Current: ${payload.speed} kph | Limit: ${payload.limit} kph`,
-    time: new Date().toLocaleTimeString()
+    time: new Date().toLocaleTimeString(),
+    timestamp: alertTime
   });
-  if (alerts.value.length > 5) alerts.value.pop();
+  if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
 };
 
 // ✅ DEBUG: Watch for alcohol status changes
@@ -1018,6 +1031,9 @@ onMounted(() => {
   // ✅ Set app start time when component mounts
   appStartTime.value = Date.now();
   console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
+  
+  // ✅ Load alert dismissal time
+  loadDismissalTime();
   
   const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
   if (storedLastCrashTime) lastCrashTimestamp = parseInt(storedLastCrashTime);
@@ -1073,15 +1089,11 @@ onMounted(() => {
           console.log('[HELMET] ✗ Sustained disconnection confirmed');
           
           if (!helmetAlertShown) {
-            alerts.value.unshift({
-              type: 'danger',
-              message: '⚠️ Helmet Device Disconnected!',
-              details: 'Helmet module has been offline for 10 seconds.',
-              time: new Date().toLocaleTimeString()
-            });
-            playSound();
+            const shown = addAlert('danger', '⚠️ Helmet Device Disconnected!', 'Helmet module has been offline for 10 seconds.');
+            if (shown) {
+              playSound();
+            }
             helmetAlertShown = true;
-            if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
           }
         }, DISCONNECT_DELAY);
       }
@@ -1134,15 +1146,11 @@ onMounted(() => {
           console.log('[MOTORCYCLE] ✗ Sustained disconnection confirmed');
           
           if (!motorcycleAlertShown) {
-            alerts.value.unshift({
-              type: 'danger',
-              message: '⚠️ Motorcycle Device Disconnected!',
-              details: 'Motorcycle module has been offline for 10 seconds.',
-              time: new Date().toLocaleTimeString()
-            });
-            playSound();
+            const shown = addAlert('danger', '⚠️ Motorcycle Device Disconnected!', 'Motorcycle module has been offline for 10 seconds.');
+            if (shown) {
+              playSound();
+            }
             motorcycleAlertShown = true;
-            if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
           }
         }, DISCONNECT_DELAY);
       }
@@ -1538,9 +1546,65 @@ const clearCrashAlert = (index) => {
   }
 };
 
+// ✅ Track dismissed alerts in localStorage
+const dismissedAlertsKey = `dismissedAlerts_${userId}`;
+const alertDismissalTime = ref(0); // Start at 0 to show all alerts initially
+
+// Load dismissed alerts timestamp from localStorage
+const loadDismissalTime = () => {
+  const stored = localStorage.getItem(dismissedAlertsKey);
+  if (stored) {
+    alertDismissalTime.value = parseInt(stored);
+    console.log('[ALERTS] Loaded dismissal time:', new Date(alertDismissalTime.value).toLocaleString());
+  }
+};
+
+// Check if an alert should be shown (not dismissed)
+const shouldShowAlert = (alertTimestamp) => {
+  // If no timestamp provided, always show
+  if (!alertTimestamp) return true;
+  
+  // Show alert only if it's newer than the last dismissal
+  return alertTimestamp > alertDismissalTime.value;
+};
+
+// ✅ Helper function to add alerts with automatic dismissal checking
+const addAlert = (type, message, details = '') => {
+  const alertTime = Date.now();
+  
+  // Check if alert should be shown
+  if (!shouldShowAlert(alertTime)) {
+    console.log('[ALERTS] Alert dismissed:', message);
+    return false;
+  }
+  
+  // Add alert
+  alerts.value.unshift({
+    type,
+    message,
+    details,
+    time: new Date().toLocaleTimeString(),
+    timestamp: alertTime
+  });
+  
+  // Keep only last 10 alerts
+  if (alerts.value.length > 10) {
+    alerts.value = alerts.value.slice(0, 10);
+  }
+  
+  return true;
+};
+
 // ✅ NEW: Clear all alerts from the alerts list
 const clearAllAlerts = () => {
   console.log('[ALERTS] Clearing all alerts');
+  
+  // Record the current time as dismissal time
+  alertDismissalTime.value = Date.now();
+  localStorage.setItem(dismissedAlertsKey, alertDismissalTime.value.toString());
+  console.log('[ALERTS] Dismissal time saved:', new Date(alertDismissalTime.value).toLocaleString());
+  
+  // Clear alerts array
   alerts.value = [];
   
   // Also stop crash animation if running
