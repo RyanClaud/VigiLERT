@@ -1016,6 +1016,27 @@ watch(alertnessStatus, (newVal, oldVal) => {
   console.log(`🔍 [WATCHER] alertnessStatus changed from "${oldVal}" to "${newVal}"`);
 });
 
+// ✅ NEW: Watch for pairing status changes and update rider status accordingly
+watch([helmetPaired, motorcyclePaired], ([newHelmet, newMotorcycle], [oldHelmet, oldMotorcycle]) => {
+  console.log(`🔍 [WATCHER] Pairing changed - Helmet: ${oldHelmet} → ${newHelmet}, Motorcycle: ${oldMotorcycle} → ${newMotorcycle}`);
+  
+  // Update rider status based on pairing
+  const bothDevicesOn = newHelmet && newMotorcycle;
+  riderStatus.value = bothDevicesOn ? 'Active' : 'Inactive';
+  
+  if (bothDevicesOn) {
+    riderSubtitle.value = 'Helmet connected';
+  } else if (!newHelmet && !newMotorcycle) {
+    riderSubtitle.value = 'Both devices disconnected';
+  } else if (!newHelmet) {
+    riderSubtitle.value = 'Helmet not connected';
+  } else {
+    riderSubtitle.value = 'Motorcycle not connected';
+  }
+  
+  console.log(`🔍 [WATCHER] Rider Status updated to: ${riderStatus.value} - ${riderSubtitle.value}`);
+});
+
 // Firebase References
 const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
 const helmetRef = dbRef(database, `helmet_public/${userId}/helmetStatus/status`);
@@ -1037,6 +1058,10 @@ onMounted(() => {
   
   const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
   if (storedLastCrashTime) lastCrashTimestamp = parseInt(storedLastCrashTime);
+  
+  // ✅ Initialize rider status as Inactive until devices connect
+  riderStatus.value = 'Inactive';
+  riderSubtitle.value = 'Waiting for device connection...';
 
   onValue(speedLimitRef, (snapshot) => {
     const data = snapshot.val();
