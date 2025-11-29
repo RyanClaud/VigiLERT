@@ -226,8 +226,8 @@
                 :class="showRiderCards ? 'rotate-180' : ''">expand_more</span>
         </button>
         
-        <div :class="['grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 transition-all duration-300 md:block', 
-                      showRiderCards ? 'block' : 'hidden md:block']">
+        <div :class="['grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 transition-all duration-300', 
+                      showRiderCards ? 'grid' : 'hidden md:grid']">
         <!-- Rider Status -->
         <div :class="[
           'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
