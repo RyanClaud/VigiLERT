@@ -1876,10 +1876,10 @@ const triggerSOS = async () => {
   if (!confirmed) return;
   
   try {
-    // Play alert sound
-    playSound();
+    // ❌ DON'T play sound for rider when they trigger SOS
+    // Sound will only play on emergency contact's dashboard
     
-    // Add to alerts
+    // Add to alerts (visual confirmation only)
     alerts.value.unshift({
       type: 'danger',
       message: '🆘 EMERGENCY SOS TRIGGERED',

@@ -649,25 +649,51 @@ onMounted(() => {
     }
   });
 
-  // Listen for device pairing status
+  // ✅ FIXED: Listen for device pairing status with heartbeat validation
   const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
   onValue(helmetStatusRef, (snapshot) => {
     const data = snapshot.val();
-    if (data && data.status === 'On') {
-      helmetPaired.value = true;
-    } else {
-      helmetPaired.value = false;
+    
+    // Check both status and heartbeat timestamp
+    let isConnected = false;
+    if (data && data.status === 'On' && data.lastHeartbeat) {
+      const now = Date.now();
+      const lastBeat = data.lastHeartbeat;
+      
+      // If timestamp is in Arduino format (small number), consider it connected
+      // Otherwise check if heartbeat is within last 10 seconds
+      if (lastBeat < 1577836800000) { // Before 2020 = Arduino millis()
+        isConnected = true;
+      } else {
+        isConnected = (now - lastBeat) < 10000; // Within 10 seconds
+      }
     }
+    
+    helmetPaired.value = isConnected;
+    console.log(`[EC DASHBOARD] Helmet status: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'}`, data);
   });
 
   const motorcycleStatusRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
   onValue(motorcycleStatusRef, (snapshot) => {
     const data = snapshot.val();
-    if (data && data.status === 'On') {
-      motorcyclePaired.value = true;
-    } else {
-      motorcyclePaired.value = false;
+    
+    // Check both status and heartbeat timestamp
+    let isConnected = false;
+    if (data && data.status === 'On' && data.lastHeartbeat) {
+      const now = Date.now();
+      const lastBeat = data.lastHeartbeat;
+      
+      // If timestamp is in Arduino format (small number), consider it connected
+      // Otherwise check if heartbeat is within last 10 seconds
+      if (lastBeat < 1577836800000) { // Before 2020 = Arduino millis()
+        isConnected = true;
+      } else {
+        isConnected = (now - lastBeat) < 10000; // Within 10 seconds
+      }
     }
+    
+    motorcyclePaired.value = isConnected;
+    console.log(`[EC DASHBOARD] Motorcycle status: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'}`, data);
   });
 
   // Listen for device health
@@ -728,8 +754,23 @@ onMounted(() => {
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      riderStatus.value = data.helmetConnected ? 'Active' : 'Inactive';
-      riderSubtitle.value = data.helmetConnected ? 'Helmet connected' : 'Helmet not connected';
+      // ✅ FIXED: Use actual pairing status from helmetPaired and motorcyclePaired refs
+      const bothDevicesOn = helmetPaired.value && motorcyclePaired.value;
+      
+      riderStatus.value = bothDevicesOn ? 'Active' : 'Inactive';
+      
+      if (bothDevicesOn) {
+        riderSubtitle.value = 'Helmet connected';
+      } else if (!helmetPaired.value && !motorcyclePaired.value) {
+        riderSubtitle.value = 'Both devices disconnected';
+      } else if (!helmetPaired.value) {
+        riderSubtitle.value = 'Helmet not connected';
+      } else {
+        riderSubtitle.value = 'Motorcycle not connected';
+      }
+      
+      console.log(`[EC DASHBOARD] Rider Status: ${riderStatus.value} (Helmet: ${helmetPaired.value}, Motorcycle: ${motorcyclePaired.value})`);
+      
       alertnessStatus.value = data.alertnessStatus || 'Normal';
       alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
       alcoholStatus.value = data.alcoholLevel > 0.05 ? 'Danger' : 'Safe';
