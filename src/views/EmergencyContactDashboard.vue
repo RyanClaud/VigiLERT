@@ -1,16 +1,27 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-[#EDE8F5]">
+  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0]">
     <!-- Header -->
-    <div class="flex flex-col items-center justify-between py-4">
-      <div class="flex items-center gap-2 bg-[#7091E6] px-6 py-2 rounded-xl shadow text-white w-full justify-between">
-        <span class="font-semibold text-lg">Emergency Contact Dashboard</span>
-        <!-- Log Out Button -->
-        <button
-          @click="logout"
-          class="bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-1 rounded transition"
-        >
-          Log Out
-        </button>
+    <div class="bg-gradient-to-r from-[#7091E6] via-[#5571c6] to-[#3D52A0] shadow-xl">
+      <div class="px-4 md:px-8 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+              <span class="material-icons text-white text-3xl">shield</span>
+            </div>
+            <div>
+              <h1 class="font-bold text-xl text-white">Emergency Contact Dashboard</h1>
+              <p class="text-sm text-white/80">Monitoring Rider Safety</p>
+            </div>
+          </div>
+          <!-- Log Out Button -->
+          <button
+            @click="logout"
+            class="inline-flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
+          >
+            <span class="material-icons text-lg">logout</span>
+            <span class="hidden sm:inline">Log Out</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -61,17 +72,69 @@
       </div>
 
       <!-- Speed Limit Control -->
-      <div class="bg-yellow-400 rounded-lg shadow p-4 mb-8 mx-2 md:mx-8">
-        <div class="flex justify-between items-center">
-          <label for="speed-limit" class="font-medium text-gray-700">Set Speed Limit</label>
-          <span class="text-xl font-bold text-[#0c0c0c]">{{ speedLimit }} km/h</span>
+      <div class="relative overflow-hidden bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 rounded-3xl shadow-2xl p-6 mb-8 transition-all duration-500 hover:shadow-3xl group">
+        <div class="absolute inset-0 bg-gradient-to-r from-yellow-300/20 to-amber-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        <div class="relative">
+          <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-3">
+              <div class="bg-white/30 backdrop-blur-sm p-2 rounded-xl">
+                <span class="material-icons text-3xl text-gray-800">tune</span>
+              </div>
+              <label for="speed-limit" class="font-bold text-gray-900 text-lg">Set Rider Speed Limit</label>
+            </div>
+            <div class="relative">
+              <div class="absolute inset-0 bg-white/40 blur-xl rounded-2xl"></div>
+              <span class="relative text-3xl font-black text-gray-900 bg-white/60 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border border-white/50">
+                {{ speedLimit }} <span class="text-xl font-semibold">km/h</span>
+              </span>
+            </div>
+          </div>
+          <div class="relative">
+            <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
+              @change="updateSpeedLimitInFirebase"
+              class="w-full h-4 bg-white/40 backdrop-blur-sm rounded-full cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/50 accent-gray-800 transition-all appearance-none slider-thumb" />
+            <div class="flex justify-between mt-3 text-sm font-bold text-gray-800">
+              <span class="bg-white/30 px-3 py-1 rounded-lg">0 km/h</span>
+              <span class="bg-white/30 px-3 py-1 rounded-lg">120 km/h</span>
+            </div>
+          </div>
+          <p class="text-sm text-gray-700 mt-3 text-center font-medium">
+            ⚠️ Rider will be alerted when exceeding this speed
+          </p>
         </div>
-        <input type="range" min="1" max="120" step="5" v-model.number="speedLimit"
-          @change="updateSpeedLimitInFirebase"
-          class="w-full h-2 bg-blue-00 rounded-lg cursor-pointer focus:outline-none focus:ring-2 accent-[#2701fd]" />
-        <div class="flex justify-between mt-1 text-xs text-gray-900">
-          <span>1 km/h</span>
-          <span>120 km/h</span>
+      </div>
+
+      <!-- Emergency Contact Location Tracking -->
+      <div class="relative overflow-hidden bg-gradient-to-r from-green-500 via-green-600 to-green-700 rounded-3xl shadow-2xl p-6 mb-8 text-white border-2 border-white/30 hover:shadow-3xl transition-all duration-300">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="p-4 bg-white/20 rounded-2xl backdrop-blur-sm">
+              <span class="material-icons text-4xl">my_location</span>
+            </div>
+            <div>
+              <h3 class="text-2xl font-bold mb-1">Track Rider Location</h3>
+              <p class="text-green-100 text-sm">
+                {{ isTrackingRider ? 'Tracking active - Your location shared with rider' : 'Enable to see rider\'s real-time location' }}
+              </p>
+              <p v-if="emergencyContactLocation.lat" class="text-green-200 text-xs mt-1">
+                Your Location: {{ formatLatLng(emergencyContactLocation.lat, emergencyContactLocation.lng) }}
+              </p>
+            </div>
+          </div>
+          <button
+            @click="toggleRiderTracking"
+            :class="[
+              'inline-flex items-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 whitespace-nowrap',
+              isTrackingRider 
+                ? 'bg-red-500 hover:bg-red-600 text-white' 
+                : 'bg-white hover:bg-gray-100 text-green-600'
+            ]"
+          >
+            <span class="material-icons text-2xl">
+              {{ isTrackingRider ? 'location_off' : 'gps_fixed' }}
+            </span>
+            <span>{{ isTrackingRider ? 'Stop Tracking' : 'Start Tracking' }}</span>
+          </button>
         </div>
       </div>
 
@@ -184,6 +247,7 @@ const alcoholSubtitle = ref('No alcohol detected');
 const currentSpeed = ref(0);
 const speedHistory = ref([]);
 const speedLimit = ref(80); // Default value
+const speedSubtitle = ref('GPS Module')
 const diagnostics = ref([]);
 const alerts = ref([]);
 const activeTab = ref('Speed Data');
@@ -203,6 +267,10 @@ let lastCrashTimestamp = null;
 
 const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
 
+// Emergency Contact Tracking States
+const isTrackingRider = ref(false);
+const emergencyContactLocation = ref({ lat: null, lng: null });
+let gpsWatchId = null;
 
 // Helpers
 const formatLatLng = (lat, lng) => {
@@ -423,8 +491,114 @@ const initializeCrashListener = () => {
   });
 };
 
+// Toggle Rider Tracking
+const toggleRiderTracking = () => {
+  if (isTrackingRider.value) {
+    stopRiderTracking();
+  } else {
+    startRiderTracking();
+  }
+};
+
+// Start tracking rider's location
+const startRiderTracking = () => {
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported by your browser');
+    return;
+  }
+
+  isTrackingRider.value = true;
+
+  // Get emergency contact's location and share it
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      
+      emergencyContactLocation.value = { lat, lng };
+      
+      // Save emergency contact location to Firebase so rider can see it
+      set(dbRef(database, `helmet_public/${userId}/emergencyContact/location`), {
+        lat,
+        lng,
+        timestamp: Date.now(),
+        tracking: true
+      }).catch(error => {
+        console.error('Failed to update emergency contact location:', error);
+      });
+      
+      console.log('[Emergency Contact] Location shared:', lat, lng);
+    },
+    (error) => {
+      console.error('GPS tracking error:', error);
+      let errorMessage = 'Unable to track location. ';
+      
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMessage += 'Please allow location access in your browser settings.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMessage += 'Location information is unavailable.';
+          break;
+        case error.TIMEOUT:
+          errorMessage += 'Location request timed out.';
+          break;
+        default:
+          errorMessage += 'An unknown error occurred.';
+      }
+      
+      alert(errorMessage);
+      stopRiderTracking();
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+  
+  alerts.value.unshift({
+    type: 'success',
+    message: 'Rider Tracking Active',
+    details: 'You can now see rider\'s real-time location',
+    time: new Date().toLocaleTimeString()
+  });
+  if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+};
+
+// Stop tracking rider's location
+const stopRiderTracking = () => {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    isTrackingRider.value = false;
+    
+    // Update Firebase to indicate tracking stopped
+    set(dbRef(database, `helmet_public/${userId}/emergencyContact/location`), {
+      lat: emergencyContactLocation.value.lat,
+      lng: emergencyContactLocation.value.lng,
+      timestamp: Date.now(),
+      tracking: false
+    }).catch(error => {
+      console.error('Failed to update tracking status:', error);
+    });
+    
+    alerts.value.unshift({
+      type: 'info',
+      message: 'Rider Tracking Stopped',
+      details: 'Location sharing disabled',
+      time: new Date().toLocaleTimeString()
+    });
+    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+  }
+};
+
 // Logout Function for Emergency Contact
 const logout = () => {
+  // Stop tracking before logout
+  if (isTrackingRider.value) {
+    stopRiderTracking();
+  }
   router.push({ name: 'EmergencyContactLogin' }); // Make sure this route exists
 };
 </script>
