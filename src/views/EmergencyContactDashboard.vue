@@ -27,6 +27,77 @@
 
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
+      <!-- System Status Bar -->
+      <div id="status" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Helmet-Motorcycle Pairing Status -->
+        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div :class="['p-3 rounded-xl', helmetPaired && motorcyclePaired ? 'bg-green-500' : 'bg-red-500']">
+                <span class="material-icons text-white text-2xl">link</span>
+              </div>
+              <div>
+                <p class="text-xs text-gray-500 font-medium uppercase">Pairing Status</p>
+                <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-600' : 'text-red-600']">
+                  {{ helmetPaired && motorcyclePaired ? 'Connected' : 'Disconnected' }}
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="helmetPaired ? 'text-green-500' : 'text-gray-400'">sports_motorsports</span>
+                <span class="text-xs font-medium" :class="helmetPaired ? 'text-green-600' : 'text-gray-500'">Helmet</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="motorcyclePaired ? 'text-green-500' : 'text-gray-400'">two_wheeler</span>
+                <span class="text-xs font-medium" :class="motorcyclePaired ? 'text-green-600' : 'text-gray-500'">Motorcycle</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Device Health -->
+        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600">
+                <span class="material-icons text-white text-2xl">battery_charging_full</span>
+              </div>
+              <div>
+                <p class="text-xs text-gray-500 font-medium uppercase">Device Health</p>
+                <p class="text-lg font-bold text-blue-600">{{ deviceBattery }}%</p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1 text-right">
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="gsmConnected ? 'text-green-500' : 'text-red-500'">signal_cellular_alt</span>
+                <span class="text-xs font-medium">GSM</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="material-icons text-sm" :class="gpsConnected ? 'text-green-500' : 'text-red-500'">gps_fixed</span>
+                <span class="text-xs font-medium">GPS</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emergency SOS Button -->
+        <div class="relative overflow-hidden bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-5 border border-white/50 cursor-pointer hover:scale-105 transition-all duration-300" @click="triggerSOS">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-3 rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
+                <span class="material-icons text-white text-3xl">emergency</span>
+              </div>
+              <div>
+                <p class="text-xs text-white/80 font-medium uppercase">Emergency</p>
+                <p class="text-xl font-bold text-white">SOS Alert</p>
+              </div>
+            </div>
+            <span class="material-icons text-white text-4xl">touch_app</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Rider Status Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 mb-8">
         <!-- Rider Status -->
@@ -435,6 +506,13 @@ const isTrackingRider = ref(false);
 const emergencyContactLocation = ref({ lat: null, lng: null });
 let gpsWatchId = null;
 
+// System Status States
+const helmetPaired = ref(false);
+const motorcyclePaired = ref(false);
+const deviceBattery = ref(85);
+const gsmConnected = ref(true);
+const gpsConnected = ref(true);
+
 // Helpers
 const formatLatLng = (lat, lng) => {
   return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
@@ -529,6 +607,38 @@ onMounted(() => {
   });
 
   initializeCrashListener();
+
+  // Listen for device pairing status
+  const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
+  onValue(helmetStatusRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data && data.status === 'On') {
+      helmetPaired.value = true;
+    } else {
+      helmetPaired.value = false;
+    }
+  });
+
+  const motorcycleStatusRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
+  onValue(motorcycleStatusRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data && data.status === 'On') {
+      motorcyclePaired.value = true;
+    } else {
+      motorcyclePaired.value = false;
+    }
+  });
+
+  // Listen for device health
+  const deviceHealthRef = dbRef(database, `helmet_public/${userId}/deviceHealth`);
+  onValue(deviceHealthRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      deviceBattery.value = data.battery || 85;
+      gsmConnected.value = data.gsm !== false;
+      gpsConnected.value = data.gps !== false;
+    }
+  });
 
   onValue(alcoholRef, (snapshot) => {
     const data = snapshot.val();
@@ -753,6 +863,45 @@ const stopRiderTracking = () => {
       time: new Date().toLocaleTimeString()
     });
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+  }
+};
+
+// Trigger SOS Alert
+const triggerSOS = async () => {
+  const confirmed = confirm('⚠️ EMERGENCY SOS\n\nThis will send an emergency alert to the rider with your current location.\n\nAre you sure you want to trigger SOS?');
+  
+  if (!confirmed) return;
+  
+  try {
+    // Play alert sound
+    playSound();
+    
+    // Add to alerts
+    alerts.value.unshift({
+      type: 'danger',
+      message: '🆘 EMERGENCY SOS TRIGGERED',
+      details: `Emergency contact has triggered SOS alert. Location: ${location.value.lat ? `${location.value.lat.toFixed(6)}, ${location.value.lng.toFixed(6)}` : 'Unknown'}`,
+      time: new Date().toLocaleTimeString()
+    });
+    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+    
+    // Log SOS event to Firebase
+    const sosRef = dbRef(database, `helmet_public/${userId}/sos/${Date.now()}`);
+    await set(sosRef, {
+      timestamp: Date.now(),
+      location: {
+        lat: location.value.lat,
+        lng: location.value.lng
+      },
+      triggeredBy: 'emergency_contact',
+      status: 'active',
+      emergencyContactLocation: emergencyContactLocation.value
+    });
+    
+    alert('✅ SOS Alert Sent!\n\nRider has been notified of your emergency alert with location.');
+  } catch (error) {
+    console.error('Failed to trigger SOS:', error);
+    alert('❌ Failed to send SOS alert. Please try again or call emergency services directly.');
   }
 };
 
