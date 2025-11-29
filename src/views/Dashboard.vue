@@ -57,6 +57,38 @@
       </div>
     </div>
 
+    <!-- 🚨 ANTI-THEFT ALERT BANNER -->
+    <div v-if="antiTheftAlert.active" 
+         class="mx-4 md:mx-8 mb-6 relative overflow-hidden bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl shadow-2xl border-4 border-orange-300 animate-pulse">
+      <div class="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-orange-600/20 animate-pulse"></div>
+      <div class="relative p-6 flex items-center gap-4">
+        <div class="bg-white/20 p-4 rounded-full animate-bounce">
+          <span class="material-icons text-5xl text-white">security</span>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+            <span class="animate-pulse">🚨</span>
+            ANTI-THEFT ALERT
+            <span class="animate-pulse">🚨</span>
+          </h3>
+          <p class="text-white/90 text-lg font-semibold">
+            {{ antiTheftAlert.message }}
+          </p>
+          <p class="text-white/70 text-sm mt-2">
+            Time: {{ antiTheftAlert.time }} • Alert Level: {{ antiTheftAlert.level }}
+          </p>
+        </div>
+        <div class="flex flex-col gap-2">
+          <div :class="['px-4 py-2 rounded-xl', antiTheftAlert.severity === 'high' ? 'bg-red-500/30' : antiTheftAlert.severity === 'medium' ? 'bg-orange-500/30' : 'bg-yellow-500/30']">
+            <p class="text-white text-sm font-bold">Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
+          </div>
+          <button @click="dismissAntiTheftAlert" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all">
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
       <!-- System Status Bar -->
@@ -798,6 +830,16 @@ const gsmConnected = ref(true);
 const gpsConnected = ref(true);
 
 // ✅ Debouncing timers
+
+// ✅ NEW: Anti-theft alert state
+const antiTheftAlert = ref({
+  active: false,
+  message: '',
+  time: '',
+  level: 0,
+  severity: 'low',
+  timestamp: 0
+});
 const helmetDisconnectTimer = ref(null);
 const motorcycleDisconnectTimer = ref(null);
 const helmetReconnectTimer = ref(null);
@@ -1544,6 +1586,9 @@ onMounted(() => {
       recentTrips.value = tripList.slice(0, 5);
     }
   });
+
+  // ✅ NEW: Listen for anti-theft alerts
+  setupAntiTheftListener();
 });
 
 // Show/Hide Alerts Panel
@@ -2305,6 +2350,83 @@ const handleScroll = () => {
       }
     }
   }
+};
+
+// ✅ NEW: Setup anti-theft alert listener
+const setupAntiTheftListener = () => {
+  console.log('[ANTI-THEFT] Setting up alert listener...');
+  
+  // Listen for anti-theft status
+  const antiTheftStatusRef = dbRef(database, `${userId}/antiTheft/status`);
+  onValue(antiTheftStatusRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data && data.alertActive) {
+      console.log('[ANTI-THEFT] Alert received:', data);
+      
+      // Only show if this is a new alert (different timestamp)
+      if (data.lastVibration !== antiTheftAlert.value.timestamp) {
+        antiTheftAlert.value = {
+          active: true,
+          message: 'Unauthorized movement detected on your motorcycle!',
+          time: new Date(data.lastVibration).toLocaleTimeString(),
+          level: data.alertLevel || 1,
+          severity: data.alertLevel >= 3 ? 'high' : (data.alertLevel >= 2 ? 'medium' : 'low'),
+          timestamp: data.lastVibration
+        };
+        
+        // Add to alerts list
+        alerts.value.unshift({
+          type: 'danger',
+          message: '🚨 Anti-Theft Alert',
+          details: antiTheftAlert.value.message,
+          time: antiTheftAlert.value.time
+        });
+        
+        playSound();
+        
+        if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+      }
+    }
+  });
+  
+  // Listen for theft alert events (from logTheftToFirebase)
+  const theftAlertsRef = dbRef(database, `helmet_public/${userId}/theft_alerts`);
+  onChildAdded(theftAlertsRef, (snapshot) => {
+    const alert = snapshot.val();
+    console.log('[ANTI-THEFT] New theft alert event:', alert);
+    
+    if (alert && alert.timestamp !== antiTheftAlert.value.timestamp) {
+      const severity = alert.severity || 'low';
+      const alertLevel = alert.alertLevel || 1;
+      
+      antiTheftAlert.value = {
+        active: true,
+        message: alert.message || 'Unauthorized movement detected!',
+        time: new Date(alert.timestamp).toLocaleTimeString(),
+        level: alertLevel,
+        severity: severity,
+        timestamp: alert.timestamp
+      };
+      
+      // Add to alerts list
+      alerts.value.unshift({
+        type: 'danger',
+        message: '🚨 Anti-Theft Alert',
+        details: antiTheftAlert.value.message,
+        time: antiTheftAlert.value.time
+      });
+      
+      playSound();
+      
+      if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+    }
+  });
+};
+
+// ✅ NEW: Dismiss anti-theft alert
+const dismissAntiTheftAlert = () => {
+  antiTheftAlert.value.active = false;
+  console.log('[ANTI-THEFT] Alert dismissed by user');
 };
 
 // Cleanup on component unmount
