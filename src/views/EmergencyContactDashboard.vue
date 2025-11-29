@@ -608,6 +608,47 @@ onMounted(() => {
 
   initializeCrashListener();
 
+  // ✅ Listen for SOS alerts from Rider
+  const sosRef = dbRef(database, `helmet_public/${userId}/sos`);
+  onChildAdded(sosRef, (snapshot) => {
+    const sosData = snapshot.val();
+    if (!sosData) return;
+    
+    // Check if SOS was triggered by rider (manual)
+    if (sosData.triggeredBy === 'manual') {
+      const sosTime = sosData.timestamp;
+      
+      // Only show if SOS is recent (within last 5 minutes)
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      const appStartTime = Date.now() - 60000; // Consider SOS from last minute on load
+      
+      if (sosTime > fiveMinutesAgo && sosTime > appStartTime) {
+        console.log('[SOS] Rider triggered SOS:', sosData);
+        
+        // Play alert sound
+        playSound();
+        
+        // Add alert
+        alerts.value.unshift({
+          type: 'danger',
+          message: '🆘 RIDER SOS ALERT!',
+          details: `Rider has triggered emergency SOS! ${sosData.location?.lat ? `Location: ${sosData.location.lat.toFixed(6)}, ${sosData.location.lng.toFixed(6)}` : 'Location unknown'}`,
+          time: new Date().toLocaleTimeString()
+        });
+        if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+        
+        // Show browser notification if permitted
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('🆘 Rider Emergency SOS', {
+            body: 'The rider has triggered an emergency SOS alert!',
+            icon: '/favicon.ico',
+            tag: 'sos-alert'
+          });
+        }
+      }
+    }
+  });
+
   // Listen for device pairing status
   const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
   onValue(helmetStatusRef, (snapshot) => {

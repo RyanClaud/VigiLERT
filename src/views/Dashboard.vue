@@ -1195,6 +1195,41 @@ onMounted(() => {
 
   initializeCrashListener();
 
+  // ✅ Listen for SOS alerts from Emergency Contact
+  const sosRef = dbRef(database, `helmet_public/${userId}/sos`);
+  onChildAdded(sosRef, (snapshot) => {
+    const sosData = snapshot.val();
+    if (!sosData) return;
+    
+    // Check if SOS was triggered by emergency contact
+    if (sosData.triggeredBy === 'emergency_contact') {
+      const sosTime = sosData.timestamp;
+      
+      // Only show if SOS is recent (within last 5 minutes) and after app start
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      if (sosTime > fiveMinutesAgo && sosTime > appStartTime.value) {
+        console.log('[SOS] Emergency Contact triggered SOS:', sosData);
+        
+        // Play alert sound
+        playSound();
+        
+        // Add alert
+        addAlert('danger', '🆘 EMERGENCY CONTACT SOS!', 
+          `Emergency contact has triggered SOS alert. ${sosData.emergencyContactLocation?.lat ? `Their location: ${sosData.emergencyContactLocation.lat.toFixed(6)}, ${sosData.emergencyContactLocation.lng.toFixed(6)}` : ''}`
+        );
+        
+        // Show browser notification if permitted
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('🆘 Emergency Contact SOS', {
+            body: 'Your emergency contact has triggered an SOS alert!',
+            icon: '/favicon.ico',
+            tag: 'sos-alert'
+          });
+        }
+      }
+    }
+  });
+
   // ✅ ENHANCED: Real-time Alcohol Detection Listener with Force Update
   onValue(alcoholRef, (snapshot) => {
     const data = snapshot.val();
