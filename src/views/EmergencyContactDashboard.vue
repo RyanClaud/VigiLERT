@@ -27,47 +27,122 @@
 
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
-      <!-- Top Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-6">
+      <!-- Rider Status Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 mb-8">
         <!-- Rider Status -->
-        <div class="bg-[#3D52A0] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl">
-          <span class="material-icons text-3xl">Rider</span>
-          <DashboardCard title="Rider Status" :value="riderStatus" :subtitle="riderSubtitle" icon="status" status="success" />
+        <div :class="[
+          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          riderStatus === 'Inactive' ? 'bg-gradient-to-br from-red-600 via-red-500 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70]'
+        ]">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div :class="['p-3 rounded-xl', riderStatus === 'Inactive' ? 'bg-white/30 animate-bounce' : 'bg-white/20']">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', riderStatus === 'Inactive' ? 'bg-yellow-300 animate-ping' : 'bg-green-400 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Rider Status</p>
+              <p class="text-2xl font-bold">{{ riderStatus }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ riderSubtitle }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Current Speed -->
         <div :class="[
-          'bg-[#7091E6] text-white rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          isOverSpeed ? 'bg-red-500' : ''
+          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          isOverSpeed ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#7091E6] via-[#6081d6] to-[#5571c6]'
         ]">
-          <span class="material-icons text-3xl">Speed</span>
-          <DashboardCard title="Current Speed" :value="currentSpeedText" :subtitle="speedSubtitle" icon="speed" status="info" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', isOverSpeed ? 'bg-yellow-300 animate-pulse' : 'bg-blue-300']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Current Speed</p>
+              <p class="text-2xl font-bold">{{ currentSpeedText }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ isOverSpeed ? 'Over speed limit!' : speedSubtitle }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Alertness -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          alertnessStatus === 'Normal' ? 'bg-[#8697C4] text-white' : 'bg-yellow-400 text-[#3D52A0]'
+          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          alertnessStatus === 'Normal' ? 'bg-gradient-to-br from-[#8697C4] via-[#7687b4] to-[#6677a4] text-white' : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-gray-800'
         ]">
-          <span class="material-icons text-3xl">Warning</span>
-          <DashboardCard title="Alertness" :value="alertnessStatus" :subtitle="alertnessSubtitle"
-            :status="alertnessStatus === 'Normal' ? 'success' : 'warning'" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10" :class="alertnessStatus === 'Normal' ? 'text-white' : 'text-gray-800'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', alertnessStatus === 'Normal' ? 'bg-green-400' : 'bg-orange-400 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Alertness</p>
+              <p class="text-2xl font-bold">{{ alertnessStatus }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ alertnessSubtitle }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Alcohol Detection -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          alcoholStatus === 'Safe' ? 'bg-[#3D52A0] text-white' : 'bg-red-500 text-white'
+          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          alcoholStatus === 'Safe' ? 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70] text-white' : 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white'
         ]">
-          <span class="material-icons text-3xl">Liquor</span>
-          <DashboardCard title="Alcohol Detection" :value="alcoholStatus" :subtitle="alcoholSubtitle"
-            :status="alcoholStatus === 'Safe' ? 'success' : 'danger'" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', alcoholStatus === 'Safe' ? 'bg-green-400' : 'bg-red-300 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Alcohol Detection</p>
+              <p class="text-2xl font-bold">{{ alcoholStatus }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ alcoholSubtitle }}</p>
+            </div>
+          </div>
         </div>
+        
         <!-- Crash Detection Card -->
         <div :class="[
-          'rounded-xl shadow-lg p-6 flex items-center gap-4 transition-transform hover:scale-105 hover:shadow-2xl',
-          crashDisplayStatus === 'Stable' ? 'bg-green-600 text-white' : 'bg-red-600 text-white animate-pulse'
+          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
+          crashDisplayStatus === 'Stable' ? 'bg-gradient-to-br from-green-600 via-green-700 to-green-800 text-white' : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 text-white animate-pulse'
         ]">
-          <span class="material-icons text-3xl">Vehicle</span>
-          <DashboardCard title="Crash Status" :value="crashDisplayMessage"
-            :status="crashDisplayStatus === 'Stable' ? 'success' : 'danger'" />
+          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="relative flex flex-col h-full">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bg-white/20 p-3 rounded-xl">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', crashDisplayStatus === 'Stable' ? 'bg-emerald-300' : 'bg-yellow-300 animate-pulse']"></div>
+            </div>
+            <div class="mt-auto">
+              <p class="text-sm opacity-80 mb-1">Vehicle Status</p>
+              <p class="text-2xl font-bold">{{ crashDisplayMessage }}</p>
+              <p class="text-xs opacity-70 mt-1">{{ crashDisplayStatus === 'Stable' ? 'No incidents' : 'Alert active' }}</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -160,54 +235,116 @@
       </div>
 
       <!-- Recent Alerts Section -->
-      <h3 class="font-semibold text-lg mb-2 text-[rgb(8,8,8)] flex items-center justify-between">
-        <span class="flex items-center gap-2">
-          <span class="material-icons text-xl">Notifications</span> Recent Alerts
-        </span>
-        <button @click="toggleAlerts"
-          class="text-sm font-medium text-blue-600 hover:text-blue-800 transition">
-          {{ showAlerts ? 'Hide Alerts' : 'Show Alerts' }}
-        </button>
-      </h3>
-      <div v-if="showAlerts" class="bg-white rounded-lg shadow p-4 mb-6 max-h-64 overflow-y-auto">
-        <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
+      <div id="alerts" class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/50 transition-all duration-300 hover:shadow-3xl">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#7091E6]/10 to-[#3D52A0]/10 rounded-full -mr-32 -mt-32"></div>
+        <h3 class="relative font-bold text-2xl mb-6 text-[#3D52A0] flex items-center justify-between">
+          <span class="flex items-center gap-3">
+            <div class="bg-gradient-to-br from-[#7091E6] to-[#3D52A0] p-3 rounded-2xl shadow-lg">
+              <span class="material-icons text-3xl text-white">notifications_active</span>
+            </div>
+            <span>Recent Alerts</span>
+            <span v-if="alerts.length > 0" class="bg-red-500 text-white text-sm px-3 py-1 rounded-full">
+              {{ alerts.length }}
+            </span>
+          </span>
+          <button @click="toggleAlerts"
+            class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+            {{ showAlerts ? 'Hide' : 'Show' }}
+          </button>
+        </h3>
+        <div v-if="showAlerts" class="relative max-h-64 overflow-y-auto custom-scrollbar">
+          <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
+        </div>
       </div>
 
       <!-- Recent Trips Preview -->
-      <section class="mb-6">
-        <h3 class="text-lg font-medium text-gray-800 mb-2">Recent Trips</h3>
-        <div v-if="recentTrips.length > 0"
-          class="space-y-4 max-h-64 overflow-y-auto bg-white shadow-sm p-4 rounded-md">
-          <div v-for="trip in recentTrips" :key="trip.id" class="py-2 border-b last:border-b-0">
-            <p class="text-sm text-gray-500">Routes</p>
-            <p><strong>From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</p>
-            <p><strong>To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</p>
-            <p><strong>Max Speed:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</p>
-            <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
-              class="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition mr-2">
-              Navigate
-            </a>
+      <section id="trips" class="mb-6">
+        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/50 transition-all duration-300 hover:shadow-3xl">
+          <div class="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-[#3D52A0]/10 to-[#7091E6]/10 rounded-full -ml-32 -mt-32"></div>
+          <h3 class="relative text-2xl font-bold text-[#3D52A0] mb-6 flex items-center gap-3">
+            <div class="bg-gradient-to-br from-[#3D52A0] to-[#2a3a70] p-3 rounded-2xl shadow-lg">
+              <span class="material-icons text-3xl text-white">route</span>
+            </div>
+            <span>Recent Trips</span>
+          </h3>
+          <div v-if="recentTrips.length > 0"
+            class="relative space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+            <div v-for="trip in recentTrips" :key="trip.id" 
+              class="group relative overflow-hidden p-6 border-2 border-white/50 rounded-2xl hover:border-[#7091E6] hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-white to-[#EDE8F5]/30 backdrop-blur-sm">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#7091E6]/10 to-transparent rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+              <div class="relative">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="bg-gradient-to-r from-[#7091E6] to-[#5571c6] px-3 py-1 rounded-lg">
+                    <p class="text-xs text-white font-bold uppercase tracking-wider">Route Details</p>
+                  </div>
+                </div>
+                <div class="space-y-2 mb-4">
+                  <p class="text-sm flex items-start gap-2">
+                    <span class="material-icons text-[#3D52A0] text-lg">trip_origin</span>
+                    <span><strong class="text-[#3D52A0]">From:</strong> <span class="text-gray-700">{{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</span></span>
+                  </p>
+                  <p class="text-sm flex items-start gap-2">
+                    <span class="material-icons text-[#3D52A0] text-lg">location_on</span>
+                    <span><strong class="text-[#3D52A0]">To:</strong> <span class="text-gray-700">{{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</span></span>
+                  </p>
+                  <p class="text-sm flex items-center gap-2">
+                    <span class="material-icons text-[#3D52A0] text-lg">speed</span>
+                    <span><strong class="text-[#3D52A0]">Max Speed:</strong> <span class="text-gray-700 font-semibold">{{ trip.maxSpeed || 'N/A' }} km/h</span></span>
+                  </p>
+                </div>
+                <div class="flex gap-3">
+                  <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
+                    class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">navigation</span>
+                    Navigate
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div v-else class="bg-white shadow-sm p-6 rounded-md text-center text-gray-500">
-          No trips found yet.
+          <div v-else class="relative p-12 text-center">
+            <div class="inline-block p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-4">
+              <span class="material-icons text-7xl text-gray-400">explore_off</span>
+            </div>
+            <p class="text-gray-600 font-semibold text-lg">No trips found yet</p>
+            <p class="text-sm text-gray-400 mt-2">Trip history will appear here</p>
+          </div>
         </div>
       </section>
 
       <!-- Crash Events -->
-      <section class="mt-8">
-        <div v-if="crashEvents.length > 0" class="mt-6">
-          <h3 class="font-semibold text-lg mb-2 text-black-600 flex items-center gap-2">
-            <span class="material-icons text-xl">Warning!</span> Navigate to Crash Site
+      <section class="mt-8" v-if="crashEvents.length > 0">
+        <div class="relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100/50 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border-l-8 border-red-500">
+          <div class="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full -mr-48 -mt-48"></div>
+          <h3 class="relative font-bold text-2xl mb-6 text-red-600 flex items-center gap-3">
+            <div class="bg-gradient-to-br from-red-500 to-red-600 p-3 rounded-2xl shadow-lg animate-pulse">
+              <span class="material-icons text-3xl text-white">warning</span>
+            </div>
+            <span>Crash Site Locations</span>
           </h3>
-          <div class="max-h-64 overflow-y-auto space-y-4 bg-white shadow rounded-lg p-4">
-            <div v-for="(event, index) in crashEvents" :key="index" class="border-b pb-2 last:border-b-0">
-              <p><strong>Impact:</strong> {{ event.impactStrength }} g</p>
-              <p><strong>Location:</strong> {{ event.location }}</p>
-              <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
-                class="mt-2 inline-block px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition">
-                See Location
-              </a>
+          <div class="relative max-h-64 overflow-y-auto space-y-4 custom-scrollbar">
+            <div v-for="(event, index) in crashEvents" :key="index" 
+              class="group relative overflow-hidden p-6 border-2 border-red-300 rounded-2xl bg-white hover:shadow-xl transition-all duration-300">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+              <div class="relative">
+                <div class="space-y-2 mb-4">
+                  <p class="text-sm flex items-center gap-2">
+                    <span class="material-icons text-red-600 text-lg">flash_on</span>
+                    <span><strong class="text-red-700">Impact:</strong> <span class="text-gray-700 font-semibold">{{ event.impactStrength }} g</span></span>
+                  </p>
+                  <p class="text-sm flex items-start gap-2">
+                    <span class="material-icons text-red-600 text-lg">location_on</span>
+                    <span><strong class="text-red-700">Location:</strong> <span class="text-gray-700">{{ event.location }}</span></span>
+                  </p>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <span class="material-icons text-lg">location_on</span>
+                    See Location
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -215,11 +352,37 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-[#ADBBD4] text-center py-4 text-[#3D52A0] text-sm border-t mt-auto">
-      © 2025 VIGILERT. All rights reserved.
+    <footer class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#4a5fb8] to-[#3D52A0] text-center py-6 text-white border-t-4 border-white/20 mt-auto backdrop-blur-sm">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
+      <div class="relative">
+        <p class="font-semibold text-sm tracking-wide">© 2025 VIGILERT. All rights reserved.</p>
+        <p class="text-xs text-white/70 mt-1">Emergency Contact Monitoring System</p>
+      </div>
     </footer>
   </div>
 </template>
+
+<style scoped>
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7091E6, #3D52A0);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #5571c6, #2a3a70);
+}
+</style>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
