@@ -2,7 +2,8 @@
   <div class="space-y-4">
     <!-- GPS Source Selector -->
     <div class="bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-2xl p-4 border border-blue-500/20">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col gap-4">
+        <!-- Header -->
         <div class="flex items-center gap-3">
           <div class="bg-blue-500 p-2 rounded-xl">
             <span class="material-icons text-white text-2xl">settings_input_antenna</span>
@@ -12,91 +13,92 @@
             <p class="text-xs text-gray-500">Select location data source</p>
           </div>
         </div>
-        <div class="flex gap-2">
+        
+        <!-- Buttons - Responsive Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <button
             @click="setGPSSource('module')"
             :class="[
-              'px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300',
+              'px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2',
               gpsSource === 'module' 
                 ? 'bg-blue-500 text-white shadow-lg' 
                 : 'bg-white text-gray-600 hover:bg-gray-100'
             ]"
           >
-            <span class="flex items-center gap-2">
-              <span class="material-icons text-lg">router</span>
-              GPS Module
-            </span>
+            <span class="material-icons text-lg">router</span>
+            <span>GPS Module</span>
           </button>
           <button
             @click="setGPSSource('phone')"
             :class="[
-              'px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300',
+              'px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2',
               gpsSource === 'phone' 
                 ? 'bg-green-500 text-white shadow-lg' 
                 : 'bg-white text-gray-600 hover:bg-gray-100'
             ]"
           >
-            <span class="flex items-center gap-2">
-              <span class="material-icons text-lg">smartphone</span>
-              Phone GPS
-            </span>
+            <span class="material-icons text-lg">smartphone</span>
+            <span>Phone GPS</span>
           </button>
           <button
             @click="setGPSSource('both')"
             :class="[
-              'px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300',
+              'px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2',
               gpsSource === 'both' 
                 ? 'bg-purple-500 text-white shadow-lg' 
                 : 'bg-white text-gray-600 hover:bg-gray-100'
             ]"
           >
-            <span class="flex items-center gap-2">
-              <span class="material-icons text-lg">merge_type</span>
-              Both (Avg)
-            </span>
+            <span class="material-icons text-lg">merge_type</span>
+            <span>Both (Avg)</span>
           </button>
         </div>
       </div>
     </div>
 
     <!-- Location Info Card -->
-    <div class="bg-gradient-to-r from-[#7091E6]/10 to-[#3D52A0]/10 rounded-2xl p-6 border border-[#7091E6]/20">
-      <div class="flex items-start gap-4">
-        <div class="bg-gradient-to-br from-[#7091E6] to-[#3D52A0] p-3 rounded-xl">
-          <span class="material-icons text-white text-3xl">my_location</span>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-bold text-[#3D52A0] mb-2">Current Location</h3>
-          <div class="flex items-center gap-2 text-sm text-gray-600">
-            <span class="material-icons text-sm">place</span>
-            <span class="font-mono">{{ formatLatLng(location.lat, location.lng) }}</span>
+    <div class="bg-gradient-to-r from-[#7091E6]/10 to-[#3D52A0]/10 rounded-2xl p-4 md:p-6 border border-[#7091E6]/20">
+      <div class="flex flex-col md:flex-row items-start gap-4">
+        <!-- Icon and Info -->
+        <div class="flex items-start gap-3 flex-1 w-full">
+          <div class="bg-gradient-to-br from-[#7091E6] to-[#3D52A0] p-3 rounded-xl flex-shrink-0">
+            <span class="material-icons text-white text-3xl">my_location</span>
           </div>
-          <div class="flex items-center gap-2 mt-2">
-            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            <span class="text-xs text-gray-500">
-              Source: {{ gpsSource === 'module' ? 'GPS Module' : gpsSource === 'phone' ? 'Phone GPS' : 'Both (Averaged)' }}
-            </span>
+          <div class="flex-1 min-w-0">
+            <h3 class="text-lg font-bold text-[#3D52A0] mb-2">Current Location</h3>
+            <div class="flex items-center gap-2 text-sm text-gray-600 flex-wrap">
+              <span class="material-icons text-sm">place</span>
+              <span class="font-mono text-xs sm:text-sm break-all">{{ formatLatLng(location.lat, location.lng) }}</span>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></span>
+              <span class="text-xs text-gray-500">
+                Source: {{ gpsSource === 'module' ? 'GPS Module' : gpsSource === 'phone' ? 'Phone GPS' : 'Both (Averaged)' }}
+              </span>
+            </div>
           </div>
         </div>
-        <div class="flex flex-col gap-2">
+        
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row md:flex-col gap-2 w-full md:w-auto">
           <button
             @click="getUserLocation"
             :disabled="isGettingLocation"
-            class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold rounded-xl hover:from-green-600 hover:to-green-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold rounded-xl hover:from-green-600 hover:to-green-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             <span class="material-icons text-lg" :class="{ 'animate-spin': isGettingLocation }">
               {{ isGettingLocation ? 'refresh' : 'gps_fixed' }}
             </span>
-            {{ isGettingLocation ? 'Getting...' : 'Get My Location' }}
+            <span>{{ isGettingLocation ? 'Getting...' : 'Get My Location' }}</span>
           </button>
           <a 
             v-if="location.lat && location.lng"
             :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" 
             target="_blank"
-            class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 whitespace-nowrap"
           >
             <span class="material-icons text-lg">open_in_new</span>
-            Open in Maps
+            <span>Open in Maps</span>
           </a>
         </div>
       </div>
