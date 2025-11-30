@@ -64,30 +64,70 @@
             </div>
           </div>
           
-          <!-- Quick Stats -->
-          <div class="flex gap-3 md:gap-4">
-            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group">
-              <div class="flex items-center justify-center mb-1">
-                <span class="material-icons text-cyan-300 text-2xl md:text-3xl group-hover:scale-110 transition-transform">two_wheeler</span>
+          <!-- Weather & Quick Stats -->
+          <div class="flex flex-col gap-4">
+            <!-- Compact Weather Widget -->
+            <div v-if="!weather.loading && !weather.error" class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 hover:bg-white/20 transition-all duration-300">
+              <div class="flex items-center gap-4">
+                <!-- Weather Icon & Temp -->
+                <div class="flex items-center gap-3">
+                  <div class="text-5xl">{{ getWeatherEmoji(weather.condition) }}</div>
+                  <div>
+                    <p class="text-3xl font-bold text-white">{{ weather.temperature }}°C</p>
+                    <p class="text-sm text-white/80">{{ weather.description }}</p>
+                  </div>
+                </div>
+                
+                <!-- Divider -->
+                <div class="h-16 w-px bg-white/20"></div>
+                
+                <!-- Weather Details -->
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div class="flex items-center gap-2">
+                    <span class="material-icons text-sm text-white/70">location_on</span>
+                    <span class="text-xs text-white/90 font-medium">{{ weather.location }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="material-icons text-sm text-white/70">air</span>
+                    <span class="text-xs text-white/90">{{ weather.windSpeed }} km/h</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="material-icons text-sm text-white/70">water_drop</span>
+                    <span class="text-xs text-white/90">{{ weather.humidity }}%</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span :class="['material-icons text-sm', getRidingSafetyIconColor()]">{{ getRidingSafetyIcon() }}</span>
+                    <span :class="['text-xs font-semibold', getRidingSafetyTextColor()]">{{ getRidingSafetyLevel() }}</span>
+                  </div>
+                </div>
               </div>
-              <p class="text-xl md:text-2xl font-bold text-white">{{ recentTrips.length }}</p>
-              <p class="text-xs text-white/70 font-medium">Trips</p>
             </div>
             
-            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group">
-              <div class="flex items-center justify-center mb-1">
-                <span class="material-icons text-green-300 text-2xl md:text-3xl group-hover:scale-110 transition-transform">verified_user</span>
+            <!-- Quick Stats -->
+            <div class="flex gap-3">
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group flex-1">
+                <div class="flex items-center justify-center mb-1">
+                  <span class="material-icons text-cyan-300 text-2xl group-hover:scale-110 transition-transform">two_wheeler</span>
+                </div>
+                <p class="text-xl font-bold text-white">{{ recentTrips.length }}</p>
+                <p class="text-xs text-white/70 font-medium">Trips</p>
               </div>
-              <p class="text-xl md:text-2xl font-bold text-white">{{ tripStats.safetyScore }}</p>
-              <p class="text-xs text-white/70 font-medium">Safety</p>
-            </div>
-            
-            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group">
-              <div class="flex items-center justify-center mb-1">
-                <span class="material-icons text-yellow-300 text-2xl md:text-3xl group-hover:scale-110 transition-transform">notifications_active</span>
+              
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group flex-1">
+                <div class="flex items-center justify-center mb-1">
+                  <span class="material-icons text-green-300 text-2xl group-hover:scale-110 transition-transform">verified_user</span>
+                </div>
+                <p class="text-xl font-bold text-white">{{ tripStats.safetyScore }}</p>
+                <p class="text-xs text-white/70 font-medium">Safety</p>
               </div>
-              <p class="text-xl md:text-2xl font-bold text-white">{{ alerts.length }}</p>
-              <p class="text-xs text-white/70 font-medium">Alerts</p>
+              
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group flex-1">
+                <div class="flex items-center justify-center mb-1">
+                  <span class="material-icons text-yellow-300 text-2xl group-hover:scale-110 transition-transform">notifications_active</span>
+                </div>
+                <p class="text-xl font-bold text-white">{{ alerts.length }}</p>
+                <p class="text-xs text-white/70 font-medium">Alerts</p>
+              </div>
             </div>
           </div>
         </div>
@@ -455,122 +495,7 @@
 
       <!-- ✅ DEBUG PANEL REMOVED - Cleaner dashboard interface -->
 
-      <!-- Weather Widget for Riding Conditions -->
-      <div class="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-blue-50 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-8 border border-blue-200">
-        <div class="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-400/10 to-cyan-400/10 rounded-full -mr-48 -mt-48"></div>
-        
-        <div class="relative">
-          <div class="flex items-center justify-between mb-6">
-            <h3 class="text-2xl font-bold text-[#3D52A0] flex items-center gap-3">
-              <div class="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-2xl shadow-lg">
-                <span class="material-icons text-3xl text-white">wb_sunny</span>
-              </div>
-              <div>
-                <span>Riding Conditions</span>
-                <p class="text-sm font-normal text-gray-600">{{ weather.location }}</p>
-              </div>
-            </h3>
-            <button @click="refreshWeather" class="p-3 rounded-xl bg-blue-100 hover:bg-blue-200 transition-all duration-300">
-              <span class="material-icons text-blue-600">refresh</span>
-            </button>
-          </div>
 
-          <div v-if="weather.loading" class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-          </div>
-
-          <div v-else-if="weather.error" class="text-center py-8">
-            <span class="material-icons text-6xl text-gray-400 mb-4">cloud_off</span>
-            <p class="text-gray-600">{{ weather.error }}</p>
-            <button @click="refreshWeather" class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all">
-              Try Again
-            </button>
-          </div>
-
-          <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Current Weather -->
-            <div class="md:col-span-2 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl p-6 text-white shadow-xl">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm opacity-90 mb-1">Current Weather</p>
-                  <div class="flex items-center gap-4">
-                    <span class="text-6xl font-bold">{{ weather.temperature }}°C</span>
-                    <div>
-                      <p class="text-2xl font-semibold">{{ weather.description }}</p>
-                      <p class="text-sm opacity-90">Feels like {{ weather.feelsLike }}°C</p>
-                    </div>
-                  </div>
-                </div>
-                <div class="text-8xl opacity-90">
-                  {{ getWeatherEmoji(weather.condition) }}
-                </div>
-              </div>
-              
-              <div class="mt-6 grid grid-cols-3 gap-4">
-                <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="material-icons text-sm">air</span>
-                    <p class="text-xs opacity-90">Wind</p>
-                  </div>
-                  <p class="text-lg font-bold">{{ weather.windSpeed }} km/h</p>
-                </div>
-                <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="material-icons text-sm">water_drop</span>
-                    <p class="text-xs opacity-90">Humidity</p>
-                  </div>
-                  <p class="text-lg font-bold">{{ weather.humidity }}%</p>
-                </div>
-                <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="material-icons text-sm">visibility</span>
-                    <p class="text-xs opacity-90">Visibility</p>
-                  </div>
-                  <p class="text-lg font-bold">{{ weather.visibility }} km</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Riding Safety Assessment -->
-            <div class="space-y-4">
-              <div :class="['p-4 rounded-2xl border-2 transition-all duration-300', getRidingSafetyColor()]">
-                <div class="flex items-center gap-3 mb-3">
-                  <span class="material-icons text-3xl" :class="getRidingSafetyIconColor()">
-                    {{ getRidingSafetyIcon() }}
-                  </span>
-                  <div>
-                    <p class="text-xs text-gray-600 font-medium">Riding Safety</p>
-                    <p class="text-xl font-bold" :class="getRidingSafetyTextColor()">
-                      {{ getRidingSafetyLevel() }}
-                    </p>
-                  </div>
-                </div>
-                <p class="text-sm text-gray-700">{{ getRidingSafetyMessage() }}</p>
-              </div>
-
-              <div class="bg-white rounded-2xl p-4 border-2 border-gray-200">
-                <p class="text-xs text-gray-600 font-medium mb-3">Weather Alerts</p>
-                <div class="space-y-2">
-                  <div v-for="alert in getWeatherAlerts()" :key="alert.type" 
-                       class="flex items-start gap-2 text-sm">
-                    <span class="material-icons text-sm" :class="alert.color">{{ alert.icon }}</span>
-                    <p class="text-gray-700">{{ alert.message }}</p>
-                  </div>
-                  <div v-if="getWeatherAlerts().length === 0" class="flex items-center gap-2 text-sm text-green-600">
-                    <span class="material-icons text-sm">check_circle</span>
-                    <p>No weather warnings</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200">
-                <p class="text-xs text-gray-600 font-medium mb-2">Last Updated</p>
-                <p class="text-sm text-gray-700">{{ weather.lastUpdate }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- Speed Limit Control -->
       <div class="relative overflow-hidden bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 rounded-3xl shadow-2xl p-8 mb-8 transition-all duration-500 hover:shadow-3xl group">
@@ -2736,18 +2661,18 @@ const getRidingSafetyIcon = () => {
 
 const getRidingSafetyIconColor = () => {
   const level = getRidingSafetyLevel();
-  if (level === 'Dangerous') return 'text-red-600';
-  if (level === 'Poor') return 'text-orange-600';
-  if (level === 'Fair') return 'text-yellow-600';
-  return 'text-green-600';
+  if (level === 'Dangerous') return 'text-red-400';
+  if (level === 'Poor') return 'text-orange-400';
+  if (level === 'Fair') return 'text-yellow-400';
+  return 'text-green-400';
 };
 
 const getRidingSafetyTextColor = () => {
   const level = getRidingSafetyLevel();
-  if (level === 'Dangerous') return 'text-red-600';
-  if (level === 'Poor') return 'text-orange-600';
-  if (level === 'Fair') return 'text-yellow-600';
-  return 'text-green-600';
+  if (level === 'Dangerous') return 'text-red-300';
+  if (level === 'Poor') return 'text-orange-300';
+  if (level === 'Fair') return 'text-yellow-300';
+  return 'text-green-300';
 };
 
 const getRidingSafetyMessage = () => {
