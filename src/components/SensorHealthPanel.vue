@@ -65,10 +65,10 @@
 
       <!-- GPS Module -->
       <div :class="['p-5 rounded-2xl border-2 transition-all duration-300 hover:scale-105', 
-        gpsConnected ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
+        getGPSStatusColor()]">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
-            <div :class="['p-2 rounded-xl', gpsConnected ? 'bg-green-500' : 'bg-red-500']">
+            <div :class="['p-2 rounded-xl', getGPSIconClass()]">
               <span class="material-icons text-white text-2xl">gps_fixed</span>
             </div>
             <div>
@@ -76,32 +76,32 @@
               <p class="text-xs text-gray-500">Location Tracking</p>
             </div>
           </div>
-          <div :class="['w-3 h-3 rounded-full', gpsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500']"></div>
+          <div :class="['w-3 h-3 rounded-full', getGPSIndicatorClass()]"></div>
         </div>
         <div class="space-y-2">
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Status:</span>
-            <span :class="['font-semibold', gpsConnected ? 'text-green-600' : 'text-red-600']">
-              {{ gpsConnected ? 'Active' : 'Offline' }}
+            <span :class="['font-semibold', getGPSTextClass()]">
+              {{ getGPSStatusText() }}
             </span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Accuracy:</span>
-            <span class="font-semibold text-gray-700">{{ sensorData.gps?.accuracy || 'N/A' }}</span>
+            <span class="font-semibold text-gray-700">{{ motorcyclePaired ? (sensorData.gps?.accuracy || 'N/A') : 'N/A' }}</span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Satellites:</span>
-            <span class="font-semibold text-gray-700">{{ sensorData.gps?.satellites || '0' }}</span>
+            <span class="font-semibold text-gray-700">{{ motorcyclePaired ? (sensorData.gps?.satellites || '0') : '0' }}</span>
           </div>
         </div>
       </div>
 
       <!-- GSM Module -->
       <div :class="['p-5 rounded-2xl border-2 transition-all duration-300 hover:scale-105', 
-        gsmConnected ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
+        getGSMStatusColor()]">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
-            <div :class="['p-2 rounded-xl', gsmConnected ? 'bg-green-500' : 'bg-red-500']">
+            <div :class="['p-2 rounded-xl', getGSMIconClass()]">
               <span class="material-icons text-white text-2xl">signal_cellular_alt</span>
             </div>
             <div>
@@ -109,22 +109,22 @@
               <p class="text-xs text-gray-500">Cellular Connection</p>
             </div>
           </div>
-          <div :class="['w-3 h-3 rounded-full', gsmConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500']"></div>
+          <div :class="['w-3 h-3 rounded-full', getGSMIndicatorClass()]"></div>
         </div>
         <div class="space-y-2">
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Status:</span>
-            <span :class="['font-semibold', gsmConnected ? 'text-green-600' : 'text-red-600']">
-              {{ gsmConnected ? 'Connected' : 'Offline' }}
+            <span :class="['font-semibold', getGSMTextClass()]">
+              {{ getGSMStatusText() }}
             </span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Signal:</span>
-            <span class="font-semibold text-gray-700">{{ sensorData.gsm?.signal || '0%' }}</span>
+            <span class="font-semibold text-gray-700">{{ motorcyclePaired ? (sensorData.gsm?.signal || '0%') : '0%' }}</span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Network:</span>
-            <span class="font-semibold text-gray-700">{{ sensorData.gsm?.network || 'N/A' }}</span>
+            <span class="font-semibold text-gray-700">{{ motorcyclePaired ? (sensorData.gsm?.network || 'N/A') : 'N/A' }}</span>
           </div>
         </div>
       </div>
@@ -254,6 +254,8 @@ const props = defineProps({
   gsmConnected: Boolean,
   deviceBattery: Number,
   alcoholStatus: String,
+  helmetPaired: Boolean,      // ✅ NEW: Helmet device connection
+  motorcyclePaired: Boolean,  // ✅ NEW: Motorcycle device connection
   sensorData: {
     type: Object,
     default: () => ({})
@@ -261,6 +263,30 @@ const props = defineProps({
 });
 
 const getSensorStatus = (sensor) => {
+  // ✅ FIXED: Check device pairing first
+  // MPU6050 and Alcohol are on motorcycle, GPS/GSM status already handled separately
+  
+  if (sensor === 'mpu6050') {
+    if (!props.motorcyclePaired) {
+      return {
+        isActive: false,
+        status: 'Offline',
+        lastUpdate: 'Device disconnected'
+      };
+    }
+  }
+  
+  if (sensor === 'alcohol') {
+    if (!props.helmetPaired) {
+      return {
+        isActive: false,
+        status: 'Offline',
+        lastUpdate: 'Device disconnected'
+      };
+    }
+  }
+  
+  // Check last update time
   const now = Date.now();
   const lastUpdate = props.sensorData[sensor]?.lastUpdate || 0;
   const timeDiff = now - lastUpdate;
@@ -390,6 +416,78 @@ const getShutdownReason = () => {
     return '🔒 Anti-theft armed - Engine locked';
   }
   return null;
+};
+
+// ✅ NEW: GPS Status Functions
+const getGPSStatusColor = () => {
+  if (!props.motorcyclePaired) {
+    return 'bg-gray-50 border-gray-300'; // Device offline
+  }
+  return props.gpsConnected ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500';
+};
+
+const getGPSIconClass = () => {
+  if (!props.motorcyclePaired) {
+    return 'bg-gray-400';
+  }
+  return props.gpsConnected ? 'bg-green-500' : 'bg-red-500';
+};
+
+const getGPSIndicatorClass = () => {
+  if (!props.motorcyclePaired) {
+    return 'bg-gray-400';
+  }
+  return props.gpsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500';
+};
+
+const getGPSStatusText = () => {
+  if (!props.motorcyclePaired) {
+    return 'Device Offline';
+  }
+  return props.gpsConnected ? 'Active' : 'Offline';
+};
+
+const getGPSTextClass = () => {
+  if (!props.motorcyclePaired) {
+    return 'text-gray-500';
+  }
+  return props.gpsConnected ? 'text-green-600' : 'text-red-600';
+};
+
+// ✅ NEW: GSM Status Functions
+const getGSMStatusColor = () => {
+  if (!props.motorcyclePaired) {
+    return 'bg-gray-50 border-gray-300'; // Device offline
+  }
+  return props.gsmConnected ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500';
+};
+
+const getGSMIconClass = () => {
+  if (!props.motorcyclePaired) {
+    return 'bg-gray-400';
+  }
+  return props.gsmConnected ? 'bg-green-500' : 'bg-red-500';
+};
+
+const getGSMIndicatorClass = () => {
+  if (!props.motorcyclePaired) {
+    return 'bg-gray-400';
+  }
+  return props.gsmConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500';
+};
+
+const getGSMStatusText = () => {
+  if (!props.motorcyclePaired) {
+    return 'Device Offline';
+  }
+  return props.gsmConnected ? 'Connected' : 'Offline';
+};
+
+const getGSMTextClass = () => {
+  if (!props.motorcyclePaired) {
+    return 'text-gray-500';
+  }
+  return props.gsmConnected ? 'text-green-600' : 'text-red-600';
 };
 </script>
 

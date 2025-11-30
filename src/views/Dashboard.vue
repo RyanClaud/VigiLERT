@@ -478,6 +478,8 @@
         :gsm-connected="gsmConnected"
         :device-battery="deviceBattery"
         :alcohol-status="alcoholStatus"
+        :helmet-paired="helmetPaired"
+        :motorcycle-paired="motorcyclePaired"
         :sensor-data="sensorData"
         class="mb-8"
       />
