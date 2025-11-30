@@ -1,25 +1,94 @@
 <template>
   <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0] pb-20">
-    <!-- User Greeting/Header -->
-    <div class="flex flex-col items-center justify-center py-6 px-4">
-      <div class="relative overflow-hidden">
-        <div class="absolute inset-0 bg-gradient-to-r from-[#7091E6] via-[#5571c6] to-[#3D52A0] opacity-90 blur-xl"></div>
-        <div class="relative flex items-center gap-4 bg-white/20 backdrop-blur-md border border-white/30 px-8 py-4 rounded-2xl shadow-2xl">
-          <div class="relative">
-            <span v-if="authStore.user && authStore.user.photoURL">
-              <img :src="authStore.user.photoURL" alt="User Avatar"
-                class="w-12 h-12 rounded-full border-3 border-white shadow-lg ring-2 ring-white/50" />
-            </span>
-            <span v-else class="material-icons text-4xl text-white drop-shadow-lg">account_circle</span>
-            <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
+    <!-- Enhanced User Profile Header -->
+    <div class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#5571c6] to-[#7091E6] py-8 px-4 md:px-8 shadow-2xl">
+      <!-- Animated Background Elements -->
+      <div class="absolute inset-0 overflow-hidden">
+        <div class="absolute -top-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
+        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
+      </div>
+      
+      <div class="relative max-w-7xl mx-auto">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+          <!-- User Info Section -->
+          <div class="flex items-center gap-6">
+            <!-- Avatar with Status -->
+            <div class="relative group">
+              <div class="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div class="relative">
+                <div v-if="authStore.user && authStore.user.photoURL" class="relative">
+                  <img :src="authStore.user.photoURL" alt="User Avatar"
+                    class="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white shadow-2xl object-cover ring-4 ring-white/30 transition-transform duration-300 group-hover:scale-105" />
+                  <div class="absolute -bottom-1 -right-1 flex items-center gap-1 bg-green-500 px-2 py-1 rounded-full border-2 border-white shadow-lg">
+                    <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                    <span class="text-xs font-bold text-white">Online</span>
+                  </div>
+                </div>
+                <div v-else class="relative bg-gradient-to-br from-white/20 to-white/10 backdrop-blur-sm p-4 rounded-full border-4 border-white shadow-2xl">
+                  <span class="material-icons text-5xl md:text-6xl text-white">account_circle</span>
+                  <div class="absolute -bottom-1 -right-1 flex items-center gap-1 bg-green-500 px-2 py-1 rounded-full border-2 border-white shadow-lg">
+                    <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                    <span class="text-xs font-bold text-white">Online</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- User Details -->
+            <div class="text-center md:text-left">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="material-icons text-yellow-300 text-sm animate-pulse">star</span>
+                <p class="text-xs md:text-sm text-white/90 font-semibold uppercase tracking-widest">
+                  Premium Rider
+                </p>
+              </div>
+              <h1 class="text-2xl md:text-4xl font-bold text-white mb-2 drop-shadow-lg">
+                Welcome Back,
+                <span class="bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-transparent">
+                  <span v-if="authStore.user?.displayName">{{ authStore.user.displayName }}</span>
+                  <span v-else-if="authStore.user?.email">{{ authStore.user.email.split('@')[0] }}</span>
+                  <span v-else>Rider</span>
+                </span>
+              </h1>
+              <div class="flex flex-wrap items-center gap-3 text-white/80 text-sm">
+                <div class="flex items-center gap-1">
+                  <span class="material-icons text-sm">email</span>
+                  <span v-if="authStore.user?.email">{{ authStore.user.email }}</span>
+                  <span v-else>Not available</span>
+                </div>
+                <div class="hidden md:flex items-center gap-1">
+                  <span class="material-icons text-sm">schedule</span>
+                  <span>{{ getCurrentTime() }}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <p class="text-xs text-white/80 font-medium uppercase tracking-wider">Welcome Back</p>
-            <p class="font-bold text-xl text-white drop-shadow-md">
-              <span v-if="authStore.user?.displayName">{{ authStore.user.displayName }}</span>
-              <span v-else-if="authStore.user?.email">{{ authStore.user.email }}</span>
-              <span v-else>User</span>
-            </p>
+          
+          <!-- Quick Stats -->
+          <div class="flex gap-3 md:gap-4">
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group">
+              <div class="flex items-center justify-center mb-1">
+                <span class="material-icons text-cyan-300 text-2xl md:text-3xl group-hover:scale-110 transition-transform">two_wheeler</span>
+              </div>
+              <p class="text-xl md:text-2xl font-bold text-white">{{ recentTrips.length }}</p>
+              <p class="text-xs text-white/70 font-medium">Trips</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group">
+              <div class="flex items-center justify-center mb-1">
+                <span class="material-icons text-green-300 text-2xl md:text-3xl group-hover:scale-110 transition-transform">verified_user</span>
+              </div>
+              <p class="text-xl md:text-2xl font-bold text-white">{{ tripStats.safetyScore }}</p>
+              <p class="text-xs text-white/70 font-medium">Safety</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group">
+              <div class="flex items-center justify-center mb-1">
+                <span class="material-icons text-yellow-300 text-2xl md:text-3xl group-hover:scale-110 transition-transform">notifications_active</span>
+              </div>
+              <p class="text-xl md:text-2xl font-bold text-white">{{ alerts.length }}</p>
+              <p class="text-xs text-white/70 font-medium">Alerts</p>
+            </div>
           </div>
         </div>
       </div>
@@ -2687,6 +2756,16 @@ const getRidingSafetyMessage = () => {
   if (level === 'Poor') return 'Ride with extreme caution. Challenging conditions.';
   if (level === 'Fair') return 'Acceptable conditions. Stay alert and ride carefully.';
   return 'Perfect conditions for riding. Enjoy your trip!';
+};
+
+// ✅ NEW: Get current time for user header
+const getCurrentTime = () => {
+  const now = new Date();
+  return now.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: true 
+  });
 };
 
 const getWeatherAlerts = () => {
