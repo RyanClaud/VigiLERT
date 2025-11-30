@@ -381,6 +381,7 @@
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       <!-- ✅ DEBUG PANEL REMOVED - Cleaner dashboard interface -->
