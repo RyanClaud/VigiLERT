@@ -201,7 +201,7 @@
     <!-- Main Dashboard -->
     <main class="flex-1 px-4 md:px-8 py-6">
       <!-- System Status Bar -->
-      <div id="status" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div id="status" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <!-- Helmet-Motorcycle Pairing Status -->
         <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
           <div class="flex items-center justify-between">
@@ -224,31 +224,6 @@
               <div class="flex items-center gap-2">
                 <span class="material-icons text-sm" :class="motorcyclePaired ? 'text-green-500' : 'text-gray-400'">two_wheeler</span>
                 <span class="text-xs font-medium" :class="motorcyclePaired ? 'text-green-600' : 'text-gray-500'">Motorcycle</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Device Health -->
-        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600">
-                <span class="material-icons text-white text-2xl">battery_charging_full</span>
-              </div>
-              <div>
-                <p class="text-xs text-gray-500 font-medium uppercase">Device Health</p>
-                <p class="text-lg font-bold text-blue-600">{{ deviceBattery }}%</p>
-              </div>
-            </div>
-            <div class="flex flex-col gap-1 text-right">
-              <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="gsmConnected ? 'text-green-500' : 'text-red-500'">signal_cellular_alt</span>
-                <span class="text-xs font-medium">GSM</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="gpsConnected ? 'text-green-500' : 'text-red-500'">gps_fixed</span>
-                <span class="text-xs font-medium">GPS</span>
               </div>
             </div>
           </div>
