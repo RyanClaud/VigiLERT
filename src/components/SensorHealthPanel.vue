@@ -131,10 +131,10 @@
 
       <!-- Engine Status -->
       <div :class="['p-5 rounded-2xl border-2 transition-all duration-300 hover:scale-105', 
-        sensorData.engineRunning ? 'bg-green-50 border-green-500' : 'bg-gray-50 border-gray-300']">
+        getEngineStatusColor()]">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
-            <div :class="['p-2 rounded-xl', sensorData.engineRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400']">
+            <div :class="['p-2 rounded-xl', getEngineIconClass()]">
               <span class="material-icons text-white text-2xl">power_settings_new</span>
             </div>
             <div>
@@ -142,26 +142,35 @@
               <p class="text-xs text-gray-500">Relay Control Monitor</p>
             </div>
           </div>
-          <div :class="['w-3 h-3 rounded-full', sensorData.engineRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400']"></div>
+          <div :class="['w-3 h-3 rounded-full', getEngineIndicatorClass()]"></div>
         </div>
         <div class="space-y-2">
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Status:</span>
-            <span :class="['font-semibold', sensorData.engineRunning ? 'text-green-600' : 'text-gray-500']">
-              {{ sensorData.engineRunning ? 'Running' : 'Stopped' }}
+            <span :class="['font-semibold', getEngineStatusTextClass()]">
+              {{ getEngineStatusText() }}
             </span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Relay:</span>
-            <span :class="['font-bold text-xl', sensorData.engineRunning ? 'text-green-600' : 'text-gray-500']">
-              {{ sensorData.engineRunning ? 'ON' : 'OFF' }}
+            <span :class="['font-bold text-xl', getRelayTextClass()]">
+              {{ getRelayStatus() }}
             </span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-gray-600">Condition:</span>
-            <span :class="['font-semibold', sensorData.engineRunning ? 'text-green-600' : 'text-gray-500']">
-              {{ sensorData.engineRunning ? 'Active' : 'Inactive' }}
+            <span :class="['font-semibold', getConditionTextClass()]">
+              {{ getConditionText() }}
             </span>
+          </div>
+          <div v-if="getShutdownReason()" class="mt-3 pt-3 border-t border-red-200">
+            <div class="flex items-start gap-2">
+              <span class="material-icons text-red-600 text-sm">warning</span>
+              <div class="flex-1">
+                <p class="text-xs font-semibold text-red-600">Shutdown Reason:</p>
+                <p class="text-xs text-red-700">{{ getShutdownReason() }}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -265,8 +274,123 @@ const getSensorStatus = (sensor) => {
   };
 };
 
-// ✅ Heart rate functions removed - replaced with Engine Status
-// Engine status is now directly read from sensorData.engineRunning
+// ✅ NEW: Engine Status Functions - Responds to alerts
+const getEngineStatusColor = () => {
+  if (props.sensorData.engineRunning) {
+    return 'bg-green-50 border-green-500';
+  }
+  // Check if stopped due to alert
+  if (props.alcoholStatus === 'Danger' || props.sensorData.crashDetected || props.sensorData.antiTheftArmed) {
+    return 'bg-red-50 border-red-500';
+  }
+  return 'bg-gray-50 border-gray-300';
+};
+
+const getEngineIconClass = () => {
+  if (props.sensorData.engineRunning) {
+    return 'bg-green-500 animate-pulse';
+  }
+  if (props.alcoholStatus === 'Danger' || props.sensorData.crashDetected || props.sensorData.antiTheftArmed) {
+    return 'bg-red-500 animate-pulse';
+  }
+  return 'bg-gray-400';
+};
+
+const getEngineIndicatorClass = () => {
+  if (props.sensorData.engineRunning) {
+    return 'bg-green-500 animate-pulse';
+  }
+  if (props.alcoholStatus === 'Danger' || props.sensorData.crashDetected || props.sensorData.antiTheftArmed) {
+    return 'bg-red-500 animate-pulse';
+  }
+  return 'bg-gray-400';
+};
+
+const getEngineStatusText = () => {
+  if (props.sensorData.engineRunning) {
+    return 'Running';
+  }
+  if (props.alcoholStatus === 'Danger') {
+    return 'Stopped - Alcohol';
+  }
+  if (props.sensorData.crashDetected) {
+    return 'Stopped - Crash';
+  }
+  if (props.sensorData.antiTheftArmed) {
+    return 'Stopped - Theft';
+  }
+  return 'Stopped';
+};
+
+const getEngineStatusTextClass = () => {
+  if (props.sensorData.engineRunning) {
+    return 'text-green-600';
+  }
+  if (props.alcoholStatus === 'Danger' || props.sensorData.crashDetected || props.sensorData.antiTheftArmed) {
+    return 'text-red-600';
+  }
+  return 'text-gray-500';
+};
+
+const getRelayStatus = () => {
+  // Relay is ACTIVE-LOW: LOW = ON, HIGH = OFF
+  // When engine running, relay is ON (LOW)
+  // When stopped, relay is OFF (HIGH)
+  return props.sensorData.engineRunning ? 'ON' : 'OFF';
+};
+
+const getRelayTextClass = () => {
+  if (props.sensorData.engineRunning) {
+    return 'text-green-600';
+  }
+  if (props.alcoholStatus === 'Danger' || props.sensorData.crashDetected || props.sensorData.antiTheftArmed) {
+    return 'text-red-600';
+  }
+  return 'text-gray-500';
+};
+
+const getConditionText = () => {
+  if (props.sensorData.engineRunning) {
+    return 'Active';
+  }
+  if (props.alcoholStatus === 'Danger') {
+    return 'Blocked - Alcohol';
+  }
+  if (props.sensorData.crashDetected) {
+    return 'Emergency Stop';
+  }
+  if (props.sensorData.antiTheftArmed) {
+    return 'Security Lock';
+  }
+  return 'Inactive';
+};
+
+const getConditionTextClass = () => {
+  if (props.sensorData.engineRunning) {
+    return 'text-green-600';
+  }
+  if (props.alcoholStatus === 'Danger' || props.sensorData.crashDetected || props.sensorData.antiTheftArmed) {
+    return 'text-red-600';
+  }
+  return 'text-gray-500';
+};
+
+const getShutdownReason = () => {
+  if (props.sensorData.engineRunning) {
+    return null; // No shutdown if running
+  }
+  
+  if (props.alcoholStatus === 'Danger') {
+    return '🍺 Alcohol detected - Engine disabled for safety';
+  }
+  if (props.sensorData.crashDetected) {
+    return '💥 Crash detected - Emergency shutdown activated';
+  }
+  if (props.sensorData.antiTheftArmed) {
+    return '🔒 Anti-theft armed - Engine locked';
+  }
+  return null;
+};
 </script>
 
 <style scoped>

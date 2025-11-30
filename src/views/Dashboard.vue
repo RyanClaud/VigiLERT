@@ -889,6 +889,8 @@ const sensorData = ref({
     network: '4G'
   },
   engineRunning: false, // ✅ Engine status from relay
+  crashDetected: false, // ✅ Crash detection status
+  antiTheftArmed: false, // ✅ Anti-theft armed status
   alcohol: {
     value: 0,
     lastUpdate: Date.now()
@@ -1478,6 +1480,18 @@ const setupFirebaseListeners = () => {
       if (typeof liveData.engineRunning !== 'undefined') {
         sensorData.value.engineRunning = liveData.engineRunning;
         console.log('[ENGINE] Status updated:', liveData.engineRunning ? 'RUNNING' : 'STOPPED');
+      }
+      
+      // ✅ Update crash detection status
+      if (typeof liveData.crashDetected !== 'undefined') {
+        sensorData.value.crashDetected = liveData.crashDetected;
+        console.log('[CRASH] Status updated:', liveData.crashDetected ? 'DETECTED' : 'CLEAR');
+      }
+      
+      // ✅ Update anti-theft armed status
+      if (typeof liveData.antiTheftArmed !== 'undefined') {
+        sensorData.value.antiTheftArmed = liveData.antiTheftArmed;
+        console.log('[ANTI-THEFT] Status updated:', liveData.antiTheftArmed ? 'ARMED' : 'DISARMED');
       }
       
       // ✅ Update battery data
