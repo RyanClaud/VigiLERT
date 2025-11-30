@@ -50,20 +50,37 @@ sensors_event_t accel, gyro, temp;
 bool engineRunning = false;
 bool crashDetected = false;
 const float ACCEL_THRESHOLD = 15.0;
+const int physicalKeyPin = 14;  // ✅ NEW: Physical key switch input
+bool lastKeyState = LOW;
 
 // Current sensor readings
 float currentRoll = 0.0;
 float currentTotalAccel = 0.0;
 
+// GPS speed
+float currentSpeed = 0.0;
+unsigned long lastGPSUpdate = 0;
+const unsigned long GPS_UPDATE_INTERVAL = 500;  // Update every 500ms
+
 // Crash detection timing
 unsigned long lastCrashTime = 0;
-const unsigned long CRASH_COOLDOWN = 5000;
+const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for faster re-detection
 
 // Alcohol detection
 bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
 const unsigned long ALCOHOL_CHECK_INTERVAL = 500;
+
+// ✅ NEW: Helmet connection detection
+bool helmetConnected = false;
+unsigned long lastHelmetCheck = 0;
+const unsigned long HELMET_CHECK_INTERVAL = 1000;  // Check every 1 second
+uint64_t lastHelmetHeartbeat = 0;  // Track last helmet heartbeat time
+const unsigned long HELMET_TIMEOUT = 3000;  // Consider disconnected after 3 seconds
+const unsigned long HELMET_FORCE_OFF_TIMEOUT = 10000;  // Force status to Off after 10 seconds
+unsigned long lastHelmetUpdateTime = 0;  // Track when we last saw an update
+bool helmetStatusForcedOff = false;  // Track if we forced the status to Off
 
 // Automatic engine control
 bool autoEngineControl = false;
@@ -72,7 +89,7 @@ bool engineStartRequested = false;
 // Dashboard button control
 bool lastDashboardButtonState = false;
 unsigned long lastButtonCheck = 0;
-const unsigned long BUTTON_CHECK_INTERVAL = 100;
+const unsigned long BUTTON_CHECK_INTERVAL = 50;  // ✅ FIX: Check every 50ms for faster response
 
 // Device heartbeat
 unsigned long lastHeartbeat = 0;
@@ -141,18 +158,19 @@ void setup() {
   pinMode(buzzerPin, OUTPUT);
   pinMode(lightIndicatorPin, OUTPUT);
   pinMode(vibrationSensorPin, INPUT);
+  pinMode(physicalKeyPin, INPUT_PULLUP);  // ✅ NEW: Physical key switch
 
-  // Initialize relay to OFF (HIGH for ACTIVE-LOW)
-  digitalWrite(relayPin, HIGH);
+  // ✅ FIX: Initialize relay to OFF (LOW for ACTIVE-HIGH relay)
+  digitalWrite(relayPin, LOW);
   digitalWrite(buzzerPin, LOW);
   digitalWrite(lightIndicatorPin, LOW);
   
   delay(100);
   Serial.println("\n[SETUP] ═══════════════════════════════════");
-  Serial.println("[SETUP] RELAY TYPE: ACTIVE-LOW");
+  Serial.println("[SETUP] RELAY TYPE: ACTIVE-HIGH");
   Serial.println("[SETUP] GPIO 13: Relay Control");
   Serial.println("[SETUP] ⚠️  REQUIRES EXTERNAL 5V POWER!");
-  Serial.printf("[SETUP] Relay: %d (HIGH/OFF)\n", digitalRead(relayPin));
+  Serial.printf("[SETUP] Relay: %d (LOW/OFF)\n", digitalRead(relayPin));
   Serial.println("[SETUP] ═══════════════════════════════════\n");
 
   connectToWiFi();
@@ -168,6 +186,22 @@ void setup() {
 }
 
 void loop() {
+  // ✅ NEW: Read GPS data continuously for real-time speed
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+  
+  // Update GPS speed every 500ms
+  if (millis() - lastGPSUpdate >= GPS_UPDATE_INTERVAL) {
+    if (gps.speed.isValid()) {
+      currentSpeed = gps.speed.kmph();
+    }
+    lastGPSUpdate = millis();
+  }
+  
+  // ✅ NEW: Monitor physical key switch
+  checkPhysicalKey();
+  
   // Send heartbeat every 1 second
   if (millis() - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     sendMotorcycleHeartbeat(true);
@@ -207,7 +241,7 @@ void loop() {
     }
   }
 
-  // Read MPU6050
+  // ✅ OPTIMIZED: Read MPU6050 continuously (no delay) for instant crash detection
   mpu.getEvent(&accel, &gyro, &temp);
   currentTotalAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
                            accel.acceleration.y * accel.acceleration.y +
@@ -231,11 +265,19 @@ void loop() {
     }
   }
 
-  // Crash detection
+  // ✅ OPTIMIZED: Crash detection with continuous monitoring
   if (engineRunning && (currentTotalAccel >= ACCEL_THRESHOLD || leanAngle > 40) && !crashDetected) {
     unsigned long timeSinceLastCrash = millis() - lastCrashTime;
     if (timeSinceLastCrash >= CRASH_COOLDOWN) {
+      Serial.printf("[CRASH] Detected! Accel: %.2f g, Lean: %.1f°\n", currentTotalAccel, leanAngle);
       triggerCrashShutdown(currentTotalAccel, currentRoll);
+    } else {
+      // Still in cooldown period
+      static unsigned long lastCooldownMsg = 0;
+      if (millis() - lastCooldownMsg > 1000) {
+        Serial.printf("[CRASH] In cooldown (%lu ms remaining)\n", CRASH_COOLDOWN - timeSinceLastCrash);
+        lastCooldownMsg = millis();
+      }
     }
   }
 
@@ -246,6 +288,18 @@ void loop() {
       crashDetected = false;
       Serial.println("[INFO] ✓ Crash cleared");
     }
+  }
+
+  // ✅ NEW: Helmet connection monitoring
+  if (millis() - lastHelmetCheck > HELMET_CHECK_INTERVAL) {
+    checkHelmetConnection();
+    lastHelmetCheck = millis();
+  }
+  
+  // ✅ NEW: Auto-shutdown if helmet disconnects while engine running
+  if (engineRunning && !helmetConnected) {
+    Serial.println("\n🚨 AUTO-SHUTDOWN: Helmet disconnected!");
+    stopEngine();
   }
 
   // Alcohol monitoring
@@ -267,18 +321,20 @@ void loop() {
     }
   }
 
-  // Safety override
+  // ✅ FIX: Safety override - turn relay OFF if alcohol detected
   if (alcoholDetected) {
-    digitalWrite(relayPin, HIGH);
+    digitalWrite(relayPin, LOW);  // LOW = OFF for ACTIVE-HIGH relay
   }
 
-  // Status monitoring
+  // Status monitoring with MPU6050 readings
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 5000) {
     Serial.printf("[STATUS] Engine:%s | Relay:%s | AntiTheft:%s\n",
                   engineRunning ? "RUN" : "STOP",
-                  digitalRead(relayPin) ? "OFF" : "ON",
+                  digitalRead(relayPin) ? "ON" : "OFF",
                   antiTheftArmed ? "ARMED" : "DISARMED");
+    Serial.printf("[MPU6050] Accel: %.2f g | Lean: %.1f° | Reading continuously\n", 
+                  currentTotalAccel, abs(currentRoll));
     lastPrint = millis();
   }
 
@@ -289,7 +345,9 @@ void loop() {
     lastFirebaseUpdate = millis();
   }
 
-  delay(5);
+  // ✅ FIX: Remove delay for faster crash detection
+  // MPU6050 reads continuously without delay
+  yield();  // Allow WiFi/system tasks to run
 }
 
 void sendMotorcycleHeartbeat(bool isActive) {
@@ -517,7 +575,8 @@ void triggerCrashShutdown(float impact, float roll) {
   Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
   Serial.printf("Impact: %.2f g | Roll: %.1f°\n", impact, roll);
   
-  digitalWrite(relayPin, HIGH);
+  // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
+  digitalWrite(relayPin, LOW);
   engineRunning = false;
   
   Serial.printf("🚨 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
@@ -539,8 +598,28 @@ void triggerCrashShutdown(float impact, float roll) {
 
 void startEngine() {
   Serial.println("\n[ENGINE] startEngine() called");
+  Serial.printf("[ENGINE] helmetConnected = %s\n", helmetConnected ? "TRUE" : "FALSE");
   Serial.printf("[ENGINE] alcoholDetected = %s\n", alcoholDetected ? "TRUE" : "FALSE");
   Serial.printf("[ENGINE] engineRunning = %s\n", engineRunning ? "TRUE" : "FALSE");
+  
+  // ✅ NEW: Check helmet connection first
+  if (!helmetConnected) {
+    Serial.println("\n❌ ENGINE START BLOCKED - HELMET NOT CONNECTED!");
+    Serial.println("💡 TIP: Turn on helmet module first");
+    Serial.println("💡 TIP: Wait for helmet to connect to WiFi and send heartbeat");
+    
+    // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
+    digitalWrite(relayPin, LOW);
+    
+    // Different beep pattern for helmet not connected (2 short beeps)
+    for (int i = 0; i < 2; i++) {
+      digitalWrite(buzzerPin, HIGH);
+      delay(100);
+      digitalWrite(buzzerPin, LOW);
+      delay(100);
+    }
+    return;
+  }
   
   if (alcoholDetected) {
     Serial.println("\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
@@ -551,8 +630,10 @@ void startEngine() {
       engineStartRequested = true;
     }
     
-    digitalWrite(relayPin, HIGH);
+    // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
+    digitalWrite(relayPin, LOW);
     
+    // 3 long beeps for alcohol detected
     for (int i = 0; i < 3; i++) {
       digitalWrite(buzzerPin, HIGH);
       delay(200);
@@ -564,7 +645,8 @@ void startEngine() {
 
   Serial.println("\n✅ Starting engine...");
   
-  digitalWrite(relayPin, LOW);
+  // ✅ FIX: HIGH = ON for ACTIVE-HIGH relay
+  digitalWrite(relayPin, HIGH);
   engineRunning = true;
   engineStartRequested = false;
   
@@ -583,7 +665,8 @@ void startEngine() {
 void stopEngine() {
   Serial.println("\n🛑 Stopping engine...");
   
-  digitalWrite(relayPin, HIGH);
+  // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
+  digitalWrite(relayPin, LOW);
   engineRunning = false;
   
   Serial.printf("🛑 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
@@ -652,7 +735,19 @@ void sendLiveToFirebase() {
   doc["antiTheftArmed"] = antiTheftArmed;
   doc["vibrationSensor"] = digitalRead(vibrationSensorPin);
   doc["relayState"] = digitalRead(relayPin);
-  doc["relayStatus"] = digitalRead(relayPin) ? "OFF" : "ON";
+  // ✅ FIX: HIGH = ON, LOW = OFF for ACTIVE-HIGH relay
+  doc["relayStatus"] = digitalRead(relayPin) ? "ON" : "OFF";
+  
+  // ✅ NEW: Add GPS speed and location
+  doc["speed"] = currentSpeed;
+  if (gps.location.isValid()) {
+    doc["locationLat"] = gps.location.lat();
+    doc["locationLng"] = gps.location.lng();
+    doc["gpsValid"] = true;
+  } else {
+    doc["gpsValid"] = false;
+  }
+  
   doc["timestamp"] = millis();
   
   String payload;
@@ -771,7 +866,8 @@ void checkAlcoholStatus() {
       lastAlcoholState = currentAlcoholState;
       
       if (currentAlcoholState) {
-        digitalWrite(relayPin, HIGH);
+        // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
+        digitalWrite(relayPin, LOW);
         
         if (engineRunning) {
           triggerAlcoholShutdown();
@@ -797,7 +893,8 @@ void checkAlcoholStatus() {
 void triggerAlcoholShutdown() {
   Serial.println("\n🚨 ALCOHOL - EMERGENCY SHUTDOWN!");
   
-  digitalWrite(relayPin, HIGH);
+  // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
+  digitalWrite(relayPin, LOW);
   engineRunning = false;
   
   for (int i = 0; i < 10; i++) {
@@ -814,8 +911,9 @@ void printSystemStatus() {
   Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   Serial.println("🔍 SYSTEM STATUS");
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  Serial.printf("Helmet: %s\n", helmetConnected ? "CONNECTED ✅" : "DISCONNECTED ❌");
   Serial.printf("Relay: GPIO %d = %d (%s)\n", relayPin, digitalRead(relayPin), 
-                digitalRead(relayPin) ? "OFF" : "ON");
+                digitalRead(relayPin) ? "ON" : "OFF");
   Serial.printf("Engine: %s\n", engineRunning ? "RUNNING" : "STOPPED");
   Serial.printf("Crash: %s\n", crashDetected ? "YES" : "NO");
   Serial.printf("Alcohol: %s\n", alcoholDetected ? "YES" : "NO");
@@ -836,6 +934,7 @@ void checkDashboardButton() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
+  http.setTimeout(1000);  // ✅ FIX: 1 second timeout for fast response
   http.begin(firebaseHost + buttonPath);
   
   int httpCode = http.GET();
@@ -867,6 +966,7 @@ void checkDashboardButton() {
   
   // Check autoMode setting
   HTTPClient http2;
+  http2.setTimeout(1000);  // ✅ FIX: 1 second timeout
   String autoModePath = "/" + userUID + "/engineControl/autoMode.json?auth=" + firebaseAuth;
   http2.begin(firebaseHost + autoModePath);
   
@@ -888,15 +988,197 @@ void checkDashboardButton() {
 
 void clearDashboardButton() {
   HTTPClient http;
+  http.setTimeout(1000);  // ✅ FIX: 1 second timeout
   http.begin(firebaseHost + buttonPath);
   http.addHeader("Content-Type", "application/json");
   
   int code = http.PUT("false");
   
   if (code == HTTP_CODE_OK) {
-    Serial.println("[DASHBOARD] ✓ Button cleared");
+    Serial.println("[DASHBOARD] ✓ Button cleared (ready for next press)");
+    // ✅ FIX: Reset the state so button can be pressed again
+    lastDashboardButtonState = false;
   } else {
     Serial.printf("[DASHBOARD] ✗ Button clear failed: %d\n", code);
+  }
+  
+  http.end();
+}
+
+// ✅ NEW: Monitor physical key switch
+void checkPhysicalKey() {
+  bool currentKeyState = digitalRead(physicalKeyPin);
+  
+  // Detect key state change (with debounce)
+  if (currentKeyState != lastKeyState) {
+    delay(50);  // Debounce
+    currentKeyState = digitalRead(physicalKeyPin);
+    
+    if (currentKeyState != lastKeyState) {
+      lastKeyState = currentKeyState;
+      
+      // ✅ OPTION 1: If using voltage divider (12V key → 3.3V GPIO)
+      // Key turned ON (HIGH when key provides voltage)
+      if (currentKeyState == HIGH && !engineRunning) {
+        Serial.println("\n🔑 PHYSICAL KEY TURNED ON!");
+        startEngine();
+      }
+      // Key turned OFF (LOW when no voltage)
+      else if (currentKeyState == LOW && engineRunning) {
+        Serial.println("\n🔑 PHYSICAL KEY TURNED OFF!");
+        stopEngine();
+      }
+      
+      // ✅ OPTION 2: If using switch to GND (uncomment below, comment above)
+      // Key turned ON (LOW because of INPUT_PULLUP)
+      // if (currentKeyState == LOW && !engineRunning) {
+      //   Serial.println("\n🔑 PHYSICAL KEY TURNED ON!");
+      //   startEngine();
+      // }
+      // // Key turned OFF
+      // else if (currentKeyState == HIGH && engineRunning) {
+      //   Serial.println("\n🔑 PHYSICAL KEY TURNED OFF!");
+      //   stopEngine();
+      // }
+    }
+  }
+}
+
+// ✅ NEW: Check helmet connection status with timeout detection
+void checkHelmetConnection() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.setTimeout(1000);
+  String helmetPath = firebaseHost + "/helmet_public/" + userUID + "/devices/helmet.json?auth=" + firebaseAuth;
+  http.begin(helmetPath);
+  
+  int httpCode = http.GET();
+  
+  // ✅ DEBUG: Show what we received
+  static unsigned long lastDebugRead = 0;
+  if (millis() - lastDebugRead > 5000) {
+    Serial.printf("[HELMET DEBUG] HTTP Code: %d\n", httpCode);
+    lastDebugRead = millis();
+  }
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String response = http.getString();
+    
+    // ✅ DEBUG: Print response once every 5 seconds
+    static unsigned long lastResponseDebug = 0;
+    if (millis() - lastResponseDebug > 5000) {
+      Serial.println("[HELMET DEBUG] Response: " + response);
+      lastResponseDebug = millis();
+    }
+    
+    // ✅ FIX: Check status first
+    bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
+    
+    if (!statusIsOn) {
+      // Status is explicitly "Off" - helmet turned off
+      if (helmetConnected) {
+        Serial.println("\n[HELMET] ⚠️ Disconnected (status: Off)");
+      }
+      helmetConnected = false;
+      lastHelmetHeartbeat = 0;
+      lastHelmetUpdateTime = 0;
+      helmetStatusForcedOff = false;
+      http.end();
+      return;
+    }
+    
+    // Status is "On" - now check if heartbeat is updating
+    int heartbeatStart = response.indexOf("\"lastHeartbeat\":") + 16;
+    int heartbeatEnd = response.indexOf(",", heartbeatStart);
+    if (heartbeatEnd == -1) heartbeatEnd = response.indexOf("}", heartbeatStart);
+    
+    if (heartbeatEnd > heartbeatStart) {
+      String heartbeatStr = response.substring(heartbeatStart, heartbeatEnd);
+      uint64_t helmetHeartbeat = (uint64_t)heartbeatStr.toDouble();
+      
+      // Check if heartbeat has changed (helmet is still alive)
+      if (helmetHeartbeat != lastHelmetHeartbeat) {
+        // Heartbeat updated!
+        lastHelmetHeartbeat = helmetHeartbeat;
+        lastHelmetUpdateTime = millis();
+        helmetStatusForcedOff = false;  // Reset forced off flag
+        
+        if (!helmetConnected) {
+          Serial.println("\n[HELMET] ✅ Connected!");
+        }
+        helmetConnected = true;
+      } else {
+        // Heartbeat hasn't changed - check timeouts
+        unsigned long timeSinceUpdate = millis() - lastHelmetUpdateTime;
+        
+        // ✅ NEW: After 10 seconds, force status to "Off" in Firebase
+        if (timeSinceUpdate > HELMET_FORCE_OFF_TIMEOUT && !helmetStatusForcedOff) {
+          Serial.printf("\n[HELMET] 🚨 FORCING STATUS TO OFF (no update for %lu ms)\n", timeSinceUpdate);
+          forceHelmetStatusOff();
+          helmetStatusForcedOff = true;
+          helmetConnected = false;
+        }
+        // After 3 seconds, mark as disconnected locally
+        else if (timeSinceUpdate > HELMET_TIMEOUT) {
+          if (helmetConnected) {
+            Serial.printf("\n[HELMET] ⚠️ Disconnected (no heartbeat update for %lu ms)\n", timeSinceUpdate);
+          }
+          helmetConnected = false;
+        }
+        // else: still within timeout, keep current connection status
+      }
+    } else {
+      // Can't parse heartbeat - assume connected if status is On
+      if (!helmetConnected) {
+        Serial.println("\n[HELMET] ✅ Connected (no timestamp check)");
+      }
+      helmetConnected = true;
+      lastHelmetUpdateTime = millis();
+    }
+  } else {
+    if (helmetConnected) {
+      Serial.printf("\n[HELMET] ⚠️ Disconnected (Firebase read failed: HTTP %d)\n", httpCode);
+    }
+    helmetConnected = false;
+  }
+  
+  http.end();
+  
+  // Debug output every 5 seconds
+  static unsigned long lastDebug = 0;
+  if (millis() - lastDebug > 5000) {
+    Serial.printf("[HELMET] Status: %s\n", helmetConnected ? "CONNECTED ✅" : "DISCONNECTED ❌");
+    lastDebug = millis();
+  }
+}
+
+// ✅ NEW: Force helmet status to "Off" in Firebase
+void forceHelmetStatusOff() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  Serial.println("[HELMET] 📝 Updating Firebase status to 'Off'...");
+  
+  StaticJsonDocument<128> doc;
+  doc["status"] = "Off";
+  doc["lastHeartbeat"] = lastHelmetHeartbeat;  // Keep last known heartbeat
+  doc["timestamp"] = lastHelmetHeartbeat;
+  doc["forcedOffByMotorcycle"] = true;  // Flag to indicate this was forced
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  HTTPClient http;
+  String helmetPath = firebaseHost + "/helmet_public/" + userUID + "/devices/helmet.json?auth=" + firebaseAuth;
+  http.begin(helmetPath);
+  http.addHeader("Content-Type", "application/json");
+  
+  int code = http.PUT(payload);
+  
+  if (code == HTTP_CODE_OK) {
+    Serial.println("[HELMET] ✅ Status forced to 'Off' in Firebase");
+  } else {
+    Serial.printf("[HELMET] ❌ Failed to update status: HTTP %d\n", code);
   }
   
   http.end();

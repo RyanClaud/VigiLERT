@@ -273,12 +273,12 @@
           <!-- Engine Turn On/Off Button -->
           <button
             @click="toggleEngine"
-            :disabled="alcoholDetected && !engineRunning"
+            :disabled="(alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
             :class="[
               'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
               engineRunning 
                 ? 'bg-red-500 hover:bg-red-600 text-white' 
-                : alcoholDetected 
+                : (alcoholDetected || !helmetPaired || !motorcyclePaired)
                   ? 'bg-gray-500 cursor-not-allowed text-gray-300'
                   : 'bg-white hover:bg-gray-100 text-green-600'
             ]"
@@ -719,12 +719,12 @@
     <!-- 🚀 FLOATING ACTION BUTTON (Mobile Only) -->
     <div class="fixed bottom-28 right-6 z-40 md:hidden">
       <button @click="toggleEngine" 
-              :disabled="alcoholDetected && !engineRunning"
+              :disabled="(alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
               :class="[
                 'w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-110',
                 engineRunning 
                   ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                  : alcoholDetected 
+                  : (alcoholDetected || !helmetPaired || !motorcyclePaired)
                     ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                     : 'bg-green-500 hover:bg-green-600 text-white'
               ]">
