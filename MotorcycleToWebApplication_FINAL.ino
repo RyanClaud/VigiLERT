@@ -1,11 +1,3 @@
-/*
- * VigiLERT ESP32 Motorcycle Module - NO LIGHTS VERSION
- * ✅ Fixed: Device heartbeat for pairing status
- * ✅ Fixed: Relay control for engine
- * ✅ Fixed: Vibration sensor buzzer alerts
- * ✅ Removed: All light wiring (headlight, taillight, signals)
- */
-
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <TinyGPSPlus.h>
@@ -13,21 +5,29 @@
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
-#include <ArduinoOTA.h>
 #include <ArduinoJson.h>
-#include <TimeLib.h>
 
-// ======= USER CONFIG =======
+// ═══════════════════════════════════════════════════════════════════════════
+// VigiLERT Motorcycle Module - FINAL PRODUCTION VERSION
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ Synchronized with Dashboard.vue
+// ✅ All features: Crash, Anti-theft, Engine control
+// ✅ Correct Firebase paths
+// ═══════════════════════════════════════════════════════════════════════════
+
+// WiFi Configuration
 const char* ssid = "DPWH";
 const char* password = "12345678900";
+
+// Firebase Configuration
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
 const String userUID = "MnzBjTBslZNijOkq732PE91hHa23";
 const String firebaseAuth = "";
 
-// Owner phone number for SMS alerts
+// Owner phone number
 const String ownerPhoneNumber = "+639675715673";
 
-// ======= PIN ASSIGNMENTS =======
+// Pin Assignments
 const int relayPin = 13;
 const int buzzerPin = 12;
 const int lightIndicatorPin = 2;
@@ -64,7 +64,6 @@ bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
 const unsigned long ALCOHOL_CHECK_INTERVAL = 500;
-unsigned long alcoholDetectionTime = 0;
 
 // Automatic engine control
 bool autoEngineControl = false;
@@ -75,22 +74,22 @@ bool lastDashboardButtonState = false;
 unsigned long lastButtonCheck = 0;
 const unsigned long BUTTON_CHECK_INTERVAL = 100;
 
-// Device heartbeat for pairing status
+// Device heartbeat
 unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 2000;
+const unsigned long HEARTBEAT_INTERVAL = 1000;  // 1 second
 
 // Anti-theft system
 bool antiTheftEnabled = false;
 bool antiTheftArmed = false;
 unsigned long engineOffTime = 0;
-const unsigned long ARM_DELAY = 30000;
+const unsigned long ARM_DELAY = 10000;  // ✅ Reduced to 10 seconds
 unsigned long lastTheftAlert = 0;
-const unsigned long THEFT_ALERT_COOLDOWN = 300000;
+const unsigned long THEFT_ALERT_COOLDOWN = 60000;  // ✅ Reduced to 1 minute
 bool theftAlertSent = false;
 int theftDetectionCount = 0;
-const int THEFT_DETECTION_REQUIRED = 1;
+const int THEFT_DETECTION_REQUIRED = 1;  // ✅ Immediate alert on first detection
 unsigned long lastVibrationTime = 0;
-const unsigned long VIBRATION_DEBOUNCE = 50;  // ✅ ULTRA-FAST: Reduced from 200ms to 50ms!
+const unsigned long VIBRATION_DEBOUNCE = 50;  // ✅ Fast response
 
 // Escalating buzzer alert system
 int consecutiveVibrations = 0;
@@ -102,29 +101,18 @@ bool gsmReady = false;
 const String crashPath = "/helmet_public/" + userUID + "/crashes.json?auth=" + firebaseAuth;
 const String buttonPath = "/" + userUID + "/engineControl/startButton.json?auth=" + firebaseAuth;
 const String livePath = "/helmet_public/" + userUID + "/live.json?auth=" + firebaseAuth;
-const String alcoholPaths[] = {
-  "/" + userUID + "/alcohol/status/status.json?auth=" + firebaseAuth,
-  "/" + userUID + "/alcohol/status.json?auth=" + firebaseAuth,
-  "/" + userUID + "/alcohol.json?auth=" + firebaseAuth,
-  "/helmet_public/" + userUID + "/alcohol.json?auth=" + firebaseAuth,
-  "/helmet_public/" + userUID + "/helmetStatus/alcohol.json?auth=" + firebaseAuth,
-  "/" + userUID + ".json?auth=" + firebaseAuth
-};
-const int numAlcoholPaths = 6;
+const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?auth=" + firebaseAuth;
 
 void setup() {
   Serial.begin(115200);
   delay(100);
   
   Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║   VIGILERT MOTORCYCLE - NO LIGHTS      ║");
+  Serial.println("║   MOTORCYCLE MODULE - FINAL VERSION    ║");
   Serial.println("╠════════════════════════════════════════╣");
-  Serial.println("║ ✅ Device heartbeat enabled            ║");
-  Serial.println("║ ✅ Relay control fixed                 ║");
-  Serial.println("║ ✅ ULTRA-FAST vibration detection      ║");
-  Serial.println("║ ✅ Light wiring removed                ║");
-  Serial.println("║ ⚡ 50ms debounce (4x faster!)          ║");
-  Serial.println("║ ⚡ 5ms loop delay (2x faster!)         ║");
+  Serial.println("║ ⚡ 1s heartbeat                        ║");
+  Serial.println("║ ✅ Dashboard synchronized              ║");
+  Serial.println("║ ✅ All features enabled                ║");
   Serial.println("╚════════════════════════════════════════╝\n");
 
   // Initialize MPU6050
@@ -163,26 +151,24 @@ void setup() {
   Serial.println("\n[SETUP] ═══════════════════════════════════");
   Serial.println("[SETUP] RELAY TYPE: ACTIVE-LOW");
   Serial.println("[SETUP] GPIO 13: Relay Control");
-  Serial.println("[SETUP] GPIO 15: Vibration Sensor");
-  Serial.println("[SETUP] GPIO 12: Buzzer");
+  Serial.println("[SETUP] ⚠️  REQUIRES EXTERNAL 5V POWER!");
   Serial.printf("[SETUP] Relay: %d (HIGH/OFF)\n", digitalRead(relayPin));
   Serial.println("[SETUP] ═══════════════════════════════════\n");
 
   connectToWiFi();
   
-  // Send initial heartbeat immediately
+  // Send initial heartbeat
   sendMotorcycleHeartbeat(true);
   lastHeartbeat = millis();
 
   Serial.println("\n📋 SERIAL COMMANDS:");
   Serial.println("   START ENGINE / STOP ENGINE");
   Serial.println("   ARM THEFT / DISARM THEFT");
-  Serial.println("   TEST VIBRATION / TEST SMS");
   Serial.println("   STATUS\n");
 }
 
 void loop() {
-  // Send heartbeat every 2 seconds for pairing status
+  // Send heartbeat every 1 second
   if (millis() - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     sendMotorcycleHeartbeat(true);
     lastHeartbeat = millis();
@@ -213,22 +199,6 @@ void loop() {
       theftDetectionCount = 0;
       Serial.println("✅ Anti-theft DISARMED!");
     }
-    else if (cmd == "TEST VIBRATION") {
-      Serial.println("🧪 Testing vibration sensor...");
-      for (int i = 0; i < 10; i++) {
-        int reading = digitalRead(vibrationSensorPin);
-        Serial.printf("Reading %d: %d %s\n", i+1, reading, reading == HIGH ? "VIBRATION!" : "");
-        if (reading == HIGH) {
-          digitalWrite(buzzerPin, HIGH);
-          delay(200);
-          digitalWrite(buzzerPin, LOW);
-        }
-        delay(500);
-      }
-    }
-    else if (cmd == "TEST SMS") {
-      sendSMS(ownerPhoneNumber, "VigiLERT Test: SMS working!");
-    }
     else if (cmd == "STATUS") {
       printSystemStatus();
     }
@@ -245,19 +215,13 @@ void loop() {
   currentRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
   float leanAngle = abs(currentRoll);
 
-  // ✅ ULTRA-FAST: Check vibration sensor multiple times per loop for faster response
+  // Anti-theft system
   static int vibrationCheckCounter = 0;
   vibrationCheckCounter++;
   
-  // Anti-theft system
+  // ✅ FIX: Check anti-theft EVERY loop for instant response
   if (!engineRunning) {
     handleAntiTheftWithVibrationSensor();
-    
-    // ✅ EXTRA SENSITIVITY: Check vibration sensor 3 times per main loop
-    if (vibrationCheckCounter >= 3) {
-      handleAntiTheftWithVibrationSensor();
-      vibrationCheckCounter = 0;
-    }
   } else {
     if (antiTheftArmed) {
       Serial.println("[ANTI-THEFT] 🔓 Disarmed - Engine running");
@@ -311,11 +275,10 @@ void loop() {
   // Status monitoring
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 5000) {
-    Serial.printf("[STATUS] Engine:%s | Relay:%s | AntiTheft:%s | Vibration:%d\n",
+    Serial.printf("[STATUS] Engine:%s | Relay:%s | AntiTheft:%s\n",
                   engineRunning ? "RUN" : "STOP",
                   digitalRead(relayPin) ? "OFF" : "ON",
-                  antiTheftArmed ? "ARMED" : "DISARMED",
-                  digitalRead(vibrationSensorPin));
+                  antiTheftArmed ? "ARMED" : "DISARMED");
     lastPrint = millis();
   }
 
@@ -326,10 +289,9 @@ void loop() {
     lastFirebaseUpdate = millis();
   }
 
-  delay(5);  // ✅ ULTRA-FAST: Reduced from 10ms to 5ms for faster loop!
+  delay(5);
 }
 
-// Send motorcycle heartbeat for pairing status
 void sendMotorcycleHeartbeat(bool isActive) {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -351,7 +313,7 @@ void sendMotorcycleHeartbeat(bool isActive) {
   int code = http.PUT(payload);
   
   if (code == HTTP_CODE_OK) {
-    Serial.printf("[HEARTBEAT] ✓ Motorcycle heartbeat sent (timestamp: %llu)\n", timestamp);
+    Serial.printf("[HEARTBEAT] ✓ Sent (timestamp: %llu)\n", timestamp);
   } else {
     Serial.printf("[HEARTBEAT] ✗ Failed: HTTP %d\n", code);
   }
@@ -359,13 +321,12 @@ void sendMotorcycleHeartbeat(bool isActive) {
   http.end();
 }
 
-// Anti-theft with proper buzzer alerts
 void handleAntiTheftWithVibrationSensor() {
   if (!antiTheftEnabled) {
     antiTheftEnabled = true;
     engineOffTime = millis();
     consecutiveVibrations = 0;
-    Serial.println("\n[ANTI-THEFT] 🛡️ System enabled - arming in 30 seconds...");
+    Serial.println("\n[ANTI-THEFT] 🛡️ System enabled - arming in 10 seconds...");
     return;
   }
 
@@ -376,7 +337,7 @@ void handleAntiTheftWithVibrationSensor() {
     consecutiveVibrations = 0;
     Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Vibration sensor active...");
     
-    // Beep to indicate armed
+    // Short beep to confirm arming
     for (int i = 0; i < 2; i++) {
       digitalWrite(buzzerPin, HIGH);
       delay(100);
@@ -391,58 +352,44 @@ void handleAntiTheftWithVibrationSensor() {
     if (vibrationDetected == HIGH) {
       unsigned long timeSinceLastVibration = millis() - lastVibrationTime;
       
+      // ✅ FIX: Immediate response with debounce
       if (timeSinceLastVibration >= VIBRATION_DEBOUNCE) {
         theftDetectionCount++;
         consecutiveVibrations++;
         lastVibrationTime = millis();
         
-        Serial.printf("[ANTI-THEFT] ⚠️ VIBRATION #%d! (Count: %d/%d)\n", 
-                      consecutiveVibrations, theftDetectionCount, THEFT_DETECTION_REQUIRED);
+        Serial.printf("\n🚨 [ANTI-THEFT] VIBRATION DETECTED #%d!\n", consecutiveVibrations);
 
-        // Escalating buzzer alert
-        int buzzerCount;
-        if (consecutiveVibrations == 1) {
-          buzzerCount = 5;
-          Serial.println("[ANTI-THEFT] 🔔 Alert Level 1 - 5 beeps");
-        } else if (consecutiveVibrations == 2) {
-          buzzerCount = 8;
-          Serial.println("[ANTI-THEFT] 🔔🔔 Alert Level 2 - 8 beeps");
-        } else {
-          buzzerCount = 15;
-          Serial.println("[ANTI-THEFT] 🔔🔔🔔 Alert Level 3 - 15 beeps (MAXIMUM)");
-        }
-
-        // ✅ FASTER ALARM: Reduced beep duration from 100ms to 50ms
+        // ✅ ALWAYS trigger buzzer immediately on ANY vibration
+        int buzzerCount = 10;  // Loud alert
         for (int i = 0; i < buzzerCount; i++) {
           digitalWrite(buzzerPin, HIGH);
           digitalWrite(lightIndicatorPin, HIGH);
-          delay(50);  // ✅ Faster beep
+          delay(50);
           digitalWrite(buzzerPin, LOW);
           digitalWrite(lightIndicatorPin, LOW);
-          delay(50);  // ✅ Faster pause
+          delay(50);
         }
 
-        if (theftDetectionCount >= THEFT_DETECTION_REQUIRED) {
-          unsigned long timeSinceLastAlert = millis() - lastTheftAlert;
-          
-          if (!theftAlertSent || timeSinceLastAlert >= THEFT_ALERT_COOLDOWN) {
-            triggerTheftAlert();
-            lastTheftAlert = millis();
-            theftAlertSent = true;
-            theftDetectionCount = 0;
-          }
+        // ✅ ALWAYS send SMS alert on vibration (with cooldown to prevent spam)
+        unsigned long timeSinceLastAlert = millis() - lastTheftAlert;
+        
+        if (timeSinceLastAlert >= THEFT_ALERT_COOLDOWN) {
+          Serial.println("[ANTI-THEFT] 📱 Sending SMS + Firebase alert...");
+          triggerTheftAlert();
+          lastTheftAlert = millis();
+          theftAlertSent = true;
+          theftDetectionCount = 0;
+        } else {
+          Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\n", 
+                        (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
         }
       }
     } else {
-      // ✅ FASTER RESET: Reset consecutive counter if no vibration for 15 seconds (was 30s)
-      if (consecutiveVibrations > 0 && (millis() - lastVibrationTime) > 15000) {
-        Serial.printf("[ANTI-THEFT] ℹ️ No vibration for 15s - resetting alert level (was %d)\n", consecutiveVibrations);
+      // Reset counters after 10 seconds of no vibration
+      if (consecutiveVibrations > 0 && (millis() - lastVibrationTime) > 10000) {
         consecutiveVibrations = 0;
-      }
-      
-      // ✅ FASTER DECAY: Reduce detection count after 5 seconds (was 10s)
-      if (theftDetectionCount > 0 && (millis() - lastVibrationTime) > 5000) {
-        theftDetectionCount--;
+        Serial.println("[ANTI-THEFT] ✓ Vibration counter reset");
       }
     }
   }
@@ -451,14 +398,13 @@ void handleAntiTheftWithVibrationSensor() {
 void triggerTheftAlert() {
   Serial.println("\n🚨🚨🚨 THEFT ALERT! 🚨🚨🚨");
   
-  // ✅ FASTER ALARM: Reduced beep duration for quicker response
   for (int i = 0; i < 10; i++) {
     digitalWrite(buzzerPin, HIGH);
     digitalWrite(lightIndicatorPin, HIGH);
-    delay(50);  // ✅ Faster beep (was 100ms)
+    delay(50);
     digitalWrite(buzzerPin, LOW);
     digitalWrite(lightIndicatorPin, LOW);
-    delay(50);  // ✅ Faster pause (was 100ms)
+    delay(50);
   }
 
   String location = "Location unavailable";
@@ -466,10 +412,7 @@ void triggerTheftAlert() {
     location = "https://maps.google.com/?q=" + String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6);
   }
 
-  String message = "VIGILERT THEFT ALERT!\n";
-  message += "Unauthorized movement detected!\n";
-  message += location + "\n";
-  message += "Check your motorcycle NOW!";
+  String message = "VIGILERT THEFT ALERT!\nUnauthorized movement detected!\n" + location;
 
   Serial.println("[ANTI-THEFT] 📱 Sending SMS alert...");
   bool smsSent = sendSMS(ownerPhoneNumber, message);
@@ -505,13 +448,6 @@ void initializeGSM() {
 
   gsmSerial.println("AT+CMGF=1");
   delay(1000);
-  
-  gsmSerial.println("AT+CSQ");
-  delay(1000);
-  
-  if (gsmSerial.available()) {
-    Serial.println("[GSM] Signal: " + gsmSerial.readString());
-  }
 }
 
 bool sendSMS(String phoneNumber, String message) {
@@ -548,7 +484,6 @@ bool sendSMS(String phoneNumber, String message) {
 void logTheftToFirebase(String location) {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // ✅ FIX: Use 64-bit timestamp for proper sorting
   uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
   
   StaticJsonDocument<256> doc;
@@ -557,18 +492,17 @@ void logTheftToFirebase(String location) {
   doc["location"] = location;
   doc["vibrationDetected"] = true;
   doc["armed"] = antiTheftArmed;
-  doc["alertTime"] = timestamp;  // ✅ Add readable timestamp
+  doc["alertTime"] = timestamp;
   
   String payload;
   serializeJson(doc, payload);
   
   HTTPClient http;
-  // ✅ FIX: Use POST without .json to create unique keys (Firebase push)
   String theftPath = "/helmet_public/" + userUID + "/theft_alerts.json?auth=" + firebaseAuth;
   http.begin(firebaseHost + theftPath);
   http.addHeader("Content-Type", "application/json");
   
-  int code = http.POST(payload);  // ✅ POST creates new entry each time
+  int code = http.POST(payload);
   
   if (code == HTTP_CODE_OK) {
     Serial.println("[FIREBASE] ✓ Theft alert logged");
@@ -583,8 +517,7 @@ void triggerCrashShutdown(float impact, float roll) {
   Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
   Serial.printf("Impact: %.2f g | Roll: %.1f°\n", impact, roll);
   
-  // Relay control
-  digitalWrite(relayPin, HIGH);  // ACTIVE-LOW: HIGH = OFF
+  digitalWrite(relayPin, HIGH);
   engineRunning = false;
   
   Serial.printf("🚨 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
@@ -594,7 +527,6 @@ void triggerCrashShutdown(float impact, float roll) {
   crashDetected = true;
   lastCrashTime = millis();
   
-  // Buzzer alert
   for (int i = 0; i < 5; i++) {
     digitalWrite(buzzerPin, HIGH);
     digitalWrite(lightIndicatorPin, HIGH);
@@ -606,8 +538,14 @@ void triggerCrashShutdown(float impact, float roll) {
 }
 
 void startEngine() {
+  Serial.println("\n[ENGINE] startEngine() called");
+  Serial.printf("[ENGINE] alcoholDetected = %s\n", alcoholDetected ? "TRUE" : "FALSE");
+  Serial.printf("[ENGINE] engineRunning = %s\n", engineRunning ? "TRUE" : "FALSE");
+  
   if (alcoholDetected) {
     Serial.println("\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
+    Serial.println("💡 TIP: Check helmet alcohol sensor readings");
+    Serial.println("💡 TIP: Helmet should send 'Safe' status if value < 600");
     
     if (autoEngineControl) {
       engineStartRequested = true;
@@ -615,7 +553,6 @@ void startEngine() {
     
     digitalWrite(relayPin, HIGH);
     
-    // Alert beeps
     for (int i = 0; i < 3; i++) {
       digitalWrite(buzzerPin, HIGH);
       delay(200);
@@ -627,17 +564,14 @@ void startEngine() {
 
   Serial.println("\n✅ Starting engine...");
   
-  // Relay control
-  digitalWrite(relayPin, LOW);  // ACTIVE-LOW: LOW = ON
+  digitalWrite(relayPin, LOW);
   engineRunning = true;
   engineStartRequested = false;
   
   Serial.printf("✅ Relay GPIO %d = %d (ON)\n", relayPin, digitalRead(relayPin));
   
-  // ✅ FIX: Immediately update Firebase when engine starts
   sendLiveToFirebase();
   
-  // Disarm anti-theft
   if (antiTheftArmed) {
     antiTheftArmed = false;
     antiTheftEnabled = false;
@@ -649,26 +583,22 @@ void startEngine() {
 void stopEngine() {
   Serial.println("\n🛑 Stopping engine...");
   
-  // Relay control
-  digitalWrite(relayPin, HIGH);  // ACTIVE-LOW: HIGH = OFF
+  digitalWrite(relayPin, HIGH);
   engineRunning = false;
   
   Serial.printf("🛑 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
   
-  // ✅ FIX: Immediately update Firebase when engine stops
   sendLiveToFirebase();
   
-  // Enable anti-theft
   engineOffTime = millis();
   antiTheftEnabled = true;
   antiTheftArmed = false;
-  Serial.println("[ANTI-THEFT] 🛡️ Will arm in 30 seconds...");
+  Serial.println("[ANTI-THEFT] 🛡️ Will arm in 10 seconds...");
 }
 
 void sendCrashToFirebase(float impact, float roll) {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // ✅ FIX: Use 64-bit timestamp for proper sorting
   uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
   
   StaticJsonDocument<256> doc;
@@ -677,14 +607,14 @@ void sendCrashToFirebase(float impact, float roll) {
   doc["roll"] = roll;
   doc["leanAngle"] = abs(roll);
   doc["hasGPS"] = gps.location.isValid();
-  doc["type"] = "crash";  // ✅ Add type for dashboard filtering
-  doc["severity"] = impact > 20.0 ? "severe" : "moderate";  // ✅ Add severity
+  doc["type"] = "crash";
+  doc["severity"] = impact > 20.0 ? "severe" : "moderate";
   
   if (gps.location.isValid()) {
     doc["lat"] = gps.location.lat();
     doc["lng"] = gps.location.lng();
-    doc["locationLat"] = gps.location.lat();  // ✅ Dashboard compatibility
-    doc["locationLng"] = gps.location.lng();  // ✅ Dashboard compatibility
+    doc["locationLat"] = gps.location.lat();
+    doc["locationLng"] = gps.location.lng();
   }
   
   String payload;
@@ -694,7 +624,7 @@ void sendCrashToFirebase(float impact, float roll) {
   http.begin(firebaseHost + crashPath);
   http.addHeader("Content-Type", "application/json");
   
-  int code = http.POST(payload);  // ✅ POST creates new entry
+  int code = http.POST(payload);
   
   if (code == HTTP_CODE_OK) {
     Serial.println("[FIREBASE] ✓ Crash event logged");
@@ -734,7 +664,7 @@ void sendLiveToFirebase() {
   http.PUT(payload);
   http.end();
   
-  // ✅ FIX: Also update engineControl path for dashboard compatibility
+  // Also update engineControl path
   StaticJsonDocument<128> engineDoc;
   engineDoc["engineRunning"] = engineRunning;
   engineDoc["autoMode"] = autoEngineControl;
@@ -747,7 +677,7 @@ void sendLiveToFirebase() {
   String enginePath = "/" + userUID + "/engineControl.json?auth=" + firebaseAuth;
   http2.begin(firebaseHost + enginePath);
   http2.addHeader("Content-Type", "application/json");
-  http2.PATCH(enginePayload);  // ✅ Use PATCH to update without overwriting startButton
+  http2.PATCH(enginePayload);
   http2.end();
 }
 
@@ -773,65 +703,95 @@ void connectToWiFi() {
 void checkAlcoholStatus() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  for (int i = 0; i < numAlcoholPaths; i++) {
-    HTTPClient http;
-    http.begin(firebaseHost + alcoholPaths[i]);
+  HTTPClient http;
+  http.setTimeout(2000);
+  http.begin(firebaseHost + alcoholPath);
+  
+  int httpCode = http.GET();
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String response = http.getString();
     
-    int httpCode = http.GET();
-    
-    if (httpCode == HTTP_CODE_OK) {
-      String response = http.getString();
-      
-      if (response == "null" || response.length() <= 2) {
-        http.end();
-        continue;
+    // ✅ FIX: If no data or null, assume Safe
+    if (response == "null" || response.length() <= 2) {
+      if (alcoholDetected) {
+        Serial.println("\n✅ Alcohol cleared (no data)");
+        alcoholDetected = false;
+        lastAlcoholState = false;
       }
-
-      bool currentAlcoholState = false;
-      
-      if (response.indexOf("Danger") != -1 || response.indexOf("danger") != -1 ||
-          response.indexOf("Detected") != -1) {
-        currentAlcoholState = true;
-      }
-
-      if (response.indexOf("sensorValue") != -1) {
-        int sensorStart = response.indexOf("sensorValue") + 13;
-        int sensorEnd = response.indexOf(",", sensorStart);
-        if (sensorEnd == -1) sensorEnd = response.indexOf("}", sensorStart);
-        
-        if (sensorEnd > sensorStart) {
-          String sensorStr = response.substring(sensorStart, sensorEnd);
-          int sensorValue = sensorStr.toInt();
-          
-          if (sensorValue > 2000) {
-            currentAlcoholState = true;
-          }
-        }
-      }
-
-      if (currentAlcoholState != lastAlcoholState) {
-        lastAlcoholState = currentAlcoholState;
-        
-        if (currentAlcoholState) {
-          Serial.println("\n🚨 ALCOHOL DETECTED!");
-          alcoholDetected = true;
-          digitalWrite(relayPin, HIGH);
-          
-          if (engineRunning) {
-            triggerAlcoholShutdown();
-          }
-        } else {
-          Serial.println("\n✅ Alcohol cleared");
-          alcoholDetected = false;
-        }
-      }
-
       http.end();
       return;
     }
+
+    bool currentAlcoholState = false;
+    int sensorValue = 0;
     
-    http.end();
+    // Parse sensor value first
+    if (response.indexOf("sensorValue") != -1) {
+      int sensorStart = response.indexOf("sensorValue") + 13;
+      int sensorEnd = response.indexOf(",", sensorStart);
+      if (sensorEnd == -1) sensorEnd = response.indexOf("}", sensorStart);
+      
+      if (sensorEnd > sensorStart) {
+        String sensorStr = response.substring(sensorStart, sensorEnd);
+        sensorValue = sensorStr.toInt();
+      }
+    }
+    
+    // ✅ FIX: Trust helmet's status first, use sensor value as backup
+    // Check if helmet explicitly sent a status
+    bool hasHelmetStatus = false;
+    
+    if (response.indexOf("\"status\":\"Safe\"") != -1 || response.indexOf("\"status\":\"safe\"") != -1) {
+      currentAlcoholState = false;
+      hasHelmetStatus = true;
+      Serial.printf("\n✅ Alcohol CLEARED! (Helmet says: Safe, Value: %d)\n", sensorValue);
+    } else if (response.indexOf("\"status\":\"Danger\"") != -1 || response.indexOf("\"status\":\"danger\"") != -1) {
+      currentAlcoholState = true;
+      hasHelmetStatus = true;
+      Serial.printf("\n🚨 ALCOHOL DETECTED! (Helmet says: Danger, Value: %d)\n", sensorValue);
+    }
+    
+    // Fallback: If no status from helmet, use sensor value with helmet's threshold (600)
+    if (!hasHelmetStatus) {
+      const int HELMET_THRESHOLD = 600;  // Match helmet's threshold
+      
+      if (sensorValue > HELMET_THRESHOLD) {
+        currentAlcoholState = true;
+        Serial.printf("\n🚨 ALCOHOL DETECTED! (Value: %d > %d)\n", sensorValue, HELMET_THRESHOLD);
+      } else {
+        currentAlcoholState = false;
+        Serial.printf("[ALCOHOL] Safe (Value: %d <= %d)\n", sensorValue, HELMET_THRESHOLD);
+      }
+    }
+
+    // Update state
+    if (currentAlcoholState != alcoholDetected) {
+      alcoholDetected = currentAlcoholState;
+      lastAlcoholState = currentAlcoholState;
+      
+      if (currentAlcoholState) {
+        digitalWrite(relayPin, HIGH);
+        
+        if (engineRunning) {
+          triggerAlcoholShutdown();
+        }
+      }
+    }
+    
+    // Debug output every 5 seconds
+    static unsigned long lastDebug = 0;
+    if (millis() - lastDebug > 5000) {
+      Serial.printf("[ALCOHOL] Status: %s | Value: %d | Helmet Threshold: 600\n", 
+                    alcoholDetected ? "DANGER" : "SAFE", 
+                    sensorValue);
+      lastDebug = millis();
+    }
+  } else {
+    Serial.printf("[ALCOHOL] ✗ Firebase read failed: HTTP %d\n", httpCode);
   }
+  
+  http.end();
 }
 
 void triggerAlcoholShutdown() {
@@ -861,12 +821,7 @@ void printSystemStatus() {
   Serial.printf("Alcohol: %s\n", alcoholDetected ? "YES" : "NO");
   Serial.printf("Auto Control: %s\n", autoEngineControl ? "ON" : "OFF");
   Serial.printf("Anti-Theft: %s\n", antiTheftArmed ? "ARMED" : "DISARMED");
-  Serial.printf("Vibration Sensor: GPIO %d = %d\n", vibrationSensorPin, digitalRead(vibrationSensorPin));
-  Serial.printf("Buzzer: GPIO %d\n", buzzerPin);
-  Serial.printf("GSM: %s\n", gsmReady ? "READY" : "NOT READY");
   Serial.printf("WiFi: %s\n", WiFi.status() == WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
-  Serial.printf("Owner Phone: %s\n", ownerPhoneNumber.c_str());
-  Serial.printf("Heartbeat: Every %lu ms\n", HEARTBEAT_INTERVAL);
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
@@ -910,7 +865,7 @@ void checkDashboardButton() {
   
   http.end();
   
-  // ✅ FIX: Also check autoMode setting from dashboard
+  // Check autoMode setting
   HTTPClient http2;
   String autoModePath = "/" + userUID + "/engineControl/autoMode.json?auth=" + firebaseAuth;
   http2.begin(firebaseHost + autoModePath);
@@ -923,7 +878,7 @@ void checkDashboardButton() {
     
     if (dashboardAutoMode != autoEngineControl) {
       autoEngineControl = dashboardAutoMode;
-      Serial.printf("[ENGINE] Auto control updated from dashboard: %s\n", 
+      Serial.printf("[ENGINE] Auto control updated: %s\n", 
                     autoEngineControl ? "ON" : "OFF");
     }
   }

@@ -257,7 +257,6 @@
               <h3 class="text-2xl font-bold mb-1">Engine Control</h3>
               <p class="text-green-100 text-sm">
                 Status: {{ engineRunning ? 'Running' : 'Stopped' }}
-                <span v-if="alcoholDetected" class="text-red-200 font-bold"> • Alcohol Detected</span>
               </p>
               <p class="text-green-200 text-xs mt-1">
                 Last Update: {{ new Date().toLocaleTimeString() }}
@@ -316,17 +315,6 @@
             <span class="material-icons text-lg">refresh</span>
             <span>Sync Status</span>
           </button>
-        </div>
-
-        <!-- Status Messages -->
-        <div v-if="alcoholDetected" class="mt-4 p-4 bg-red-500/20 border border-red-300/30 rounded-xl">
-          <div class="flex items-center gap-3">
-            <span class="material-icons text-red-200 animate-pulse">warning</span>
-            <div>
-              <p class="text-red-100 font-bold">Alcohol Detected!</p>
-              <p class="text-red-200 text-sm">Engine cannot start until alcohol clears</p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1075,8 +1063,8 @@ const handleOverspeed = (payload) => {
   
   playSound(); // Triggers alert sound
   alerts.value.unshift({
-    type: 'danger',
-    message: 'Speed Limit Exceeded!',
+    type: 'speed',
+    message: '⚡ Speed Limit Exceeded!',
     details: `Current: ${payload.speed} kph | Limit: ${payload.limit} kph`,
     time: new Date().toLocaleTimeString(),
     timestamp: alertTime
@@ -1156,38 +1144,30 @@ const setupFirebaseListeners = () => {
   onValue(helmetStatusRef, (snapshot) => {
     const data = snapshot.val();
     
-    // Determine raw connection status
+    // ✅ FIX: Determine raw connection status - check if status is "On"
     let rawConnected = false;
-    if (data && data.status === 'On' && data.lastHeartbeat) {
-      const now = Date.now();
-      const lastBeat = data.lastHeartbeat;
+    if (data && data.status === 'On') {
+      // Device sent a heartbeat
+      lastHelmetUpdate.value = Date.now();
+      rawConnected = true;
+      console.log(`[HELMET] ✓ Heartbeat received - timestamp: ${data.timestamp || data.lastHeartbeat}`);
       
-      if (lastBeat < 1577836800000) {
-        rawConnected = true;
-      } else {
-        rawConnected = (now - lastBeat) < 10000;
+      // ✅ IMMEDIATE FIX: If we receive a heartbeat, device is connected NOW
+      if (!helmetPaired.value) {
+        helmetPaired.value = true;
+        helmetAlertShown = false;
+        console.log('[HELMET] ✓ Connected');
       }
     }
     
     helmetRawConnected.value = rawConnected;
-    console.log(`[HELMET] Raw status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    console.log(`[HELMET] Status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
     
     // Clear any existing timers
     if (helmetDisconnectTimer.value) clearTimeout(helmetDisconnectTimer.value);
     if (helmetReconnectTimer.value) clearTimeout(helmetReconnectTimer.value);
     
-    if (rawConnected) {
-      // Device is connected
-      if (!helmetPaired.value) {
-        // Was disconnected, now connected - wait 2s before showing connected
-        console.log('[HELMET] Reconnection detected, waiting 2s to stabilize...');
-        helmetReconnectTimer.value = setTimeout(() => {
-          helmetPaired.value = true;
-          helmetAlertShown = false;
-          console.log('[HELMET] ✓ Stable connection confirmed');
-        }, RECONNECT_DELAY);
-      }
-    } else {
+    if (!rawConnected) {
       // Device appears disconnected
       if (helmetPaired.value) {
         // Was connected, now disconnected - wait 10s before showing disconnected
@@ -1213,38 +1193,30 @@ const setupFirebaseListeners = () => {
   onValue(motorcycleStatusRef, (snapshot) => {
     const data = snapshot.val();
     
-    // Determine raw connection status
+    // ✅ FIX: Determine raw connection status - check if status is "On"
     let rawConnected = false;
-    if (data && data.status === 'On' && data.lastHeartbeat) {
-      const now = Date.now();
-      const lastBeat = data.lastHeartbeat;
+    if (data && data.status === 'On') {
+      // Device sent a heartbeat
+      lastMotorcycleUpdate.value = Date.now();
+      rawConnected = true;
+      console.log(`[MOTORCYCLE] ✓ Heartbeat received - timestamp: ${data.timestamp || data.lastHeartbeat}`);
       
-      if (lastBeat < 1577836800000) {
-        rawConnected = true;
-      } else {
-        rawConnected = (now - lastBeat) < 10000;
+      // ✅ IMMEDIATE FIX: If we receive a heartbeat, device is connected NOW
+      if (!motorcyclePaired.value) {
+        motorcyclePaired.value = true;
+        motorcycleAlertShown = false;
+        console.log('[MOTORCYCLE] ✓ Connected');
       }
     }
     
     motorcycleRawConnected.value = rawConnected;
-    console.log(`[MOTORCYCLE] Raw status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    console.log(`[MOTORCYCLE] Status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
     
     // Clear any existing timers
     if (motorcycleDisconnectTimer.value) clearTimeout(motorcycleDisconnectTimer.value);
     if (motorcycleReconnectTimer.value) clearTimeout(motorcycleReconnectTimer.value);
     
-    if (rawConnected) {
-      // Device is connected
-      if (!motorcyclePaired.value) {
-        // Was disconnected, now connected - wait 2s before showing connected
-        console.log('[MOTORCYCLE] Reconnection detected, waiting 2s to stabilize...');
-        motorcycleReconnectTimer.value = setTimeout(() => {
-          motorcyclePaired.value = true;
-          motorcycleAlertShown = false;
-          console.log('[MOTORCYCLE] ✓ Stable connection confirmed');
-        }, RECONNECT_DELAY);
-      }
-    } else {
+    if (!rawConnected) {
       // Device appears disconnected
       if (motorcyclePaired.value) {
         // Was connected, now disconnected - wait 10s before showing disconnected
@@ -1317,7 +1289,11 @@ const setupFirebaseListeners = () => {
   });
 
   // ✅ ENHANCED: Real-time Alcohol Detection Listener with Force Update
-  onValue(alcoholRef, (snapshot) => {
+  if (!alcoholRef.value) {
+    console.error('[ALCOHOL] alcoholRef is null, cannot set up listener');
+    return;
+  }
+  onValue(alcoholRef.value, (snapshot) => {
     const data = snapshot.val();
     const timestamp = new Date().toLocaleTimeString();
     
@@ -1352,9 +1328,11 @@ const setupFirebaseListeners = () => {
         // Force update refs with immediate assignment
         alcoholStatus.value = 'Danger';
         alcoholSubtitle.value = `Alcohol Detected! Value: ${sensorValue}`;
+        alcoholDetected.value = true;  // ✅ FIX: Update alcoholDetected for engine control
         
         console.log(`[UPDATE] alcoholStatus AFTER update: ${alcoholStatus.value}`);
         console.log(`[UPDATE] alcoholSubtitle AFTER update: ${alcoholSubtitle.value}`);
+        console.log(`[UPDATE] alcoholDetected AFTER update: ${alcoholDetected.value}`);
         
         // ✅ NEW: Check for severe intoxication (> 4000) and trigger alertness warning
         const severeThreshold = 4000;
@@ -1372,7 +1350,7 @@ const setupFirebaseListeners = () => {
           
           // Add severe intoxication alert
           alerts.value.unshift({
-            type: 'danger',
+            type: 'alcohol',
             message: '⚠️ SEVERE INTOXICATION - DROWSINESS RISK!',
             details: `Alcohol level ${sensorValue} indicates high drowsiness risk. DO NOT RIDE!`,
             time: timestamp
@@ -1393,12 +1371,15 @@ const setupFirebaseListeners = () => {
         }, 100);
         
         // Add alcohol alert
-        alerts.value.unshift({
-          type: 'danger',
+        const newAlert = {
+          type: 'alcohol',
           message: '🚨 Alcohol Detected!',
           details: `Sensor Value: ${sensorValue} (Threshold: ${threshold})`,
-          time: timestamp
-        });
+          time: new Date().toLocaleTimeString()
+        };
+        alerts.value.unshift(newAlert);
+        console.log('[ALERT] ✅ Alcohol alert added:', newAlert);
+        console.log('[ALERT] Total alerts:', alerts.value.length);
         playSound();
         if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
         
@@ -1407,6 +1388,7 @@ const setupFirebaseListeners = () => {
         console.log('✓ Alcohol status: SAFE');
         alcoholStatus.value = 'Safe';
         alcoholSubtitle.value = `No alcohol detected (Value: ${sensorValue})`;
+        alcoholDetected.value = false;  // ✅ FIX: Update alcoholDetected for engine control
         
         // ✅ Reset alertness when alcohol is safe
         alertnessStatus.value = 'Normal';
@@ -1414,6 +1396,7 @@ const setupFirebaseListeners = () => {
         
         console.log(`[UPDATE] alcoholStatus AFTER update: ${alcoholStatus.value}`);
         console.log(`[UPDATE] alcoholSubtitle AFTER update: ${alcoholSubtitle.value}`);
+        console.log(`[UPDATE] alcoholDetected AFTER update: ${alcoholDetected.value}`);
         console.log(`[UPDATE] alertnessStatus AFTER update: ${alertnessStatus.value}`);
       }
       
@@ -1427,7 +1410,11 @@ const setupFirebaseListeners = () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   });
 
-  onValue(helmetPublicRef, (snapshot) => {
+  if (!helmetPublicRef.value) {
+    console.error('[HELMET_PUBLIC] helmetPublicRef is null, cannot set up listener');
+    return;
+  }
+  onValue(helmetPublicRef.value, (snapshot) => {
     const data = snapshot.val();
     if (data?.live) {
       const liveData = data.live;
@@ -1524,7 +1511,11 @@ const setupFirebaseListeners = () => {
   });
 
   // ✅ FIX: Use .value for ref access
-  onValue(helmetRef, (snapshot) => {
+  if (!helmetRef.value) {
+    console.error('[HELMET_STATUS] helmetRef is null, cannot set up listener');
+    return;
+  }
+  onValue(helmetRef.value, (snapshot) => {
     const data = snapshot.val();
     console.log('[DEBUG] Helmet status data from Firebase:', data);
     
@@ -1537,7 +1528,7 @@ const setupFirebaseListeners = () => {
         console.log('[WARNING] Helmet REMOVED - Triggering alert!');
         
         alerts.value.unshift({
-          type: 'danger',
+          type: 'warning',
           message: '⚠️ HELMET REMOVED!',
           details: 'Rider removed helmet during trip. Engine stopped for safety.',
           time: new Date().toLocaleTimeString()
@@ -1591,12 +1582,15 @@ const setupFirebaseListeners = () => {
       
       // ✅ Alert for drowsiness only (alcohol alerts handled by alcoholRef listener)
       if (alertnessStatus.value !== 'Normal') {
-        alerts.value.unshift({
-          type: 'danger',
-          message: 'Drowsiness Detected',
+        const newAlert = {
+          type: 'drowsiness',
+          message: '😴 Drowsiness Detected',
           details: alertnessSubtitle.value,
           time: new Date().toLocaleTimeString()
-        });
+        };
+        alerts.value.unshift(newAlert);
+        console.log('[ALERT] ✅ Drowsiness alert added:', newAlert);
+        console.log('[ALERT] Total alerts:', alerts.value.length);
         playSound();
         if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
       }
@@ -1605,7 +1599,11 @@ const setupFirebaseListeners = () => {
     }
   });
 
-  onValue(tripsRef, async (snapshot) => {
+  if (!tripsRef.value) {
+    console.error('[TRIPS] tripsRef is null, cannot set up listener');
+    return;
+  }
+  onValue(tripsRef.value, async (snapshot) => {
     const data = snapshot.val();
     if (data) {
       const tripList = Object.entries(data).map(([id, trip]) => ({ id, ...trip }));
@@ -1623,34 +1621,7 @@ const setupFirebaseListeners = () => {
 };
 
 // ✅ FIXED: Wait for user authentication before setting up Firebase
-onMounted(() => {
-  // ✅ Set app start time when component mounts
-  appStartTime.value = Date.now();
-  console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
-  
-  // ✅ Load alert dismissal time
-  loadDismissalTime();
-  
-  // ✅ Initialize rider status as Inactive until devices connect
-  riderStatus.value = 'Inactive';
-  riderSubtitle.value = 'Waiting for device connection...';
-  
-  // ✅ Watch for user authentication and setup Firebase listeners
-  watch(userId, (newUserId, oldUserId) => {
-    if (newUserId && newUserId !== oldUserId) {
-      console.log('[AUTH] User authenticated:', newUserId);
-      setupFirebaseListeners();
-    } else if (!newUserId && oldUserId) {
-      console.log('[AUTH] User logged out');
-      // Clear data when user logs out
-      alerts.value = [];
-      recentTrips.value = [];
-      crashEvents.value = [];
-      riderStatus.value = 'Inactive';
-      riderSubtitle.value = 'Not logged in';
-    }
-  }, { immediate: true });
-});
+// ✅ REMOVED: Duplicate onMounted - merged into main onMounted below
 
 // Show/Hide Alerts Panel
 const toggleAlerts = () => {
@@ -2044,7 +2015,13 @@ const initializeCrashListener = () => {
   console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId.value}/crashes`);
   console.log('[INIT] App start time:', new Date(appStartTime.value).toLocaleString());
   
-  onChildAdded(crashRef, (snapshot) => {
+  // ✅ FIX: Use .value to get the actual ref from computed property
+  if (!crashRef.value) {
+    console.error('[CRASH] crashRef is null, cannot set up listener');
+    return;
+  }
+  
+  onChildAdded(crashRef.value, (snapshot) => {
     const event = snapshot.val();
     console.log('[CRASH] New crash event received from Firebase:', event);
     
@@ -2106,13 +2083,16 @@ const initializeCrashListener = () => {
     console.log('[CRASH] Previous markers removed, displaying current crash only');
     
     // Add alert notification (with timestamp for dismissal tracking)
-    alerts.value.unshift({
-      type: 'danger',
+    const newAlert = {
+      type: 'crash',
       message: '🚨 CRASH DETECTED!',
       details: `Impact: ${event.impactStrength || 'N/A'} g | Location: ${crashEvent.location}`,
       time: new Date().toLocaleTimeString(),
       timestamp: eventTime
-    });
+    };
+    alerts.value.unshift(newAlert);
+    console.log('[ALERT] ✅ Crash alert added:', newAlert);
+    console.log('[ALERT] Total alerts:', alerts.value.length);
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
     
     // Flash crash message for ALL crashes (always trigger animation)
@@ -2213,12 +2193,37 @@ const checkDeviceTimeouts = () => {
 };
 
 onMounted(() => {
-  // ... existing onMounted code ...
+  // ✅ Set app start time when component mounts
+  appStartTime.value = Date.now();
+  console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
+  
+  // ✅ Load alert dismissal time
+  loadDismissalTime();
+  
+  // ✅ Initialize rider status as Inactive until devices connect
+  riderStatus.value = 'Inactive';
+  riderSubtitle.value = 'Waiting for device connection...';
+  
+  // ✅ Watch for user authentication and setup Firebase listeners
+  watch(userId, (newUserId, oldUserId) => {
+    if (newUserId && newUserId !== oldUserId) {
+      console.log('[AUTH] User authenticated:', newUserId);
+      setupFirebaseListeners();  // ✅ CRITICAL: Setup alcohol and other listeners
+    } else if (!newUserId && oldUserId) {
+      console.log('[AUTH] User logged out');
+      // Clear data when user logs out
+      alerts.value = [];
+      recentTrips.value = [];
+      crashEvents.value = [];
+      riderStatus.value = 'Inactive';
+      riderSubtitle.value = 'Not logged in';
+    }
+  }, { immediate: true });
   
   // ✅ Setup real-time device listeners (instant updates)
   setupDeviceListeners();
   
-  // ✅ NEW: Setup engine control listeners
+  // ✅ Setup engine control listeners
   setupEngineStatusListener();
   
   // ✅ Start backup timeout check (every 2 seconds)
@@ -2227,7 +2232,7 @@ onMounted(() => {
   console.log('[DASHBOARD] Device monitoring initialized with real-time listeners + 2s timeout checks');
   console.log('[ENGINE] Engine control system initialized');
   
-  // ✅ NEW: Setup mobile navigation scroll detection
+  // ✅ Setup mobile navigation scroll detection
   window.addEventListener('scroll', handleScroll);
   handleScroll(); // Set initial active section
 });
@@ -2359,16 +2364,7 @@ const setupEngineStatusListener = () => {
     });
   });
   
-  // Monitor alcohol detection status
-  const alcoholRef = dbRef(database, `${userId.value}/alcohol/status/status`);
-  onValue(alcoholRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data !== null) {
-      const isAlcoholDetected = data === 'Danger' || data === 'danger' || data === 'DANGER';
-      alcoholDetected.value = isAlcoholDetected;
-      console.log('[ALCOHOL] Status updated:', isAlcoholDetected ? 'DETECTED' : 'SAFE');
-    }
-  });
+  // ✅ REMOVED: Duplicate alcohol listener - using main listener at line ~1301 instead
   
   // Monitor auto control setting
   const autoRef = dbRef(database, `${userId.value}/engineControl/autoMode`);
@@ -2439,7 +2435,7 @@ const setupAntiTheftListener = () => {
         
         // Add to alerts list
         alerts.value.unshift({
-          type: 'danger',
+          type: 'theft',
           message: '🚨 Anti-Theft Alert',
           details: antiTheftAlert.value.message,
           time: antiTheftAlert.value.time
