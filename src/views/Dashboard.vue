@@ -385,61 +385,121 @@
 
       <!-- ✅ DEBUG PANEL REMOVED - Cleaner dashboard interface -->
 
-      <!-- Electrical Diagnostics Panel -->
-      <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-8 border border-white/50">
-        <div class="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-full -ml-32 -mt-32"></div>
-        <h3 class="relative text-2xl font-bold text-[#3D52A0] mb-6 flex items-center gap-3">
-          <div class="bg-gradient-to-br from-purple-500 to-purple-600 p-3 rounded-2xl shadow-lg">
-            <span class="material-icons text-3xl text-white">electrical_services</span>
+      <!-- Weather Widget for Riding Conditions -->
+      <div class="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-blue-50 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-8 border border-blue-200">
+        <div class="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-400/10 to-cyan-400/10 rounded-full -mr-48 -mt-48"></div>
+        
+        <div class="relative">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-2xl font-bold text-[#3D52A0] flex items-center gap-3">
+              <div class="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-2xl shadow-lg">
+                <span class="material-icons text-3xl text-white">wb_sunny</span>
+              </div>
+              <div>
+                <span>Riding Conditions</span>
+                <p class="text-sm font-normal text-gray-600">{{ weather.location }}</p>
+              </div>
+            </h3>
+            <button @click="refreshWeather" class="p-3 rounded-xl bg-blue-100 hover:bg-blue-200 transition-all duration-300">
+              <span class="material-icons text-blue-600">refresh</span>
+            </button>
           </div>
-          <span>Motorcycle Electrical Diagnostics</span>
-        </h3>
-        <div class="relative grid grid-cols-2 md:grid-cols-4 gap-4">
-          <!-- Headlight -->
-          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.headlight ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
-            <div class="flex flex-col items-center gap-2">
-              <span class="material-icons text-4xl" :class="electricalDiagnostics.headlight ? 'text-green-600' : 'text-red-600'">lightbulb</span>
-              <p class="text-sm font-semibold text-gray-700">Headlight</p>
-              <p :class="['text-xs font-bold', electricalDiagnostics.headlight ? 'text-green-600' : 'text-red-600']">
-                {{ electricalDiagnostics.headlight ? 'OK' : 'FAULT' }}
-              </p>
+
+          <div v-if="weather.loading" class="flex items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+          </div>
+
+          <div v-else-if="weather.error" class="text-center py-8">
+            <span class="material-icons text-6xl text-gray-400 mb-4">cloud_off</span>
+            <p class="text-gray-600">{{ weather.error }}</p>
+            <button @click="refreshWeather" class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all">
+              Try Again
+            </button>
+          </div>
+
+          <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Current Weather -->
+            <div class="md:col-span-2 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl p-6 text-white shadow-xl">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm opacity-90 mb-1">Current Weather</p>
+                  <div class="flex items-center gap-4">
+                    <span class="text-6xl font-bold">{{ weather.temperature }}°C</span>
+                    <div>
+                      <p class="text-2xl font-semibold">{{ weather.description }}</p>
+                      <p class="text-sm opacity-90">Feels like {{ weather.feelsLike }}°C</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-8xl opacity-90">
+                  {{ getWeatherEmoji(weather.condition) }}
+                </div>
+              </div>
+              
+              <div class="mt-6 grid grid-cols-3 gap-4">
+                <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="material-icons text-sm">air</span>
+                    <p class="text-xs opacity-90">Wind</p>
+                  </div>
+                  <p class="text-lg font-bold">{{ weather.windSpeed }} km/h</p>
+                </div>
+                <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="material-icons text-sm">water_drop</span>
+                    <p class="text-xs opacity-90">Humidity</p>
+                  </div>
+                  <p class="text-lg font-bold">{{ weather.humidity }}%</p>
+                </div>
+                <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="material-icons text-sm">visibility</span>
+                    <p class="text-xs opacity-90">Visibility</p>
+                  </div>
+                  <p class="text-lg font-bold">{{ weather.visibility }} km</p>
+                </div>
+              </div>
             </div>
-          </div>
-          
-          <!-- Taillight -->
-          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.taillight ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
-            <div class="flex flex-col items-center gap-2">
-              <span class="material-icons text-4xl" :class="electricalDiagnostics.taillight ? 'text-green-600' : 'text-red-600'">highlight</span>
-              <p class="text-sm font-semibold text-gray-700">Taillight</p>
-              <p :class="['text-xs font-bold', electricalDiagnostics.taillight ? 'text-green-600' : 'text-red-600']">
-                {{ electricalDiagnostics.taillight ? 'OK' : 'FAULT' }}
-              </p>
-            </div>
-          </div>
-          
-          <!-- Brake Light -->
-          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.brakeLight ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
-            <div class="flex flex-col items-center gap-2">
-              <span class="material-icons text-4xl" :class="electricalDiagnostics.brakeLight ? 'text-green-600' : 'text-red-600'">traffic</span>
-              <p class="text-sm font-semibold text-gray-700">Brake Light</p>
-              <p :class="['text-xs font-bold', electricalDiagnostics.brakeLight ? 'text-green-600' : 'text-red-600']">
-                {{ electricalDiagnostics.brakeLight ? 'OK' : 'FAULT' }}
-              </p>
-            </div>
-          </div>
-          
-          <!-- Signal Lights -->
-          <div :class="['p-4 rounded-xl border-2 transition-all duration-300', electricalDiagnostics.signalLights ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500']">
-            <div class="flex flex-col items-center gap-2">
-              <span class="material-icons text-4xl" :class="electricalDiagnostics.signalLights ? 'text-green-600' : 'text-red-600'">turn_slight_right</span>
-              <p class="text-sm font-semibold text-gray-700">Signal Lights</p>
-              <p :class="['text-xs font-bold', electricalDiagnostics.signalLights ? 'text-green-600' : 'text-red-600']">
-                {{ electricalDiagnostics.signalLights ? 'OK' : 'FAULT' }}
-              </p>
+
+            <!-- Riding Safety Assessment -->
+            <div class="space-y-4">
+              <div :class="['p-4 rounded-2xl border-2 transition-all duration-300', getRidingSafetyColor()]">
+                <div class="flex items-center gap-3 mb-3">
+                  <span class="material-icons text-3xl" :class="getRidingSafetyIconColor()">
+                    {{ getRidingSafetyIcon() }}
+                  </span>
+                  <div>
+                    <p class="text-xs text-gray-600 font-medium">Riding Safety</p>
+                    <p class="text-xl font-bold" :class="getRidingSafetyTextColor()">
+                      {{ getRidingSafetyLevel() }}
+                    </p>
+                  </div>
+                </div>
+                <p class="text-sm text-gray-700">{{ getRidingSafetyMessage() }}</p>
+              </div>
+
+              <div class="bg-white rounded-2xl p-4 border-2 border-gray-200">
+                <p class="text-xs text-gray-600 font-medium mb-3">Weather Alerts</p>
+                <div class="space-y-2">
+                  <div v-for="alert in getWeatherAlerts()" :key="alert.type" 
+                       class="flex items-start gap-2 text-sm">
+                    <span class="material-icons text-sm" :class="alert.color">{{ alert.icon }}</span>
+                    <p class="text-gray-700">{{ alert.message }}</p>
+                  </div>
+                  <div v-if="getWeatherAlerts().length === 0" class="flex items-center gap-2 text-sm text-green-600">
+                    <span class="material-icons text-sm">check_circle</span>
+                    <p>No weather warnings</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200">
+                <p class="text-xs text-gray-600 font-medium mb-2">Last Updated</p>
+                <p class="text-sm text-gray-700">{{ weather.lastUpdate }}</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       <!-- Speed Limit Control -->
@@ -850,11 +910,20 @@ const DISCONNECT_DELAY = 10000; // 10 seconds before showing disconnected
 const RECONNECT_DELAY = 2000; // 2 seconds before showing reconnected
 let helmetAlertShown = false;
 let motorcycleAlertShown = false;
-const electricalDiagnostics = ref({
-  headlight: true,
-  taillight: true,
-  brakeLight: true,
-  signalLights: true
+
+// ✅ NEW: Weather data for riding conditions
+const weather = ref({
+  loading: true,
+  error: null,
+  location: 'Loading...',
+  temperature: 0,
+  feelsLike: 0,
+  description: '',
+  condition: '',
+  windSpeed: 0,
+  humidity: 0,
+  visibility: 0,
+  lastUpdate: ''
 });
 
 // Crash UI
@@ -1237,30 +1306,8 @@ const setupFirebaseListeners = () => {
     }
   });
 
-  // Listen for electrical diagnostics
-  const electricalRef = dbRef(database, `helmet_public/${userId.value}/electrical`);
-  onValue(electricalRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      electricalDiagnostics.value = {
-        headlight: data.headlight !== false,
-        taillight: data.taillight !== false,
-        brakeLight: data.brakeLight !== false,
-        signalLights: data.signalLights !== false
-      };
-      
-      // Check for any faults and alert
-      const faults = [];
-      if (!data.headlight) faults.push('Headlight');
-      if (!data.taillight) faults.push('Taillight');
-      if (!data.brakeLight) faults.push('Brake Light');
-      if (!data.signalLights) faults.push('Signal Lights');
-      
-      if (faults.length > 0) {
-        addAlert('warning', 'Electrical Fault Detected', `Faulty components: ${faults.join(', ')}`);
-      }
-    }
-  });
+  // ✅ NEW: Fetch weather data for riding conditions
+  fetchWeather();
 
   initializeCrashListener();
 
@@ -2473,6 +2520,245 @@ const setupAntiTheftListener = () => {
 const dismissAntiTheftAlert = () => {
   antiTheftAlert.value.active = false;
   console.log('[ANTI-THEFT] Alert dismissed by user');
+};
+
+// ✅ NEW: Weather Functions
+const fetchWeather = async () => {
+  try {
+    weather.value.loading = true;
+    weather.value.error = null;
+    
+    // Get user's location (use GPS data if available, otherwise use default)
+    const lat = location.value.lat || 14.5995; // Default to Manila
+    const lng = location.value.lng || 120.9842;
+    
+    // Using Open-Meteo API (free, no API key required)
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,visibility&timezone=Asia/Manila`;
+    
+    const response = await fetch(weatherUrl);
+    if (!response.ok) throw new Error('Weather data unavailable');
+    
+    const data = await response.json();
+    const current = data.current;
+    
+    // Get location name using reverse geocoding
+    const locationUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
+    const locationResponse = await fetch(locationUrl);
+    const locationData = await locationResponse.json();
+    
+    weather.value = {
+      loading: false,
+      error: null,
+      location: locationData.address?.city || locationData.address?.town || locationData.address?.county || 'Current Location',
+      temperature: Math.round(current.temperature_2m),
+      feelsLike: Math.round(current.apparent_temperature),
+      description: getWeatherDescription(current.weather_code),
+      condition: getWeatherCondition(current.weather_code),
+      windSpeed: Math.round(current.wind_speed_10m),
+      humidity: current.relative_humidity_2m,
+      visibility: Math.round(current.visibility / 1000), // Convert to km
+      lastUpdate: new Date().toLocaleTimeString()
+    };
+    
+    console.log('[WEATHER] Data updated:', weather.value);
+  } catch (error) {
+    console.error('[WEATHER] Error fetching data:', error);
+    weather.value.loading = false;
+    weather.value.error = 'Unable to load weather data';
+  }
+};
+
+const refreshWeather = () => {
+  console.log('[WEATHER] Refreshing data...');
+  fetchWeather();
+};
+
+const getWeatherDescription = (code) => {
+  const descriptions = {
+    0: 'Clear Sky',
+    1: 'Mainly Clear',
+    2: 'Partly Cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Foggy',
+    51: 'Light Drizzle',
+    53: 'Drizzle',
+    55: 'Heavy Drizzle',
+    61: 'Light Rain',
+    63: 'Rain',
+    65: 'Heavy Rain',
+    71: 'Light Snow',
+    73: 'Snow',
+    75: 'Heavy Snow',
+    77: 'Snow Grains',
+    80: 'Light Showers',
+    81: 'Showers',
+    82: 'Heavy Showers',
+    85: 'Light Snow Showers',
+    86: 'Snow Showers',
+    95: 'Thunderstorm',
+    96: 'Thunderstorm with Hail',
+    99: 'Severe Thunderstorm'
+  };
+  return descriptions[code] || 'Unknown';
+};
+
+const getWeatherCondition = (code) => {
+  if (code === 0 || code === 1) return 'clear';
+  if (code === 2 || code === 3) return 'cloudy';
+  if (code >= 45 && code <= 48) return 'fog';
+  if (code >= 51 && code <= 67) return 'rain';
+  if (code >= 71 && code <= 86) return 'snow';
+  if (code >= 95) return 'storm';
+  return 'unknown';
+};
+
+const getWeatherEmoji = (condition) => {
+  const emojis = {
+    clear: '☀️',
+    cloudy: '☁️',
+    fog: '🌫️',
+    rain: '🌧️',
+    snow: '❄️',
+    storm: '⛈️'
+  };
+  return emojis[condition] || '🌤️';
+};
+
+const getRidingSafetyLevel = () => {
+  const temp = weather.value.temperature;
+  const wind = weather.value.windSpeed;
+  const condition = weather.value.condition;
+  
+  // Dangerous conditions
+  if (condition === 'storm' || condition === 'snow') return 'Dangerous';
+  if (wind > 40) return 'Dangerous';
+  
+  // Poor conditions
+  if (condition === 'rain' && wind > 25) return 'Poor';
+  if (temp < 10 || temp > 38) return 'Poor';
+  if (wind > 30) return 'Poor';
+  
+  // Fair conditions
+  if (condition === 'rain') return 'Fair';
+  if (condition === 'fog') return 'Fair';
+  if (wind > 20) return 'Fair';
+  
+  // Good conditions
+  return 'Excellent';
+};
+
+const getRidingSafetyColor = () => {
+  const level = getRidingSafetyLevel();
+  if (level === 'Dangerous') return 'bg-red-50 border-red-500';
+  if (level === 'Poor') return 'bg-orange-50 border-orange-500';
+  if (level === 'Fair') return 'bg-yellow-50 border-yellow-500';
+  return 'bg-green-50 border-green-500';
+};
+
+const getRidingSafetyIcon = () => {
+  const level = getRidingSafetyLevel();
+  if (level === 'Dangerous') return 'dangerous';
+  if (level === 'Poor') return 'warning';
+  if (level === 'Fair') return 'info';
+  return 'check_circle';
+};
+
+const getRidingSafetyIconColor = () => {
+  const level = getRidingSafetyLevel();
+  if (level === 'Dangerous') return 'text-red-600';
+  if (level === 'Poor') return 'text-orange-600';
+  if (level === 'Fair') return 'text-yellow-600';
+  return 'text-green-600';
+};
+
+const getRidingSafetyTextColor = () => {
+  const level = getRidingSafetyLevel();
+  if (level === 'Dangerous') return 'text-red-600';
+  if (level === 'Poor') return 'text-orange-600';
+  if (level === 'Fair') return 'text-yellow-600';
+  return 'text-green-600';
+};
+
+const getRidingSafetyMessage = () => {
+  const level = getRidingSafetyLevel();
+  if (level === 'Dangerous') return 'Not recommended to ride. Severe weather conditions.';
+  if (level === 'Poor') return 'Ride with extreme caution. Challenging conditions.';
+  if (level === 'Fair') return 'Acceptable conditions. Stay alert and ride carefully.';
+  return 'Perfect conditions for riding. Enjoy your trip!';
+};
+
+const getWeatherAlerts = () => {
+  const alerts = [];
+  const temp = weather.value.temperature;
+  const wind = weather.value.windSpeed;
+  const condition = weather.value.condition;
+  const visibility = weather.value.visibility;
+  
+  if (condition === 'rain') {
+    alerts.push({
+      type: 'rain',
+      icon: 'water_drop',
+      color: 'text-blue-600',
+      message: 'Wet roads - Reduce speed and increase following distance'
+    });
+  }
+  
+  if (condition === 'storm') {
+    alerts.push({
+      type: 'storm',
+      icon: 'thunderstorm',
+      color: 'text-red-600',
+      message: 'Thunderstorm warning - Seek shelter immediately'
+    });
+  }
+  
+  if (wind > 30) {
+    alerts.push({
+      type: 'wind',
+      icon: 'air',
+      color: 'text-orange-600',
+      message: `Strong winds (${wind} km/h) - Maintain firm grip on handlebars`
+    });
+  }
+  
+  if (temp > 35) {
+    alerts.push({
+      type: 'heat',
+      icon: 'wb_sunny',
+      color: 'text-orange-600',
+      message: 'High temperature - Stay hydrated and take breaks'
+    });
+  }
+  
+  if (temp < 15) {
+    alerts.push({
+      type: 'cold',
+      icon: 'ac_unit',
+      color: 'text-blue-600',
+      message: 'Cold weather - Wear appropriate gear and warm up engine'
+    });
+  }
+  
+  if (visibility < 5) {
+    alerts.push({
+      type: 'visibility',
+      icon: 'visibility_off',
+      color: 'text-yellow-600',
+      message: 'Low visibility - Use headlights and reduce speed'
+    });
+  }
+  
+  if (condition === 'fog') {
+    alerts.push({
+      type: 'fog',
+      icon: 'cloud',
+      color: 'text-gray-600',
+      message: 'Foggy conditions - Use fog lights and ride slowly'
+    });
+  }
+  
+  return alerts;
 };
 
 // Cleanup on component unmount
