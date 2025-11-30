@@ -868,7 +868,8 @@ let crashInterval = null;
 let flashCount = 0;
 let lastCrashTimestamp = null;
 
-const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
+// ✅ FIXED: Use authenticated user's UID dynamically
+const userId = computed(() => authStore.user?.uid || null);
 
 // Sensor Data Tracking
 const sensorData = ref({
@@ -1079,39 +1080,36 @@ watch([helmetPaired, motorcyclePaired], ([newHelmet, newMotorcycle], [oldHelmet,
   console.log(`🔍 [WATCHER] Rider Status updated to: ${riderStatus.value} - ${riderSubtitle.value}`);
 });
 
-// Firebase References
-const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
-const helmetRef = dbRef(database, `helmet_public/${userId}/helmetStatus/status`);
-const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
-const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
-const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol/status`);
-const speedLimitRef = dbRef(database, `helmet_public/${userId}/settings/speedLimit`);
+// ✅ FIXED: Firebase References - now reactive based on authenticated user
+const helmetPublicRef = computed(() => userId.value ? dbRef(database, `helmet_public/${userId.value}`) : null);
+const helmetRef = computed(() => userId.value ? dbRef(database, `helmet_public/${userId.value}/helmetStatus/status`) : null);
+const tripsRef = computed(() => userId.value ? dbRef(database, `helmet_public/${userId.value}/trips`) : null);
+const crashRef = computed(() => userId.value ? dbRef(database, `helmet_public/${userId.value}/crashes`) : null);
+const alcoholRef = computed(() => userId.value ? dbRef(database, `helmet_public/${userId.value}/alcohol/status`) : null);
+const speedLimitRef = computed(() => userId.value ? dbRef(database, `helmet_public/${userId.value}/settings/speedLimit`) : null);
 
 // ✅ Track app start time to ignore old crashes
 const appStartTime = ref(Date.now());
 
-onMounted(() => {
-  // ✅ Set app start time when component mounts
-  appStartTime.value = Date.now();
-  console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
+// ✅ FIXED: Setup Firebase listeners only when user is authenticated
+const setupFirebaseListeners = () => {
+  if (!userId.value) {
+    console.warn('[INIT] No user ID available, skipping Firebase setup');
+    return;
+  }
   
-  // ✅ Load alert dismissal time
-  loadDismissalTime();
+  console.log('[INIT] Setting up Firebase listeners for user:', userId.value);
   
-  const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
+  const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId.value}`);
   if (storedLastCrashTime) lastCrashTimestamp = parseInt(storedLastCrashTime);
-  
-  // ✅ Initialize rider status as Inactive until devices connect
-  riderStatus.value = 'Inactive';
-  riderSubtitle.value = 'Waiting for device connection...';
 
-  onValue(speedLimitRef, (snapshot) => {
+  onValue(speedLimitRef.value, (snapshot) => {
     const data = snapshot.val();
     if (data !== null) speedLimit.value = data;
   });
 
   // ✅ STABLE: Listen for helmet pairing status with proper debouncing
-  const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
+  const helmetStatusRef = dbRef(database, `helmet_public/${userId.value}/devices/helmet`);
   onValue(helmetStatusRef, (snapshot) => {
     const data = snapshot.val();
     
@@ -1168,7 +1166,7 @@ onMounted(() => {
   });
 
   // ✅ STABLE: Listen for motorcycle pairing status with proper debouncing
-  const motorcycleStatusRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
+  const motorcycleStatusRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
   onValue(motorcycleStatusRef, (snapshot) => {
     const data = snapshot.val();
     
@@ -1225,7 +1223,7 @@ onMounted(() => {
   });
 
   // Listen for device health
-  const deviceHealthRef = dbRef(database, `helmet_public/${userId}/deviceHealth`);
+  const deviceHealthRef = dbRef(database, `helmet_public/${userId.value}/deviceHealth`);
   onValue(deviceHealthRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -1236,7 +1234,7 @@ onMounted(() => {
   });
 
   // Listen for electrical diagnostics
-  const electricalRef = dbRef(database, `helmet_public/${userId}/electrical`);
+  const electricalRef = dbRef(database, `helmet_public/${userId.value}/electrical`);
   onValue(electricalRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -1263,7 +1261,7 @@ onMounted(() => {
   initializeCrashListener();
 
   // ✅ Listen for SOS alerts from Emergency Contact
-  const sosRef = dbRef(database, `helmet_public/${userId}/sos`);
+  const sosRef = dbRef(database, `helmet_public/${userId.value}/sos`);
   onChildAdded(sosRef, (snapshot) => {
     const sosData = snapshot.val();
     if (!sosData) return;
@@ -1589,6 +1587,36 @@ onMounted(() => {
 
   // ✅ NEW: Listen for anti-theft alerts
   setupAntiTheftListener();
+};
+
+// ✅ FIXED: Wait for user authentication before setting up Firebase
+onMounted(() => {
+  // ✅ Set app start time when component mounts
+  appStartTime.value = Date.now();
+  console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
+  
+  // ✅ Load alert dismissal time
+  loadDismissalTime();
+  
+  // ✅ Initialize rider status as Inactive until devices connect
+  riderStatus.value = 'Inactive';
+  riderSubtitle.value = 'Waiting for device connection...';
+  
+  // ✅ Watch for user authentication and setup Firebase listeners
+  watch(userId, (newUserId, oldUserId) => {
+    if (newUserId && newUserId !== oldUserId) {
+      console.log('[AUTH] User authenticated:', newUserId);
+      setupFirebaseListeners();
+    } else if (!newUserId && oldUserId) {
+      console.log('[AUTH] User logged out');
+      // Clear data when user logs out
+      alerts.value = [];
+      recentTrips.value = [];
+      crashEvents.value = [];
+      riderStatus.value = 'Inactive';
+      riderSubtitle.value = 'Not logged in';
+    }
+  }, { immediate: true });
 });
 
 // Show/Hide Alerts Panel
@@ -1598,16 +1626,18 @@ const toggleAlerts = () => {
 
 // Update speed limit in Firebase
 const updateSpeedLimitInFirebase = () => {
-  set(dbRef(database, `helmet_public/${userId}/settings/speedLimit`), speedLimit.value).catch(error => {
+  if (!userId.value) return;
+  set(dbRef(database, `helmet_public/${userId.value}/settings/speedLimit`), speedLimit.value).catch(error => {
     console.error("Failed to update speed limit:", error);
   });
 };
 
 // Delete a trip by ID
 const deleteTrip = async (tripId) => {
+  if (!userId.value) return;
   const confirmDelete = confirm("Are you sure you want to delete this trip?");
   if (!confirmDelete) return;
-  const tripRef = dbRef(database, `helmet_public/${userId}/trips/${tripId}`);
+  const tripRef = dbRef(database, `helmet_public/${userId.value}/trips/${tripId}`);
   try {
     await remove(tripRef);
     recentTrips.value = recentTrips.value.filter(trip => trip.id !== tripId);
@@ -1629,7 +1659,7 @@ const clearCrashAlert = (index) => {
   if (event) {
     console.log('[CRASH] Clearing crash alert for event:', event);
     lastCrashTimestamp = event.timestamp;
-    localStorage.setItem(`lastCrashTimestamp_${userId}`, event.timestamp.toString());
+    localStorage.setItem(`lastCrashTimestamp_${userId.value}`, event.timestamp.toString());
     
     // Stop any ongoing crash animation
     if (crashInterval) {
@@ -1646,7 +1676,7 @@ const clearCrashAlert = (index) => {
 };
 
 // ✅ Track dismissed alerts in localStorage
-const dismissedAlertsKey = `dismissedAlerts_${userId}`;
+const dismissedAlertsKey = `dismissedAlerts_${userId.value}`;
 const alertDismissalTime = ref(0); // Start at 0 to show all alerts initially
 
 // Load dismissed alerts timestamp from localStorage
@@ -1729,7 +1759,7 @@ const deleteCrashEvent = async (index) => {
     crashEvents.value.splice(index, 1);
     
     // Also delete from Firebase to prevent it from reappearing
-    const crashesRef = dbRef(database, `helmet_public/${userId}/crashes`);
+    const crashesRef = dbRef(database, `helmet_public/${userId.value}/crashes`);
     const snapshot = await get(crashesRef);
     
     if (snapshot.exists()) {
@@ -1737,7 +1767,7 @@ const deleteCrashEvent = async (index) => {
       // Find and delete the crash with matching timestamp
       for (const [key, crash] of Object.entries(crashes)) {
         if (crash.timestamp === event.timestamp) {
-          await remove(dbRef(database, `helmet_public/${userId}/crashes/${key}`));
+          await remove(dbRef(database, `helmet_public/${userId.value}/crashes/${key}`));
           console.log('[CRASH] ✓ Deleted crash from Firebase:', key);
           break;
         }
@@ -1794,7 +1824,7 @@ const startGPSSpeedMonitoring = () => {
       }
       
       // Update Firebase with GPS phone data
-      const locationRef = dbRef(database, `helmet_public/${userId}/live`);
+      const locationRef = dbRef(database, `helmet_public/${userId.value}/live`);
       set(locationRef, {
         locationLat: lat,
         locationLng: lng,
@@ -1918,7 +1948,7 @@ const handleLocationUpdate = async (newLocation) => {
   
   // Update location in Firebase
   try {
-    const locationRef = dbRef(database, `helmet_public/${userId}/live`);
+    const locationRef = dbRef(database, `helmet_public/${userId.value}/live`);
     await set(locationRef, {
       locationLat: newLocation.lat,
       locationLng: newLocation.lng,
@@ -1958,7 +1988,7 @@ const triggerSOS = async () => {
     });
     
     // Log SOS event to Firebase
-    const sosRef = dbRef(database, `helmet_public/${userId}/sos/${Date.now()}`);
+    const sosRef = dbRef(database, `helmet_public/${userId.value}/sos/${Date.now()}`);
     await set(sosRef, {
       timestamp: Date.now(),
       location: {
@@ -1978,7 +2008,7 @@ const triggerSOS = async () => {
 
 // Initialize crash event listener
 const initializeCrashListener = () => {
-  console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId}/crashes`);
+  console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId.value}/crashes`);
   console.log('[INIT] App start time:', new Date(appStartTime.value).toLocaleString());
   
   onChildAdded(crashRef, (snapshot) => {
@@ -2059,7 +2089,7 @@ const initializeCrashListener = () => {
     if (!lastCrashTimestamp || eventTime !== lastCrashTimestamp) {
       console.log('[CRASH] ✓ New crash detected, triggering animation...');
       lastCrashTimestamp = eventTime;
-      localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
+      localStorage.setItem(`lastCrashTimestamp_${userId.value}`, eventTime.toString());
       flashCrashMessage();
       playSound();
     } else {
@@ -2075,7 +2105,7 @@ const setupDeviceListeners = () => {
   console.log('[DEVICE LISTENERS] Setting up real-time device status monitoring...');
   
   // ✅ Helmet real-time listener
-  const helmetRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
+  const helmetRef = dbRef(database, `helmet_public/${userId.value}/devices/helmet`);
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
     console.log('[HELMET] Firebase update received:', data);
@@ -2098,7 +2128,7 @@ const setupDeviceListeners = () => {
   }); // ✅ NO onlyOnce - listen continuously for real-time updates!
   
   // ✅ Motorcycle real-time listener
-  const motorcycleRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
+  const motorcycleRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
   onValue(motorcycleRef, (snapshot) => {
     const data = snapshot.val();
     console.log('[MOTORCYCLE] Firebase update received:', data);
@@ -2178,7 +2208,7 @@ const toggleEngine = async () => {
     }
 
     // Toggle the button state in Firebase
-    const buttonRef = dbRef(database, `${userId}/engineControl/startButton`);
+    const buttonRef = dbRef(database, `${userId.value}/engineControl/startButton`);
     await set(buttonRef, true);
     
     console.log('[ENGINE] Button press sent to Firebase');
@@ -2201,7 +2231,7 @@ const toggleAutoControl = async () => {
     autoEngineControl.value = !autoEngineControl.value;
     
     // Send auto control setting to Firebase
-    const autoRef = dbRef(database, `${userId}/engineControl/autoMode`);
+    const autoRef = dbRef(database, `${userId.value}/engineControl/autoMode`);
     await set(autoRef, autoEngineControl.value);
     
     console.log('[ENGINE] Auto control set to:', autoEngineControl.value);
@@ -2223,12 +2253,12 @@ const syncEngineStatus = async () => {
   
   // Check multiple Firebase paths for engine status
   const pathsToCheck = [
-    `helmet_public/${userId}/live/engineRunning`,
-    `${userId}/engineControl/engineRunning`, 
-    `helmet_public/${userId}/engineRunning`,
-    `${userId}/live/engineRunning`,
-    `helmet_public/${userId}/live`,
-    `${userId}/engineControl`
+    `helmet_public/${userId.value}/live/engineRunning`,
+    `${userId.value}/engineControl/engineRunning`, 
+    `helmet_public/${userId.value}/engineRunning`,
+    `${userId.value}/live/engineRunning`,
+    `helmet_public/${userId.value}/live`,
+    `${userId.value}/engineControl`
   ];
   
   for (const path of pathsToCheck) {
@@ -2258,7 +2288,7 @@ const syncEngineStatus = async () => {
   
   // Also sync alcohol status
   try {
-    const alcoholRef = dbRef(database, `${userId}/alcohol/status/status`);
+    const alcoholRef = dbRef(database, `${userId.value}/alcohol/status/status`);
     const alcoholSnapshot = await get(alcoholRef);
     const alcoholData = alcoholSnapshot.val();
     
@@ -2278,10 +2308,10 @@ const syncEngineStatus = async () => {
 const setupEngineStatusListener = () => {
   // Monitor engine running status from multiple possible paths
   const enginePaths = [
-    `helmet_public/${userId}/live/engineRunning`,
-    `${userId}/engineControl/engineRunning`,
-    `helmet_public/${userId}/engineRunning`,
-    `${userId}/live/engineRunning`
+    `helmet_public/${userId.value}/live/engineRunning`,
+    `${userId.value}/engineControl/engineRunning`,
+    `helmet_public/${userId.value}/engineRunning`,
+    `${userId.value}/live/engineRunning`
   ];
   
   // Try each path and use the first one that has data
@@ -2297,7 +2327,7 @@ const setupEngineStatusListener = () => {
   });
   
   // Monitor alcohol detection status
-  const alcoholRef = dbRef(database, `${userId}/alcohol/status/status`);
+  const alcoholRef = dbRef(database, `${userId.value}/alcohol/status/status`);
   onValue(alcoholRef, (snapshot) => {
     const data = snapshot.val();
     if (data !== null) {
@@ -2308,7 +2338,7 @@ const setupEngineStatusListener = () => {
   });
   
   // Monitor auto control setting
-  const autoRef = dbRef(database, `${userId}/engineControl/autoMode`);
+  const autoRef = dbRef(database, `${userId.value}/engineControl/autoMode`);
   onValue(autoRef, (snapshot) => {
     const data = snapshot.val();
     if (data !== null) {
@@ -2357,7 +2387,7 @@ const setupAntiTheftListener = () => {
   console.log('[ANTI-THEFT] Setting up alert listener...');
   
   // Listen for anti-theft status
-  const antiTheftStatusRef = dbRef(database, `${userId}/antiTheft/status`);
+  const antiTheftStatusRef = dbRef(database, `${userId.value}/antiTheft/status`);
   onValue(antiTheftStatusRef, (snapshot) => {
     const data = snapshot.val();
     if (data && data.alertActive) {
@@ -2390,7 +2420,7 @@ const setupAntiTheftListener = () => {
   });
   
   // Listen for theft alert events (from logTheftToFirebase)
-  const theftAlertsRef = dbRef(database, `helmet_public/${userId}/theft_alerts`);
+  const theftAlertsRef = dbRef(database, `helmet_public/${userId.value}/theft_alerts`);
   onChildAdded(theftAlertsRef, (snapshot) => {
     const alert = snapshot.val();
     console.log('[ANTI-THEFT] New theft alert event:', alert);
