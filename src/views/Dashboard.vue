@@ -584,6 +584,12 @@
             </span>
           </span>
           <div class="flex gap-2">
+            <!-- ✅ NEW: Stop Sound Button -->
+            <button v-if="showStopSoundButton" @click="stopSound"
+              class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 animate-pulse">
+              <span class="material-icons text-lg mr-2">volume_off</span>
+              Stop Sound
+            </button>
             <button v-if="alerts.length > 0" @click="clearAllAlerts"
               class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
               Clear All
@@ -791,6 +797,18 @@
         </button>
       </div>
     </div>
+
+    <!-- ✅ NEW: Floating Stop Sound Button -->
+    <div v-if="showStopSoundButton" 
+         class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[9999]">
+      <button @click="stopSound"
+              class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-8 py-4 rounded-full shadow-2xl hover:from-orange-600 hover:to-red-600 transition-all duration-300 transform hover:scale-110 animate-pulse border-4 border-white">
+        <div class="flex items-center gap-3">
+          <span class="material-icons text-2xl">volume_off</span>
+          <span class="font-bold text-lg">Stop Alert Sound</span>
+        </div>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -831,6 +849,7 @@ const recentTrips = ref([]);
 const crashEvents = ref([]);
 const isOverSpeed = ref(false);
 const showAlerts = ref(true);
+const showStopSoundButton = ref(false);  // ✅ NEW: Control stop sound button visibility
 
 // New states for enhanced features
 // ✅ STABLE states (used for display - debounced)
@@ -992,16 +1011,46 @@ const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
   return `https://www.google.com/maps/dir/?api=1&origin=${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
 };
 
-// Play alert sound
+// ✅ ENHANCED: Audio control with stop functionality
+let currentAudio = null;
+
 const playSound = () => {
   try {
-    const audio = new Audio('/sounds/alert.mp3');
-    audio.play().catch(err => {
+    // Stop any currently playing audio
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    }
+    
+    // Create and play new audio
+    currentAudio = new Audio('/sounds/alert.mp3');
+    currentAudio.play().catch(err => {
       console.warn("Audio playback failed:", err);
     });
+    
+    // Show stop button when audio starts
+    showStopSoundButton.value = true;
+    
+    // Auto-hide stop button when audio ends
+    currentAudio.addEventListener('ended', () => {
+      showStopSoundButton.value = false;
+      currentAudio = null;
+    });
+    
   } catch (err) {
     console.error("Error creating audio object:", err);
   }
+};
+
+// ✅ NEW: Stop sound function
+const stopSound = () => {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  showStopSoundButton.value = false;
+  console.log('[AUDIO] Sound stopped by user');
 };
 
 // Flash Crash Message
@@ -2192,10 +2241,20 @@ const checkDeviceTimeouts = () => {
   }
 };
 
+// ✅ NEW: Keyboard shortcut handler
+const handleKeyPress = (event) => {
+  if (event.key === 'Escape' && showStopSoundButton.value) {
+    stopSound();
+  }
+};
+
 onMounted(() => {
   // ✅ Set app start time when component mounts
   appStartTime.value = Date.now();
   console.log('[INIT] App started at:', new Date(appStartTime.value).toLocaleString());
+  
+  // ✅ NEW: Add keyboard shortcut to stop sound (Escape key)
+  document.addEventListener('keydown', handleKeyPress);
   
   // ✅ Load alert dismissal time
   loadDismissalTime();
@@ -2739,6 +2798,13 @@ const getWeatherAlerts = () => {
 
 // Cleanup on component unmount
 onBeforeUnmount(() => {
+  // ✅ NEW: Cleanup audio and keyboard event listener
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  document.removeEventListener('keydown', handleKeyPress);
+  
   // Stop GPS monitoring if active
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
