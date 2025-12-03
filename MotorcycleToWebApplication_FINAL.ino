@@ -62,6 +62,24 @@ float currentSpeed = 0.0;
 unsigned long lastGPSUpdate = 0;
 const unsigned long GPS_UPDATE_INTERVAL = 500;  // Update every 500ms
 
+// ✅ NEW: Trip tracking
+struct TripData {
+  double fromLat = 0.0;
+  double fromLng = 0.0;
+  double toLat = 0.0;
+  double toLng = 0.0;
+  uint64_t startTime = 0;
+  uint64_t endTime = 0;
+  float maxSpeed = 0.0;
+  float totalDistance = 0.0;
+  bool isActive = false;
+  bool hasValidStart = false;
+};
+
+TripData currentTrip;
+double lastValidLat = 0.0;
+double lastValidLng = 0.0;
+
 // Crash detection timing
 unsigned long lastCrashTime = 0;
 const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for faster re-detection
@@ -70,17 +88,29 @@ const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for fast
 bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
-const unsigned long ALCOHOL_CHECK_INTERVAL = 500;
+const unsigned long ALCOHOL_CHECK_INTERVAL = 250;  // Check every 250ms
 
-// ✅ NEW: Helmet connection detection
+// ✅ ENHANCED: Comprehensive security system with 5-second timeouts
 bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
-const unsigned long HELMET_CHECK_INTERVAL = 1000;  // Check every 1 second
+const unsigned long HELMET_CHECK_INTERVAL = 500;  // Check every 500ms
 uint64_t lastHelmetHeartbeat = 0;  // Track last helmet heartbeat time
-const unsigned long HELMET_TIMEOUT = 3000;  // Consider disconnected after 3 seconds
+const unsigned long HELMET_TIMEOUT = 5000;  // ✅ 5-second timeout for helmet
 const unsigned long HELMET_FORCE_OFF_TIMEOUT = 10000;  // Force status to Off after 10 seconds
 unsigned long lastHelmetUpdateTime = 0;  // Track when we last saw an update
 bool helmetStatusForcedOff = false;  // Track if we forced the status to Off
+
+// ✅ NEW: WiFi connection monitoring for security
+unsigned long lastWiFiCheck = 0;
+unsigned long lastWiFiConnected = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 1000;  // Check WiFi every 1 second
+const unsigned long WIFI_TIMEOUT = 5000;  // ✅ 5-second WiFi timeout
+bool wifiSecurityEnabled = true;
+
+// ✅ NEW: Comprehensive security state
+bool securitySystemActive = true;
+unsigned long lastSecurityCheck = 0;
+const unsigned long SECURITY_CHECK_INTERVAL = 500;  // Check security every 500ms
 
 // Automatic engine control
 bool autoEngineControl = false;
@@ -89,11 +119,27 @@ bool engineStartRequested = false;
 // Dashboard button control
 bool lastDashboardButtonState = false;
 unsigned long lastButtonCheck = 0;
-const unsigned long BUTTON_CHECK_INTERVAL = 50;  // ✅ FIX: Check every 50ms for faster response
+const unsigned long BUTTON_CHECK_INTERVAL = 100;  // Check every 100ms
 
 // Device heartbeat
 unsigned long lastHeartbeat = 0;
 const unsigned long HEARTBEAT_INTERVAL = 1000;  // 1 second
+
+// ✅ NEW: Network security timeouts
+unsigned long lastWiFiConnection = 0;
+unsigned long lastFirebaseSuccess = 0;
+const unsigned long NETWORK_TIMEOUT = 30000;  // 30 seconds without network = auto shutdown
+const unsigned long FIREBASE_TIMEOUT = 60000;  // 60 seconds without Firebase = auto shutdown
+bool networkSecurityEnabled = true;
+bool systemInSecureMode = false;
+
+// ✅ NEW: Real-time monitoring intervals
+unsigned long lastRealtimeUpdate = 0;
+const unsigned long REALTIME_INTERVAL = 250;  // 250ms = 4 times per second
+unsigned long lastSensorPrint = 0;
+const unsigned long SENSOR_PRINT_INTERVAL = 500;  // 500ms sensor readings
+unsigned long lastQuickStatus = 0;
+const unsigned long QUICK_STATUS_INTERVAL = 1000;  // 1 second quick status
 
 // Anti-theft system
 bool antiTheftEnabled = false;
@@ -106,7 +152,7 @@ bool theftAlertSent = false;
 int theftDetectionCount = 0;
 const int THEFT_DETECTION_REQUIRED = 1;  // ✅ Immediate alert on first detection
 unsigned long lastVibrationTime = 0;
-const unsigned long VIBRATION_DEBOUNCE = 50;  // ✅ Fast response
+const unsigned long VIBRATION_DEBOUNCE = 10;  // ✅ Ultra-fast response (10ms)
 
 // Escalating buzzer alert system
 int consecutiveVibrations = 0;
@@ -120,6 +166,13 @@ const String buttonPath = "/" + userUID + "/engineControl/startButton.json?auth=
 const String livePath = "/helmet_public/" + userUID + "/live.json?auth=" + firebaseAuth;
 const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?auth=" + firebaseAuth;
 
+// ✅ NEW: Function declarations for security system
+void checkComprehensiveSecurity();
+void triggerSecurityShutdown(String reason);
+void checkPhysicalKeyWithSecurity();
+void logSecurityEventToFirebase(String eventType);
+void printSecurityStatus();
+
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -130,6 +183,8 @@ void setup() {
   Serial.println("║ ⚡ 1s heartbeat                        ║");
   Serial.println("║ ✅ Dashboard synchronized              ║");
   Serial.println("║ ✅ All features enabled                ║");
+  Serial.println("║ 🔒 5-second security timeouts          ║");
+  Serial.println("║ 🛡️ Comprehensive theft protection     ║");
   Serial.println("╚════════════════════════════════════════╝\n");
 
   // Initialize MPU6050
@@ -182,10 +237,20 @@ void setup() {
   Serial.println("\n📋 SERIAL COMMANDS:");
   Serial.println("   START ENGINE / STOP ENGINE");
   Serial.println("   ARM THEFT / DISARM THEFT");
+  Serial.println("   SECURITY ON / SECURITY OFF");
+  Serial.println("   SECURITY STATUS");
+  Serial.println("   TEST VIBRATION");
+  Serial.println("   MONITOR (10s real-time data)");
   Serial.println("   STATUS\n");
 }
 
 void loop() {
+  // ✅ ENHANCED: Comprehensive security monitoring (5-second timeouts)
+  if (millis() - lastSecurityCheck >= SECURITY_CHECK_INTERVAL) {
+    checkComprehensiveSecurity();
+    lastSecurityCheck = millis();
+  }
+  
   // ✅ NEW: Read GPS data continuously for real-time speed
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
@@ -199,12 +264,23 @@ void loop() {
     lastGPSUpdate = millis();
   }
   
-  // ✅ NEW: Monitor physical key switch
-  checkPhysicalKey();
+  // ✅ NEW: Update trip data continuously
+  updateTripData();
+  
+  // ✅ ENHANCED: Monitor physical key switch (with comprehensive security)
+  if (securitySystemActive) {
+    checkPhysicalKeyWithSecurity();
+  } else {
+    checkPhysicalKey();  // Fallback to basic key monitoring
+  }
   
   // Send heartbeat every 1 second
   if (millis() - lastHeartbeat >= HEARTBEAT_INTERVAL) {
-    sendMotorcycleHeartbeat(true);
+    bool heartbeatSent = sendMotorcycleHeartbeat(true);
+    if (heartbeatSent) {
+      lastFirebaseSuccess = millis();
+      lastWiFiConnected = millis();  // ✅ Track successful WiFi communication
+    }
     lastHeartbeat = millis();
   }
 
@@ -238,6 +314,70 @@ void loop() {
     }
     else if (cmd == "CRASH") {
       triggerCrashShutdown(20.0, 45.0);
+    }
+    else if (cmd == "SECURITY ON") {
+      securitySystemActive = true;
+      Serial.println("✅ Comprehensive security ENABLED!");
+      Serial.println("🔒 5-second timeout protection active");
+    }
+    else if (cmd == "SECURITY OFF") {
+      securitySystemActive = false;
+      systemInSecureMode = false;
+      Serial.println("⚠️ Comprehensive security DISABLED!");
+      Serial.println("⚠️ WARNING: Vehicle is now vulnerable to theft!");
+    }
+    else if (cmd == "SECURITY STATUS") {
+      printSecurityStatus();
+    }
+    else if (cmd == "TEST VIBRATION") {
+      Serial.println("🧪 TESTING VIBRATION SENSOR...");
+      int reading = digitalRead(vibrationSensorPin);
+      Serial.printf("📍 GPIO %d current reading: %d\n", vibrationSensorPin, reading);
+      Serial.printf("🛡️ Anti-theft armed: %s\n", antiTheftArmed ? "YES" : "NO");
+      Serial.printf("🛡️ Anti-theft enabled: %s\n", antiTheftEnabled ? "YES" : "NO");
+      
+      // Force trigger for testing
+      if (antiTheftArmed) {
+        Serial.println("🚨 FORCE TRIGGERING VIBRATION ALERT!");
+        consecutiveVibrations++;
+        Serial.printf("🚨 [TEST] VIBRATION DETECTED #%d!\n", consecutiveVibrations);
+        
+        // Test buzzer
+        for (int i = 0; i < 3; i++) {
+          digitalWrite(buzzerPin, HIGH);
+          digitalWrite(lightIndicatorPin, HIGH);
+          delay(200);
+          digitalWrite(buzzerPin, LOW);
+          digitalWrite(lightIndicatorPin, LOW);
+          delay(200);
+        }
+      } else {
+        Serial.println("⚠️ Anti-theft not armed - cannot test");
+      }
+    }
+    else if (cmd == "MONITOR") {
+      Serial.println("📊 REAL-TIME MONITORING MODE (10 seconds)");
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      unsigned long monitorStart = millis();
+      while (millis() - monitorStart < 10000) {  // 10 seconds
+        // Read all sensors
+        mpu.getEvent(&accel, &gyro, &temp);
+        float totalAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
+                               accel.acceleration.y * accel.acceleration.y +
+                               accel.acceleration.z * accel.acceleration.z);
+        float roll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+        int vibration = digitalRead(vibrationSensorPin);
+        int physicalKey = digitalRead(physicalKeyPin);
+        
+        Serial.printf("[LIVE] Accel:%.1fg Roll:%.1f° Vib:%d Key:%d Speed:%.1fkph WiFi:%s\n",
+                      totalAccel, roll, vibration, physicalKey, currentSpeed,
+                      WiFi.status() == WL_CONNECTED ? "OK" : "FAIL");
+        
+        delay(200);  // 5 times per second
+      }
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      Serial.println("📊 MONITORING COMPLETE");
     }
   }
 
@@ -296,11 +436,8 @@ void loop() {
     lastHelmetCheck = millis();
   }
   
-  // ✅ NEW: Auto-shutdown if helmet disconnects while engine running
-  if (engineRunning && !helmetConnected) {
-    Serial.println("\n🚨 AUTO-SHUTDOWN: Helmet disconnected!");
-    stopEngine();
-  }
+  // ✅ ENHANCED: Auto-shutdown logic is now handled in checkComprehensiveSecurity()
+  // This ensures consistent 5-second timeout enforcement
 
   // Alcohol monitoring
   if (millis() - lastAlcoholCheck > ALCOHOL_CHECK_INTERVAL) {
@@ -326,23 +463,28 @@ void loop() {
     digitalWrite(relayPin, LOW);  // LOW = OFF for ACTIVE-HIGH relay
   }
 
-  // Status monitoring with MPU6050 readings
-  static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 5000) {
-    Serial.printf("[STATUS] Engine:%s | Relay:%s | AntiTheft:%s\n",
-                  engineRunning ? "RUN" : "STOP",
-                  digitalRead(relayPin) ? "ON" : "OFF",
-                  antiTheftArmed ? "ARMED" : "DISARMED");
-    Serial.printf("[MPU6050] Accel: %.2f g | Lean: %.1f° | Reading continuously\n", 
-                  currentTotalAccel, abs(currentRoll));
-    lastPrint = millis();
+  // ✅ REAL-TIME: Fast sensor monitoring every 500ms
+  if (millis() - lastSensorPrint > SENSOR_PRINT_INTERVAL) {
+    Serial.printf("[SENSORS] Accel: %.2f g | Lean: %.1f° | Speed: %.1f kph | Vibration: %d\n", 
+                  currentTotalAccel, abs(currentRoll), currentSpeed, digitalRead(vibrationSensorPin));
+    lastSensorPrint = millis();
   }
 
-  // Firebase updates
-  static unsigned long lastFirebaseUpdate = 0;
-  if (millis() - lastFirebaseUpdate > 2000) {
+  // ✅ QUICK STATUS: System status every 1 second
+  if (millis() - lastQuickStatus > QUICK_STATUS_INTERVAL) {
+    Serial.printf("[STATUS] Engine:%s | Relay:%s | Helmet:%s | Alcohol:%s | Security:%s\n",
+                  engineRunning ? "RUN" : "STOP",
+                  digitalRead(relayPin) ? "ON" : "OFF",
+                  helmetConnected ? "CONN" : "DISC",
+                  alcoholDetected ? "DANGER" : "SAFE",
+                  systemInSecureMode ? "SECURE" : "NORMAL");
+    lastQuickStatus = millis();
+  }
+
+  // ✅ REAL-TIME: Firebase updates every 250ms for faster dashboard response
+  if (millis() - lastRealtimeUpdate > REALTIME_INTERVAL) {
     sendLiveToFirebase();
-    lastFirebaseUpdate = millis();
+    lastRealtimeUpdate = millis();
   }
 
   // ✅ FIX: Remove delay for faster crash detection
@@ -350,8 +492,8 @@ void loop() {
   yield();  // Allow WiFi/system tasks to run
 }
 
-void sendMotorcycleHeartbeat(bool isActive) {
-  if (WiFi.status() != WL_CONNECTED) return;
+bool sendMotorcycleHeartbeat(bool isActive) {
+  if (WiFi.status() != WL_CONNECTED) return false;
 
   uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
   
@@ -372,14 +514,28 @@ void sendMotorcycleHeartbeat(bool isActive) {
   
   if (code == HTTP_CODE_OK) {
     Serial.printf("[HEARTBEAT] ✓ Sent (timestamp: %llu)\n", timestamp);
+    return true;
   } else {
     Serial.printf("[HEARTBEAT] ✗ Failed: HTTP %d\n", code);
+    return false;
   }
   
   http.end();
+  return false;
 }
 
 void handleAntiTheftWithVibrationSensor() {
+  // ✅ FAST DEBUG: Show current sensor reading every 500ms
+  static unsigned long lastSensorDebug = 0;
+  if (millis() - lastSensorDebug > 500) {
+    int currentReading = digitalRead(vibrationSensorPin);
+    Serial.printf("[VIBRATION] Pin %d = %d | Armed: %s | Enabled: %s\n", 
+                  vibrationSensorPin, currentReading,
+                  antiTheftArmed ? "YES" : "NO",
+                  antiTheftEnabled ? "YES" : "NO");
+    lastSensorDebug = millis();
+  }
+
   if (!antiTheftEnabled) {
     antiTheftEnabled = true;
     engineOffTime = millis();
@@ -394,6 +550,7 @@ void handleAntiTheftWithVibrationSensor() {
     theftAlertSent = false;
     consecutiveVibrations = 0;
     Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Vibration sensor active...");
+    Serial.printf("[ANTI-THEFT] 📍 Monitoring GPIO %d for HIGH signals\n", vibrationSensorPin);
     
     // Short beep to confirm arming
     for (int i = 0; i < 2; i++) {
@@ -407,26 +564,34 @@ void handleAntiTheftWithVibrationSensor() {
   if (antiTheftArmed) {
     int vibrationDetected = digitalRead(vibrationSensorPin);
     
+    // ✅ ENHANCED: More sensitive detection
     if (vibrationDetected == HIGH) {
       unsigned long timeSinceLastVibration = millis() - lastVibrationTime;
       
-      // ✅ FIX: Immediate response with debounce
+      // ✅ ULTRA-FAST: Reduced debounce to 10ms
       if (timeSinceLastVibration >= VIBRATION_DEBOUNCE) {
         theftDetectionCount++;
         consecutiveVibrations++;
         lastVibrationTime = millis();
         
-        Serial.printf("\n🚨 [ANTI-THEFT] VIBRATION DETECTED #%d!\n", consecutiveVibrations);
+        Serial.printf("\n🚨🚨 [ANTI-THEFT] VIBRATION DETECTED #%d! 🚨🚨\n", consecutiveVibrations);
+        Serial.printf("[ANTI-THEFT] 📍 GPIO %d went HIGH!\n", vibrationSensorPin);
 
-        // ✅ ALWAYS trigger buzzer immediately on ANY vibration
-        int buzzerCount = 10;  // Loud alert
-        for (int i = 0; i < buzzerCount; i++) {
+        // ✅ IMMEDIATE buzzer response
+        digitalWrite(buzzerPin, HIGH);
+        digitalWrite(lightIndicatorPin, HIGH);
+        delay(200);  // Longer initial beep
+        digitalWrite(buzzerPin, LOW);
+        digitalWrite(lightIndicatorPin, LOW);
+        
+        // ✅ Additional alert sequence
+        for (int i = 0; i < 5; i++) {
           digitalWrite(buzzerPin, HIGH);
           digitalWrite(lightIndicatorPin, HIGH);
-          delay(50);
+          delay(100);
           digitalWrite(buzzerPin, LOW);
           digitalWrite(lightIndicatorPin, LOW);
-          delay(50);
+          delay(100);
         }
 
         // ✅ ALWAYS send SMS alert on vibration (with cooldown to prevent spam)
@@ -442,13 +607,27 @@ void handleAntiTheftWithVibrationSensor() {
           Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\n", 
                         (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
         }
+      } else {
+        // Still in debounce period
+        Serial.printf("[VIBRATION] Debounce active (%lu ms remaining)\n", 
+                      VIBRATION_DEBOUNCE - timeSinceLastVibration);
       }
-    } else {
-      // Reset counters after 10 seconds of no vibration
-      if (consecutiveVibrations > 0 && (millis() - lastVibrationTime) > 10000) {
-        consecutiveVibrations = 0;
-        Serial.println("[ANTI-THEFT] ✓ Vibration counter reset");
-      }
+    }
+    
+    // ✅ ENHANCED: Show LOW to HIGH transitions
+    static int lastVibrationReading = LOW;
+    if (vibrationDetected != lastVibrationReading) {
+      Serial.printf("[VIBRATION] Pin %d changed: %s → %s\n", 
+                    vibrationSensorPin,
+                    lastVibrationReading ? "HIGH" : "LOW",
+                    vibrationDetected ? "HIGH" : "LOW");
+      lastVibrationReading = vibrationDetected;
+    }
+    
+    // Reset counters after 10 seconds of no vibration
+    if (consecutiveVibrations > 0 && (millis() - lastVibrationTime) > 10000) {
+      consecutiveVibrations = 0;
+      Serial.println("[ANTI-THEFT] ✓ Vibration counter reset");
     }
   }
 }
@@ -598,48 +777,107 @@ void triggerCrashShutdown(float impact, float roll) {
 
 void startEngine() {
   Serial.println("\n[ENGINE] startEngine() called");
-  Serial.printf("[ENGINE] helmetConnected = %s\n", helmetConnected ? "TRUE" : "FALSE");
-  Serial.printf("[ENGINE] alcoholDetected = %s\n", alcoholDetected ? "TRUE" : "FALSE");
-  Serial.printf("[ENGINE] engineRunning = %s\n", engineRunning ? "TRUE" : "FALSE");
   
-  // ✅ NEW: Check helmet connection first
-  if (!helmetConnected) {
-    Serial.println("\n❌ ENGINE START BLOCKED - HELMET NOT CONNECTED!");
-    Serial.println("💡 TIP: Turn on helmet module first");
-    Serial.println("💡 TIP: Wait for helmet to connect to WiFi and send heartbeat");
+  // ✅ ENHANCED: Comprehensive security checks before engine start
+  unsigned long currentTime = millis();
+  unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
+  unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
+  
+  bool wifiOK = (timeSinceWiFi <= WIFI_TIMEOUT);
+  bool helmetOK = (timeSinceHelmet <= HELMET_TIMEOUT || lastHelmetUpdateTime == 0 || helmetConnected);
+  bool alcoholOK = !alcoholDetected;
+  bool crashOK = !crashDetected;
+  
+  Serial.printf("[ENGINE] WiFi: %s (%lu ms ago)\n", wifiOK ? "OK ✅" : "TIMEOUT ❌", timeSinceWiFi);
+  Serial.printf("[ENGINE] Helmet: %s (%lu ms ago)\n", helmetOK ? "OK ✅" : "TIMEOUT ❌", timeSinceHelmet);
+  Serial.printf("[ENGINE] Alcohol: %s\n", alcoholOK ? "SAFE ✅" : "DETECTED ❌");
+  Serial.printf("[ENGINE] Crash: %s\n", crashOK ? "NONE ✅" : "DETECTED ❌");
+  Serial.printf("[ENGINE] Current state: %s\n", engineRunning ? "RUNNING" : "STOPPED");
+  
+  // ✅ 1. WiFi Security Check (5-second timeout)
+  if (!wifiOK) {
+    Serial.println("\n❌ ENGINE START BLOCKED - WiFi TIMEOUT!");
+    Serial.printf("💡 WiFi disconnected for %lu ms (>%lu ms limit)\n", timeSinceWiFi, WIFI_TIMEOUT);
+    Serial.println("💡 TIP: Check WiFi connection and wait for reconnection");
     
-    // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
     digitalWrite(relayPin, LOW);
     
-    // Different beep pattern for helmet not connected (2 short beeps)
+    // WiFi timeout alert (3 short beeps)
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(buzzerPin, HIGH);
+      delay(150);
+      digitalWrite(buzzerPin, LOW);
+      delay(150);
+    }
+    
+    logSecurityEventToFirebase("Engine Start Blocked - WiFi Timeout");
+    return;
+  }
+  
+  // ✅ 2. Helmet Security Check (5-second timeout)
+  if (!helmetOK && lastHelmetUpdateTime > 0) {
+    Serial.println("\n❌ ENGINE START BLOCKED - HELMET TIMEOUT!");
+    Serial.printf("💡 Helmet disconnected for %lu ms (>%lu ms limit)\n", timeSinceHelmet, HELMET_TIMEOUT);
+    Serial.printf("💡 DEBUG: currentTime=%lu, lastHelmetUpdateTime=%lu\n", currentTime, lastHelmetUpdateTime);
+    Serial.printf("💡 DEBUG: helmetConnected=%s, lastHelmetHeartbeat=%llu\n", 
+                  helmetConnected ? "true" : "false", lastHelmetHeartbeat);
+    Serial.println("💡 TIP: Turn on helmet and wait for connection");
+    
+    digitalWrite(relayPin, LOW);
+    
+    // Helmet timeout alert (2 short beeps)
     for (int i = 0; i < 2; i++) {
       digitalWrite(buzzerPin, HIGH);
       delay(100);
       digitalWrite(buzzerPin, LOW);
       delay(100);
     }
+    
+    logSecurityEventToFirebase("Engine Start Blocked - Helmet Timeout");
     return;
   }
   
-  if (alcoholDetected) {
+  // ✅ 3. Alcohol Safety Check
+  if (!alcoholOK) {
     Serial.println("\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
-    Serial.println("💡 TIP: Check helmet alcohol sensor readings");
-    Serial.println("💡 TIP: Helmet should send 'Safe' status if value < 600");
+    Serial.println("💡 TIP: Wait for alcohol levels to clear");
+    Serial.println("💡 TIP: Helmet should send 'Safe' status");
     
     if (autoEngineControl) {
       engineStartRequested = true;
     }
     
-    // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
     digitalWrite(relayPin, LOW);
     
-    // 3 long beeps for alcohol detected
+    // Alcohol alert (3 long beeps)
     for (int i = 0; i < 3; i++) {
       digitalWrite(buzzerPin, HIGH);
       delay(200);
       digitalWrite(buzzerPin, LOW);
       delay(200);
     }
+    
+    logSecurityEventToFirebase("Engine Start Blocked - Alcohol Detected");
+    return;
+  }
+  
+  // ✅ 4. Crash Safety Check
+  if (!crashOK) {
+    Serial.println("\n❌ ENGINE START BLOCKED - CRASH DETECTED!");
+    Serial.println("💡 TIP: Clear crash alert first");
+    Serial.println("💡 TIP: Ensure vehicle is upright and stable");
+    
+    digitalWrite(relayPin, LOW);
+    
+    // Crash alert (4 urgent beeps)
+    for (int i = 0; i < 4; i++) {
+      digitalWrite(buzzerPin, HIGH);
+      delay(250);
+      digitalWrite(buzzerPin, LOW);
+      delay(150);
+    }
+    
+    logSecurityEventToFirebase("Engine Start Blocked - Crash Detected");
     return;
   }
 
@@ -651,6 +889,9 @@ void startEngine() {
   engineStartRequested = false;
   
   Serial.printf("✅ Relay GPIO %d = %d (ON)\n", relayPin, digitalRead(relayPin));
+  
+  // ✅ NEW: Start trip tracking
+  startTrip();
   
   sendLiveToFirebase();
   
@@ -664,6 +905,9 @@ void startEngine() {
 
 void stopEngine() {
   Serial.println("\n🛑 Stopping engine...");
+  
+  // ✅ NEW: End trip tracking before stopping engine
+  endTrip();
   
   // ✅ FIX: LOW = OFF for ACTIVE-HIGH relay
   digitalWrite(relayPin, LOW);
@@ -790,6 +1034,8 @@ void connectToWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n[WIFI] ✅ Connected!");
     Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+    lastWiFiConnection = millis();  // ✅ NEW: Track connection time
+    lastFirebaseSuccess = millis(); // ✅ NEW: Reset Firebase timer on WiFi connect
   } else {
     Serial.println("\n[WIFI] ❌ Failed!");
   }
@@ -875,10 +1121,10 @@ void checkAlcoholStatus() {
       }
     }
     
-    // Debug output every 5 seconds
+    // ✅ FAST DEBUG: Alcohol status every 1 second
     static unsigned long lastDebug = 0;
-    if (millis() - lastDebug > 5000) {
-      Serial.printf("[ALCOHOL] Status: %s | Value: %d | Helmet Threshold: 600\n", 
+    if (millis() - lastDebug > 1000) {
+      Serial.printf("[ALCOHOL] Status: %s | Value: %d | Threshold: 600\n", 
                     alcoholDetected ? "DANGER" : "SAFE", 
                     sensorValue);
       lastDebug = millis();
@@ -1005,7 +1251,7 @@ void clearDashboardButton() {
   http.end();
 }
 
-// ✅ NEW: Monitor physical key switch
+// ✅ MODIFIED: Monitor physical key switch with security override
 void checkPhysicalKey() {
   bool currentKeyState = digitalRead(physicalKeyPin);
   
@@ -1016,6 +1262,25 @@ void checkPhysicalKey() {
     
     if (currentKeyState != lastKeyState) {
       lastKeyState = currentKeyState;
+      
+      // ✅ SECURITY: Check if system is in secure mode
+      if (systemInSecureMode) {
+        Serial.println("\n🚨 PHYSICAL KEY BLOCKED - SYSTEM IN SECURE MODE!");
+        Serial.println("💡 Network/Firebase connection required for engine control");
+        
+        // Force relay OFF regardless of key position
+        digitalWrite(relayPin, LOW);
+        engineRunning = false;
+        
+        // Alert beeps
+        for (int i = 0; i < 5; i++) {
+          digitalWrite(buzzerPin, HIGH);
+          delay(100);
+          digitalWrite(buzzerPin, LOW);
+          delay(100);
+        }
+        return;
+      }
       
       // ✅ OPTION 1: If using voltage divider (12V key → 3.3V GPIO)
       // Key turned ON (HIGH when key provides voltage)
@@ -1040,6 +1305,148 @@ void checkPhysicalKey() {
       //   Serial.println("\n🔑 PHYSICAL KEY TURNED OFF!");
       //   stopEngine();
       // }
+    }
+  }
+}
+
+// ✅ ENHANCED: Comprehensive security system with 5-second timeouts
+void checkComprehensiveSecurity() {
+  if (!securitySystemActive) return;
+  
+  unsigned long currentTime = millis();
+  
+  // ✅ 1. WiFi Connection Monitoring (5-second timeout)
+  if (WiFi.status() == WL_CONNECTED) {
+    lastWiFiConnected = currentTime;
+  }
+  unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
+  bool wifiTimeout = (timeSinceWiFi > WIFI_TIMEOUT);
+  
+  // ✅ 2. Helmet Connection Monitoring (5-second timeout)  
+  unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
+  bool helmetTimeout = (timeSinceHelmet > HELMET_TIMEOUT && lastHelmetUpdateTime > 0 && !helmetConnected);
+  
+  // ✅ 3. Security Violations Detection
+  bool securityViolation = wifiTimeout || helmetTimeout;
+  
+  // ✅ 4. Auto-Shutdown Logic
+  if (securityViolation && engineRunning) {
+    Serial.println("\n🚨🚨🚨 SECURITY VIOLATION - AUTO SHUTDOWN! 🚨🚨🚨");
+    
+    if (wifiTimeout) {
+      Serial.printf("📡 WiFi TIMEOUT: %lu ms (>%lu ms limit)\n", timeSinceWiFi, WIFI_TIMEOUT);
+      Serial.println("🔒 Thieves may have disconnected WiFi!");
+    }
+    
+    if (helmetTimeout) {
+      Serial.printf("🪖 HELMET TIMEOUT: %lu ms (>%lu ms limit)\n", timeSinceHelmet, HELMET_TIMEOUT);
+      Serial.println("🔒 Helmet turned off or disconnected!");
+    }
+    
+    // Force engine shutdown
+    triggerSecurityShutdown("Security Violation");
+  }
+  
+  // ✅ 5. Physical Key Security Override
+  if (securityViolation) {
+    systemInSecureMode = true;
+  } else {
+    systemInSecureMode = false;
+  }
+  
+  // ✅ 6. Debug Output (every 3 seconds)
+  static unsigned long lastSecurityDebug = 0;
+  if (currentTime - lastSecurityDebug > 3000) {
+    Serial.printf("[SECURITY] WiFi: %s (%lu ms) | Helmet: %s (%lu ms) | Engine: %s\n",
+                  wifiTimeout ? "TIMEOUT ❌" : "OK ✅", timeSinceWiFi,
+                  helmetTimeout ? "TIMEOUT ❌" : "OK ✅", timeSinceHelmet,
+                  engineRunning ? "RUNNING" : "STOPPED");
+    lastSecurityDebug = currentTime;
+  }
+}
+
+// ✅ NEW: Security shutdown with detailed logging
+void triggerSecurityShutdown(String reason) {
+  Serial.println("\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
+  Serial.println("Reason: " + reason);
+  Serial.println("Time: " + String(millis()) + " ms");
+  
+  // Force relay OFF
+  digitalWrite(relayPin, LOW);
+  engineRunning = false;
+  
+  // End current trip
+  endTrip();
+  
+  Serial.printf("🛑 Engine STOPPED | Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
+  
+  // Security alert sequence (10 loud beeps)
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(buzzerPin, HIGH);
+    digitalWrite(lightIndicatorPin, HIGH);
+    delay(150);
+    digitalWrite(buzzerPin, LOW);
+    digitalWrite(lightIndicatorPin, LOW);
+    delay(150);
+  }
+  
+  // Log security event to Firebase
+  logSecurityEventToFirebase(reason);
+}
+
+// ✅ NEW: Enhanced physical key with security checks
+void checkPhysicalKeyWithSecurity() {
+  bool currentKeyState = digitalRead(physicalKeyPin);
+  
+  // Detect key state change (with debounce)
+  if (currentKeyState != lastKeyState) {
+    delay(50);  // Debounce
+    currentKeyState = digitalRead(physicalKeyPin);
+    
+    if (currentKeyState != lastKeyState) {
+      lastKeyState = currentKeyState;
+      
+      // ✅ SECURITY: Check comprehensive security before allowing key operation
+      unsigned long currentTime = millis();
+      unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
+      unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
+      
+      bool wifiOK = (timeSinceWiFi <= WIFI_TIMEOUT);
+      bool helmetOK = (timeSinceHelmet <= HELMET_TIMEOUT || lastHelmetUpdateTime == 0 || helmetConnected);
+      bool securityOK = wifiOK && helmetOK;
+      
+      if (!securityOK) {
+        Serial.println("\n🚨 PHYSICAL KEY BLOCKED - SECURITY VIOLATION!");
+        Serial.printf("WiFi Status: %s (%lu ms ago)\n", wifiOK ? "OK" : "TIMEOUT", timeSinceWiFi);
+        Serial.printf("Helmet Status: %s (%lu ms ago)\n", helmetOK ? "OK" : "TIMEOUT", timeSinceHelmet);
+        Serial.println("💡 Both devices must be online for physical key to work");
+        
+        // Force relay OFF regardless of key position
+        digitalWrite(relayPin, LOW);
+        engineRunning = false;
+        
+        // Security alert beeps
+        for (int i = 0; i < 5; i++) {
+          digitalWrite(buzzerPin, HIGH);
+          delay(200);
+          digitalWrite(buzzerPin, LOW);
+          delay(200);
+        }
+        
+        // Log attempted theft
+        logSecurityEventToFirebase("Physical Key Blocked - Security Violation");
+        return;
+      }
+      
+      // ✅ Security OK - Allow normal key operation
+      if (currentKeyState == HIGH && !engineRunning) {
+        Serial.println("\n🔑 PHYSICAL KEY TURNED ON! (Security verified ✅)");
+        startEngine();
+      }
+      else if (currentKeyState == LOW && engineRunning) {
+        Serial.println("\n🔑 PHYSICAL KEY TURNED OFF!");
+        stopEngine();
+      }
     }
   }
 }
@@ -1108,9 +1515,14 @@ void checkHelmetConnection() {
           Serial.println("\n[HELMET] ✅ Connected!");
         }
         helmetConnected = true;
+        
+        // ✅ DEBUG: Show heartbeat update
+        Serial.printf("[HELMET DEBUG] Heartbeat updated! New: %llu, lastHelmetUpdateTime: %lu\n", 
+                      helmetHeartbeat, lastHelmetUpdateTime);
       } else {
-        // Heartbeat hasn't changed - check timeouts
+        // ✅ DEBUG: Show when heartbeat hasn't changed
         unsigned long timeSinceUpdate = millis() - lastHelmetUpdateTime;
+        Serial.printf("[HELMET DEBUG] Heartbeat unchanged. Time since update: %lu ms\n", timeSinceUpdate);
         
         // ✅ NEW: After 10 seconds, force status to "Off" in Firebase
         if (timeSinceUpdate > HELMET_FORCE_OFF_TIMEOUT && !helmetStatusForcedOff) {
@@ -1134,7 +1546,8 @@ void checkHelmetConnection() {
         Serial.println("\n[HELMET] ✅ Connected (no timestamp check)");
       }
       helmetConnected = true;
-      lastHelmetUpdateTime = millis();
+      lastHelmetUpdateTime = millis();  // ✅ Always update time when helmet is connected
+      Serial.printf("[HELMET DEBUG] No heartbeat parsing, but status On. Updated lastHelmetUpdateTime: %lu\n", lastHelmetUpdateTime);
     }
   } else {
     if (helmetConnected) {
@@ -1145,9 +1558,9 @@ void checkHelmetConnection() {
   
   http.end();
   
-  // Debug output every 5 seconds
+  // ✅ FAST DEBUG: Helmet status every 1 second
   static unsigned long lastDebug = 0;
-  if (millis() - lastDebug > 5000) {
+  if (millis() - lastDebug > 1000) {
     Serial.printf("[HELMET] Status: %s\n", helmetConnected ? "CONNECTED ✅" : "DISCONNECTED ❌");
     lastDebug = millis();
   }
@@ -1182,4 +1595,272 @@ void forceHelmetStatusOff() {
   }
   
   http.end();
+}
+// ✅ NEW: Trip tracking functions
+void startTrip() {
+  Serial.println("\n🗺️ STARTING TRIP TRACKING");
+  
+  // Initialize trip data
+  currentTrip.isActive = true;
+  currentTrip.hasValidStart = false;
+  currentTrip.startTime = 1700000000000ULL + (uint64_t)millis();
+  currentTrip.maxSpeed = 0.0;
+  currentTrip.totalDistance = 0.0;
+  currentTrip.fromLat = 0.0;
+  currentTrip.fromLng = 0.0;
+  currentTrip.toLat = 0.0;
+  currentTrip.toLng = 0.0;
+  
+  Serial.println("[TRIP] 📍 Waiting for first GPS fix...");
+}
+
+void updateTripData() {
+  if (!currentTrip.isActive || !engineRunning) return;
+  
+  // Check if GPS has valid location
+  if (gps.location.isValid()) {
+    double currentLat = gps.location.lat();
+    double currentLng = gps.location.lng();
+    
+    // Set "From" coordinates on first valid GPS reading
+    if (!currentTrip.hasValidStart) {
+      currentTrip.fromLat = currentLat;
+      currentTrip.fromLng = currentLng;
+      currentTrip.hasValidStart = true;
+      
+      Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\n", currentLat, currentLng);
+      Serial.println("[TRIP] 📍 Trip origin set!");
+    }
+    
+    // Always update "To" coordinates with latest valid position
+    currentTrip.toLat = currentLat;
+    currentTrip.toLng = currentLng;
+    
+    // Calculate distance if we have a previous position
+    if (lastValidLat != 0.0 && lastValidLng != 0.0) {
+      float distance = calculateDistance(lastValidLat, lastValidLng, currentLat, currentLng);
+      currentTrip.totalDistance += distance;
+    }
+    
+    // Update last valid position
+    lastValidLat = currentLat;
+    lastValidLng = currentLng;
+    
+    // Track maximum speed
+    if (gps.speed.isValid()) {
+      float speed = gps.speed.kmph();
+      if (speed > currentTrip.maxSpeed) {
+        currentTrip.maxSpeed = speed;
+      }
+    }
+    
+    // Debug output every 10 seconds
+    static unsigned long lastTripDebug = 0;
+    if (millis() - lastTripDebug > 10000) {
+      Serial.printf("[TRIP] Current: %.6f, %.6f | Distance: %.2f km | Max Speed: %.1f kph\n",
+                    currentLat, currentLng, currentTrip.totalDistance, currentTrip.maxSpeed);
+      lastTripDebug = millis();
+    }
+  }
+}
+
+void endTrip() {
+  if (!currentTrip.isActive) return;
+  
+  Serial.println("\n🏁 ENDING TRIP TRACKING");
+  
+  currentTrip.endTime = 1700000000000ULL + (uint64_t)millis();
+  currentTrip.isActive = false;
+  
+  // Only save trip if we have valid start and end coordinates
+  if (currentTrip.hasValidStart && currentTrip.toLat != 0.0 && currentTrip.toLng != 0.0) {
+    Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\n", currentTrip.fromLat, currentTrip.fromLng);
+    Serial.printf("[TRIP] 🏁 TO: %.6f, %.6f\n", currentTrip.toLat, currentTrip.toLng);
+    Serial.printf("[TRIP] 📊 Distance: %.2f km | Max Speed: %.1f kph\n", 
+                  currentTrip.totalDistance, currentTrip.maxSpeed);
+    
+    // Calculate trip duration
+    uint64_t duration = currentTrip.endTime - currentTrip.startTime;
+    Serial.printf("[TRIP] ⏱️ Duration: %llu minutes\n", duration / 60000);
+    
+    // Save trip to Firebase
+    saveTripToFirebase();
+  } else {
+    Serial.println("[TRIP] ⚠️ No valid GPS data - trip not saved");
+  }
+  
+  // Reset for next trip
+  lastValidLat = 0.0;
+  lastValidLng = 0.0;
+}
+
+void saveTripToFirebase() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  
+  Serial.println("[TRIP] 💾 Saving trip to Firebase...");
+  
+  StaticJsonDocument<512> doc;
+  doc["startTime"] = currentTrip.startTime;
+  doc["endTime"] = currentTrip.endTime;
+  doc["duration"] = currentTrip.endTime - currentTrip.startTime;
+  
+  // From coordinates
+  doc["from"]["lat"] = currentTrip.fromLat;
+  doc["from"]["lng"] = currentTrip.fromLng;
+  doc["from"]["address"] = "GPS Location"; // Could be enhanced with reverse geocoding
+  
+  // To coordinates  
+  doc["to"]["lat"] = currentTrip.toLat;
+  doc["to"]["lng"] = currentTrip.toLng;
+  doc["to"]["address"] = "GPS Location"; // Could be enhanced with reverse geocoding
+  
+  // Trip statistics
+  doc["distance"] = currentTrip.totalDistance;
+  doc["maxSpeed"] = currentTrip.maxSpeed;
+  doc["avgSpeed"] = (currentTrip.totalDistance / ((currentTrip.endTime - currentTrip.startTime) / 3600000.0)); // km/h
+  
+  // Additional metadata
+  doc["vehicleType"] = "motorcycle";
+  doc["userId"] = userUID;
+  doc["tripId"] = String(currentTrip.startTime); // Use start time as unique ID
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  HTTPClient http;
+  String tripPath = "/helmet_public/" + userUID + "/trips.json?auth=" + firebaseAuth;
+  http.begin(firebaseHost + tripPath);
+  http.addHeader("Content-Type", "application/json");
+  
+  int code = http.POST(payload);
+  
+  if (code == HTTP_CODE_OK) {
+    Serial.println("[TRIP] ✅ Trip saved to Firebase!");
+  } else {
+    Serial.printf("[TRIP] ❌ Failed to save trip: HTTP %d\n", code);
+  }
+  
+  http.end();
+}
+
+// Calculate distance between two GPS coordinates (Haversine formula)
+float calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+  const float R = 6371.0; // Earth's radius in kilometers
+  
+  float dLat = radians(lat2 - lat1);
+  float dLng = radians(lng2 - lng1);
+  
+  float a = sin(dLat/2) * sin(dLat/2) + 
+            cos(radians(lat1)) * cos(radians(lat2)) * 
+            sin(dLng/2) * sin(dLng/2);
+  
+  float c = 2 * atan2(sqrt(a), sqrt(1-a));
+  
+  return R * c; // Distance in kilometers
+}
+
+// ✅ NEW: Log security events to Firebase
+void logSecurityEventToFirebase(String eventType) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  
+  Serial.println("[SECURITY] 📝 Logging security event: " + eventType);
+  
+  uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
+  
+  StaticJsonDocument<256> doc;
+  doc["timestamp"] = timestamp;
+  doc["type"] = "security_event";
+  doc["event"] = eventType;
+  doc["engineRunning"] = engineRunning;
+  doc["wifiConnected"] = (WiFi.status() == WL_CONNECTED);
+  doc["helmetConnected"] = helmetConnected;
+  doc["alcoholDetected"] = alcoholDetected;
+  doc["crashDetected"] = crashDetected;
+  
+  // Add location if available
+  if (gps.location.isValid()) {
+    doc["lat"] = gps.location.lat();
+    doc["lng"] = gps.location.lng();
+    doc["hasGPS"] = true;
+  } else {
+    doc["hasGPS"] = false;
+  }
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  HTTPClient http;
+  String securityPath = "/helmet_public/" + userUID + "/security_events.json?auth=" + firebaseAuth;
+  http.begin(firebaseHost + securityPath);
+  http.addHeader("Content-Type", "application/json");
+  
+  int code = http.POST(payload);
+  
+  if (code == HTTP_CODE_OK) {
+    Serial.println("[SECURITY] ✅ Security event logged to Firebase");
+  } else {
+    Serial.printf("[SECURITY] ❌ Failed to log security event: HTTP %d\n", code);
+  }
+  
+  http.end();
+}
+
+// ✅ NEW: Print comprehensive security status
+void printSecurityStatus() {
+  unsigned long currentTime = millis();
+  unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
+  unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
+  
+  Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  Serial.println("🔒 COMPREHENSIVE SECURITY STATUS");
+  Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  
+  // Security System Status
+  Serial.printf("Security System: %s\n", securitySystemActive ? "ACTIVE 🔒" : "DISABLED ⚠️");
+  Serial.printf("Secure Mode: %s\n", systemInSecureMode ? "ENGAGED 🚨" : "NORMAL ✅");
+  
+  Serial.println("\n📡 CONNECTIVITY STATUS:");
+  Serial.printf("WiFi: %s (%lu ms ago)\n", 
+                (timeSinceWiFi <= WIFI_TIMEOUT) ? "CONNECTED ✅" : "TIMEOUT ❌", 
+                timeSinceWiFi);
+  Serial.printf("WiFi Timeout Limit: %lu ms\n", WIFI_TIMEOUT);
+  
+  Serial.printf("Helmet: %s (%lu ms ago)\n", 
+                (timeSinceHelmet <= HELMET_TIMEOUT || lastHelmetUpdateTime == 0) ? "CONNECTED ✅" : "TIMEOUT ❌", 
+                timeSinceHelmet);
+  Serial.printf("Helmet Timeout Limit: %lu ms\n", HELMET_TIMEOUT);
+  
+  Serial.println("\n🛡️ SAFETY STATUS:");
+  Serial.printf("Engine: %s\n", engineRunning ? "RUNNING 🟢" : "STOPPED 🔴");
+  Serial.printf("Alcohol: %s\n", alcoholDetected ? "DETECTED ❌" : "SAFE ✅");
+  Serial.printf("Crash: %s\n", crashDetected ? "DETECTED ❌" : "NONE ✅");
+  Serial.printf("Anti-Theft: %s\n", antiTheftArmed ? "ARMED 🛡️" : "DISARMED 🔓");
+  
+  Serial.println("\n🔑 PHYSICAL KEY STATUS:");
+  Serial.printf("Key Position: %s\n", digitalRead(physicalKeyPin) ? "ON" : "OFF");
+  Serial.printf("Key Security: %s\n", securitySystemActive ? "PROTECTED 🔒" : "UNPROTECTED ⚠️");
+  
+  Serial.println("\n⚡ RELAY STATUS:");
+  Serial.printf("Relay GPIO %d: %d (%s)\n", relayPin, digitalRead(relayPin), 
+                digitalRead(relayPin) ? "ON" : "OFF");
+  
+  Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  
+  // Security Recommendations
+  if (!securitySystemActive) {
+    Serial.println("⚠️  WARNING: Security system is DISABLED!");
+    Serial.println("💡 Recommendation: Enable with 'SECURITY ON' command");
+  }
+  
+  if (timeSinceWiFi > WIFI_TIMEOUT) {
+    Serial.println("⚠️  WARNING: WiFi connection timeout!");
+    Serial.println("💡 Recommendation: Check WiFi network and reconnect");
+  }
+  
+  if (timeSinceHelmet > HELMET_TIMEOUT && lastHelmetUpdateTime > 0) {
+    Serial.println("⚠️  WARNING: Helmet connection timeout!");
+    Serial.println("💡 Recommendation: Turn on helmet and ensure WiFi connection");
+  }
+  
+  Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
