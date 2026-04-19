@@ -311,66 +311,102 @@
         </div>
       </div>
 
-      <!-- Row 3: Speed Limit Control (color-changing progress bar) -->
-      <div class="relative overflow-hidden rounded-3xl shadow-2xl p-6 md:p-8 mb-6 transition-all duration-500"
+      <!-- Row 3: Speed Limit Control (Emergency Contact only — interactive) -->
+      <div class="relative overflow-hidden rounded-2xl shadow-2xl p-6 mb-6 transition-all duration-500 border border-white/10"
         :style="{ background: speedLimitGradient }">
         <div class="relative">
-          <div class="flex items-center justify-between mb-4">
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-5">
             <div class="flex items-center gap-3">
-              <div class="bg-white/20 backdrop-blur-sm p-3 rounded-2xl">
-                <span class="material-icons text-3xl text-white">tune</span>
+              <div class="bg-white/20 backdrop-blur-sm p-2.5 rounded-xl">
+                <span class="material-icons text-2xl text-white">tune</span>
               </div>
               <div>
-                <h3 class="text-lg font-bold text-white">Speed Limit Control</h3>
-                <p class="text-white/70 text-xs">Drag to set rider speed limit</p>
+                <h3 class="text-base font-bold text-white">Speed Limit Control</h3>
+                <p class="text-white/60 text-xs flex items-center gap-1">
+                  <span class="material-icons text-xs">edit</span>
+                  Only you (emergency contact) can adjust this
+                </p>
               </div>
             </div>
-            <div class="relative">
-              <div class="absolute inset-0 bg-white/20 blur-xl rounded-2xl"></div>
-              <span class="relative text-3xl font-black text-white bg-white/20 backdrop-blur-md px-5 py-2 rounded-2xl border border-white/30">
-                {{ speedLimit }} <span class="text-base font-semibold">km/h</span>
-              </span>
+            <div class="text-right">
+              <span class="text-3xl font-black text-white">{{ speedLimit }}</span>
+              <span class="text-sm font-semibold text-white/70 ml-1">km/h</span>
+              <p class="text-white/50 text-xs mt-0.5">{{ speedZoneLabel }}</p>
             </div>
           </div>
 
-          <!-- Color-coded progress bar track -->
-          <div class="relative mb-3">
-            <!-- Background gradient track -->
-            <div class="w-full h-4 rounded-full overflow-hidden bg-white/20">
-              <div class="h-full rounded-full transition-all duration-300"
-                :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }">
+          <!-- Progress bar with threshold marker and current speed indicator -->
+          <div class="relative mb-2">
+            <!-- Track background -->
+            <div class="w-full h-5 rounded-full bg-white/15 overflow-visible relative">
+              <!-- Fill -->
+              <div class="h-full rounded-full transition-all duration-300 absolute top-0 left-0"
+                :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }"></div>
+
+              <!-- Current speed indicator (white vertical line) -->
+              <div v-if="currentSpeed > 0"
+                class="absolute top-1/2 -translate-y-1/2 flex flex-col items-center"
+                :style="{ left: `${Math.min((currentSpeed / 120) * 100, 100)}%` }">
+                <div class="w-0.5 h-7 bg-white shadow-lg rounded-full -mt-1"></div>
+                <span class="text-white text-xs font-bold mt-1 bg-black/30 px-1 rounded whitespace-nowrap">
+                  {{ currentSpeed.toFixed(0) }}
+                </span>
+              </div>
+
+              <!-- Threshold marker (diamond shape at the set limit) -->
+              <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+                :style="{ left: `${(speedLimit / 120) * 100}%` }">
+                <div class="w-4 h-4 bg-white rotate-45 shadow-xl border-2 border-white/50"
+                  :style="{ boxShadow: `0 0 8px ${speedBarColor}` }"></div>
               </div>
             </div>
-            <!-- Range input overlaid -->
+
+            <!-- Invisible range input on top for interaction -->
             <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
               @input="updateSpeedLimitInFirebase"
-              class="absolute inset-0 w-full h-4 opacity-0 cursor-pointer" />
+              class="absolute inset-0 w-full h-5 opacity-0 cursor-pointer" />
           </div>
 
           <!-- Labels -->
-          <div class="flex justify-between text-xs font-bold text-white/80">
-            <span class="bg-white/20 px-2 py-1 rounded-lg">0 km/h</span>
-            <span class="bg-white/20 px-2 py-1 rounded-lg">30</span>
-            <span class="bg-white/20 px-2 py-1 rounded-lg">60</span>
-            <span class="bg-white/20 px-2 py-1 rounded-lg">90</span>
-            <span class="bg-white/20 px-2 py-1 rounded-lg">120 km/h</span>
+          <div class="flex justify-between text-xs font-bold text-white/60 mt-3">
+            <span>0</span><span>30</span><span>60</span><span>90</span><span>120 km/h</span>
           </div>
 
-          <!-- Speed zone indicator -->
-          <div class="mt-4 flex items-center gap-2">
-            <div :class="['w-3 h-3 rounded-full', speedZoneColor]"></div>
-            <span class="text-white/90 text-sm font-semibold">{{ speedZoneLabel }}</span>
+          <!-- Legend -->
+          <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-white/70">
+            <div class="flex items-center gap-1.5">
+              <div class="w-3 h-3 bg-white rotate-45"></div>
+              <span>Limit threshold</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <div class="w-0.5 h-4 bg-white rounded-full"></div>
+              <span>Current speed</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <div :class="['w-2.5 h-2.5 rounded-full', speedZoneColor]"></div>
+              <span>{{ speedZoneLabel }}</span>
+            </div>
+          </div>
+
+          <!-- Over-speed alert -->
+          <div v-if="isOverSpeed"
+            class="mt-4 flex items-center gap-2 bg-red-500/20 border border-red-400/30 rounded-xl px-4 py-2.5">
+            <span class="material-icons text-red-300 text-sm animate-pulse">warning</span>
+            <p class="text-red-200 text-xs font-semibold">
+              Rider is exceeding your set limit! ({{ currentSpeed.toFixed(0) }} km/h > {{ speedLimit }} km/h)
+            </p>
           </div>
         </div>
       </div>
 
       <!-- Row 4: Location + Speed Tabs -->
       <div class="mb-4">
-        <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-2 border border-white/50 flex gap-2">
+        <div class="bg-white/5 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 flex gap-1.5">
           <button v-for="tab in ['Rider Location', 'Speed Data', 'Recent Alerts']" :key="tab"
             @click="activeTab = tab"
             :class="['flex-1 px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300',
-              activeTab === tab ? 'bg-gradient-to-r from-[#3D52A0] to-[#7091E6] text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100']">
+              activeTab === tab ? 'bg-gradient-to-r from-[#3D52A0] to-[#7091E6] text-white shadow-lg' : 'text-white/40 hover:text-white/70 hover:bg-white/5']">
             {{ tab }}
           </button>
         </div>
@@ -622,6 +658,23 @@ const toggleRiderTracking = () => {
   isTrackingRider.value = !isTrackingRider.value;
 };
 
+// ── Alert sound ────────────────────────────────────────────────────────────
+let currentAudio = null;
+
+const playAlertSound = () => {
+  try {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    }
+    currentAudio = new Audio('/sounds/alert.mp3');
+    currentAudio.play().catch(err => console.warn('[SOUND] Playback failed:', err));
+    currentAudio.addEventListener('ended', () => { currentAudio = null; });
+  } catch (err) {
+    console.error('[SOUND] Error:', err);
+  }
+};
+
 const updateSpeedLimitInFirebase = () => {
   const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
   set(dbRef(database, `${userUID}/speedLimit`), speedLimit.value)
@@ -657,6 +710,7 @@ const triggerSOS = async () => {
       time: new Date().toLocaleTimeString()
     });
 
+    playAlertSound();
     alert('✅ SOS Alert sent! The rider has been notified.');
   } catch (err) {
     console.error('[SOS] Error:', err);
@@ -814,6 +868,9 @@ const setupFirebaseListeners = () => {
     crashDisplayStatus.value  = 'Alert';
     crashDisplayMessage.value = 'Crash Detected';
 
+    // Play alert sound for crash
+    playAlertSound();
+
     console.log('[CRASH] New crash event received:', crashEvent);
   });
 
@@ -823,7 +880,7 @@ const setupFirebaseListeners = () => {
     if (d !== null && d !== undefined) speedLimit.value = d;
   });
 
-  // Alerts — only show ones created after this page opened
+  // Alerts — only show ones created after this page opened, play sound for danger/warning
   onValue(dbRef(database, `helmet_public/${userUID}/alerts`), snap => {
     const d = snap.val();
     if (!d) return;
@@ -831,7 +888,17 @@ const setupFirebaseListeners = () => {
       .filter(a => (a.timestamp || 0) > appStartTime)
       .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
       .slice(0, 20);
+
+    // Play sound if there are new alerts since last check
+    const prevCount = alerts.value.length;
     alerts.value = fresh;
+    if (fresh.length > prevCount) {
+      const newest = fresh[0];
+      const type = newest?.type || '';
+      if (['danger', 'crash', 'alcohol', 'warning', 'theft', 'speed'].includes(type)) {
+        playAlertSound();
+      }
+    }
   });
 };
 

@@ -485,37 +485,53 @@
 
 
 
-      <!-- Speed Limit Control -->
-      <div class="relative overflow-hidden bg-white/5 border border-white/10 rounded-2xl shadow-xl p-6 mb-6 hover:border-white/20 transition-all duration-300">
-        <div class="flex justify-between items-center mb-5">
+      <!-- Speed Limit Display (read-only — set by Emergency Contact) -->
+      <div class="relative overflow-hidden bg-white/5 border border-white/10 rounded-2xl shadow-xl p-6 mb-6">
+        <div class="flex justify-between items-center mb-4">
           <div class="flex items-center gap-3">
             <div class="bg-white/10 p-2 rounded-xl">
-              <span class="material-icons text-2xl text-[#7091E6]">tune</span>
+              <span class="material-icons text-2xl text-[#7091E6]">speed</span>
             </div>
             <div>
               <p class="text-white font-bold">Speed Limit</p>
-              <p class="text-white/40 text-xs">Drag to set maximum speed</p>
+              <p class="text-white/40 text-xs flex items-center gap-1">
+                <span class="material-icons text-xs">lock</span>
+                Set by your emergency contact
+              </p>
             </div>
           </div>
           <span class="text-2xl font-black text-white bg-white/10 px-4 py-2 rounded-xl border border-white/10">
             {{ speedLimit }} <span class="text-sm font-semibold text-white/60">km/h</span>
           </span>
         </div>
-        <div class="relative">
-          <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-1">
-            <div class="h-full rounded-full transition-all duration-300"
-              :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }"></div>
-          </div>
-          <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
-            @change="updateSpeedLimitInFirebase"
-            class="w-full h-2 opacity-0 cursor-pointer absolute inset-0" />
+
+        <!-- Read-only progress bar -->
+        <div class="w-full h-3 bg-white/10 rounded-full overflow-hidden relative">
+          <!-- Fill -->
+          <div class="h-full rounded-full transition-all duration-500"
+            :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }"></div>
+          <!-- Current speed indicator -->
+          <div v-if="currentSpeed > 0"
+            class="absolute top-0 h-full w-0.5 bg-white/60 transition-all duration-300"
+            :style="{ left: `${Math.min((currentSpeed / 120) * 100, 100)}%` }"></div>
         </div>
-        <div class="flex justify-between mt-2 text-xs text-white/30">
+
+        <div class="flex justify-between mt-2 text-xs text-white/25">
           <span>0</span><span>30</span><span>60</span><span>90</span><span>120 km/h</span>
         </div>
+
+        <!-- Over-speed warning -->
+        <div v-if="isOverSpeed"
+          class="mt-3 flex items-center gap-2 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">
+          <span class="material-icons text-red-400 text-sm animate-pulse">warning</span>
+          <p class="text-red-400 text-xs font-semibold">
+            Current speed ({{ currentSpeed.toFixed(0) }} km/h) exceeds the limit set by your emergency contact!
+          </p>
+        </div>
+
         <div class="mt-3 flex items-center gap-2">
           <div :class="['w-2 h-2 rounded-full', speedZoneColor]"></div>
-          <span class="text-white/50 text-xs">{{ speedZoneLabel }}</span>
+          <span class="text-white/40 text-xs">{{ speedZoneLabel }}</span>
         </div>
       </div>
 
