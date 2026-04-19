@@ -622,35 +622,70 @@
       <!-- Crash Events -->
       <section class="mb-6" v-if="crashEvents.length > 0">
         <div class="relative overflow-hidden bg-red-500/5 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-red-500/20">
-          <h3 class="font-bold text-lg mb-4 text-red-400 flex items-center gap-2">
-            <span class="material-icons animate-pulse">warning</span>
-            <span>Crash Site Locations</span>
-          </h3>
-          <div class="relative max-h-64 overflow-y-auto space-y-3 custom-scrollbar">
-            <div v-for="(event, index) in crashEvents" :key="index" 
-              class="group relative overflow-hidden p-4 border border-red-500/20 rounded-xl bg-red-500/5 hover:bg-red-500/10 transition-all duration-300">
-              <div class="space-y-1.5 mb-3">
-                <p class="text-sm flex items-center gap-2 text-white/70">
-                  <span class="material-icons text-red-400 text-base">flash_on</span>
-                  <span><strong class="text-red-400/70">Impact:</strong> {{ event.impactStrength }} g</span>
-                </p>
-                <p class="text-sm flex items-start gap-2 text-white/70">
-                  <span class="material-icons text-red-400 text-base">location_on</span>
-                  <span><strong class="text-red-400/70">Location:</strong> {{ event.location }}</span>
-                </p>
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-lg text-red-400 flex items-center gap-2">
+              <span class="material-icons text-red-400 animate-pulse">warning</span>
+              <span>Crash Site Locations</span>
+              <span class="bg-red-500/20 border border-red-400/30 text-red-400 text-xs px-2 py-0.5 rounded-full">{{ crashEvents.length }}</span>
+            </h3>
+          </div>
+
+          <div class="space-y-4">
+            <div v-for="(event, index) in crashEvents" :key="index"
+              class="relative overflow-hidden p-5 border border-red-500/20 rounded-xl bg-red-500/5 hover:bg-red-500/10 transition-all duration-300">
+
+              <!-- Severity badge -->
+              <div class="flex items-center justify-between mb-3">
+                <span :class="['text-xs font-bold px-2 py-1 rounded-full border',
+                  event.severity === 'High'
+                    ? 'bg-red-500/20 border-red-400/40 text-red-400'
+                    : 'bg-orange-500/20 border-orange-400/40 text-orange-400']">
+                  {{ event.severity || 'Medium' }} Severity
+                </span>
+                <span class="text-xs text-white/30">{{ event.time || new Date(event.timestamp).toLocaleTimeString() }}</span>
               </div>
+
+              <!-- Data rows -->
+              <div class="grid grid-cols-2 gap-2 mb-4">
+                <div class="bg-white/5 rounded-lg p-2">
+                  <p class="text-xs text-white/40 mb-0.5">Impact Force</p>
+                  <p class="text-sm font-bold text-white">{{ event.impactStrength || 'N/A' }} g</p>
+                </div>
+                <div class="bg-white/5 rounded-lg p-2">
+                  <p class="text-xs text-white/40 mb-0.5">Lean Angle</p>
+                  <p class="text-sm font-bold text-white">{{ event.roll ? event.roll.toFixed(1) + '°' : 'N/A' }}</p>
+                </div>
+                <div class="bg-white/5 rounded-lg p-2 col-span-2">
+                  <p class="text-xs text-white/40 mb-0.5">GPS Location</p>
+                  <p class="text-sm font-mono text-white/70">
+                    {{ event.hasGPS ? `${Number(event.lat).toFixed(6)}, ${Number(event.lng).toFixed(6)}` : 'No GPS fix at time of crash' }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Action buttons -->
               <div class="flex flex-wrap gap-2">
-                <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-green-500/10 border border-green-400/20 text-green-400 text-xs font-semibold rounded-lg hover:bg-green-500/20 transition-all">
-                  <span class="material-icons text-sm">location_on</span>View
+                <!-- Navigate button — only if GPS available -->
+                <a v-if="event.hasGPS && event.lat && event.lng"
+                  :href="`https://www.google.com/maps?q=${event.lat},${event.lng}`"
+                  target="_blank" rel="noopener noreferrer"
+                  class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-blue-500/20 border border-blue-400/30 text-blue-400 text-xs font-bold rounded-lg hover:bg-blue-500/30 transition-all">
+                  <span class="material-icons text-sm">navigation</span>Navigate to Site
                 </a>
+                <a v-if="event.hasGPS && event.lat && event.lng"
+                  :href="`https://www.google.com/maps?q=${event.lat},${event.lng}`"
+                  target="_blank" rel="noopener noreferrer"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-green-500/10 border border-green-400/20 text-green-400 text-xs font-semibold rounded-lg hover:bg-green-500/20 transition-all">
+                  <span class="material-icons text-sm">map</span>Maps
+                </a>
+                <div v-if="!event.hasGPS"
+                  class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white/5 border border-white/10 text-white/30 text-xs rounded-lg">
+                  <span class="material-icons text-sm">gps_off</span>No GPS location recorded
+                </div>
                 <button @click="deleteCrashEvent(index)"
-                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-red-500/10 border border-red-400/20 text-red-400 text-xs font-semibold rounded-lg hover:bg-red-500/20 transition-all">
-                  <span class="material-icons text-sm">delete</span>Delete
-                </button>
-                <button v-if="isCrashActive(index)" @click="clearCrashAlert(index)"
-                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 text-white/50 text-xs font-semibold rounded-lg hover:bg-white/10 transition-all">
-                  <span class="material-icons text-sm">clear</span>Clear
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-500/10 border border-red-400/20 text-red-400 text-xs font-semibold rounded-lg hover:bg-red-500/20 transition-all">
+                  <span class="material-icons text-sm">delete</span>
                 </button>
               </div>
             </div>
@@ -2024,12 +2059,15 @@ const initializeCrashListener = () => {
     // Add to crash events array (for map display)
     const crashEvent = {
       timestamp: eventTime,
-      impactStrength: event.impactStrength || "N/A",
+      impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
       roll: event.roll || event.leanAngle || 0,
       location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
-      lat: event.lat,
-      lng: event.lng,
-      hasGPS: event.hasGPS || false
+      lat: event.lat || (event.location && event.location.lat) || null,
+      lng: event.lng || (event.location && event.location.lng) || null,
+      hasGPS: event.hasGPS || (event.gpsValid === true) || (event.lat && event.lat !== 0),
+      severity: event.severity || 'Medium',
+      time: event.time || new Date(eventTime).toLocaleTimeString(),
+      speed: event.speed || 0
     };
     
     // ✅ FIX: Keep ONLY the latest crash marker (replace old ones)

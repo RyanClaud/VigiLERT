@@ -111,6 +111,62 @@
       </div>
     </div>
 
+    <!-- ===== CRASH HISTORY (shown when crashes exist) ===== -->
+    <div v-if="crashEvents.length > 0" class="mx-4 md:mx-8 mt-4">
+      <div class="relative overflow-hidden bg-red-500/5 backdrop-blur-lg rounded-2xl shadow-xl p-5 border border-red-500/20">
+        <h3 class="font-bold text-base text-red-400 mb-4 flex items-center gap-2">
+          <span class="material-icons text-lg">place</span>
+          Crash Site Locations
+          <span class="bg-red-500/20 border border-red-400/30 text-red-400 text-xs px-2 py-0.5 rounded-full ml-1">{{ crashEvents.length }}</span>
+        </h3>
+        <div class="space-y-3">
+          <div v-for="(event, index) in crashEvents" :key="index"
+            class="p-4 border border-red-500/20 rounded-xl bg-red-500/5">
+            <!-- Header row -->
+            <div class="flex items-center justify-between mb-3">
+              <span :class="['text-xs font-bold px-2 py-0.5 rounded-full border',
+                event.severity === 'High'
+                  ? 'bg-red-500/20 border-red-400/40 text-red-400'
+                  : 'bg-orange-500/20 border-orange-400/40 text-orange-400']">
+                {{ event.severity || 'Medium' }} Severity
+              </span>
+              <span class="text-xs text-white/30">{{ event.time }}</span>
+            </div>
+            <!-- Stats -->
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <div class="bg-white/5 rounded-lg p-2">
+                <p class="text-xs text-white/40">Impact</p>
+                <p class="text-sm font-bold text-white">{{ event.impactStrength }} g</p>
+              </div>
+              <div class="bg-white/5 rounded-lg p-2">
+                <p class="text-xs text-white/40">Speed</p>
+                <p class="text-sm font-bold text-white">{{ event.speed ? event.speed.toFixed(1) + ' km/h' : 'N/A' }}</p>
+              </div>
+              <div class="bg-white/5 rounded-lg p-2 col-span-2">
+                <p class="text-xs text-white/40 mb-0.5">GPS Coordinates</p>
+                <p class="text-xs font-mono text-white/60">
+                  {{ event.hasGPS ? `${Number(event.lat).toFixed(6)}, ${Number(event.lng).toFixed(6)}` : 'No GPS fix recorded' }}
+                </p>
+              </div>
+            </div>
+            <!-- Navigation buttons -->
+            <div class="flex gap-2">
+              <a v-if="event.hasGPS && event.lat && event.lng"
+                :href="`https://www.google.com/maps?q=${event.lat},${event.lng}`"
+                target="_blank" rel="noopener noreferrer"
+                class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-blue-500/20 border border-blue-400/30 text-blue-400 text-xs font-bold rounded-lg hover:bg-blue-500/30 transition-all">
+                <span class="material-icons text-sm">navigation</span>Navigate to Crash Site
+              </a>
+              <div v-else
+                class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 text-white/30 text-xs rounded-lg">
+                <span class="material-icons text-sm">gps_off</span>No GPS location
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== MAIN ===== -->
     <main class="flex-1 px-4 md:px-8 py-6 max-w-7xl mx-auto w-full">
 
@@ -437,7 +493,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue, push } from 'firebase/database';
+import { ref as dbRef, set, onValue, push, onChildAdded } from 'firebase/database';
 import EmergencyRiderMap from '../components/EmergencyRiderMap.vue';
 
 const router = useRouter();
@@ -453,6 +509,7 @@ const isOverSpeed       = ref(false);
 const alcoholStatus     = ref('Safe');
 const crashDisplayStatus  = ref('Stable');
 const crashDisplayMessage = ref('Normal');
+const crashEvents         = ref([]);  // crash history with GPS locations
 const isTrackingRider   = ref(false);
 const emergencyContactLocation = ref({ lat: null, lng: null });
 const activeTab         = ref('Rider Location');
@@ -678,6 +735,37 @@ const setupFirebaseListeners = () => {
     // Crash
     crashDisplayStatus.value  = d.crashDetected ? 'Alert'         : 'Stable';
     crashDisplayMessage.value = d.crashDetected ? 'Crash Detected' : 'Normal';
+  });
+
+  // ── Crash history listener ────────────────────────────────────────────
+  onChildAdded(dbRef(database, `helmet_public/${userUID}/crashes`), (snap) => {
+    const event = snap.val();
+    if (!event || !event.timestamp) return;
+
+    // Only show crashes after app opened
+    if (event.timestamp <= appStartTime) return;
+
+    const crashEvent = {
+      timestamp: event.timestamp,
+      impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
+      roll: event.roll || event.leanAngle || 0,
+      lat: event.lat || (event.location && event.location.lat) || null,
+      lng: event.lng || (event.location && event.location.lng) || null,
+      hasGPS: event.hasGPS || event.gpsValid || (event.lat && event.lat !== 0),
+      severity: event.severity || 'Medium',
+      time: event.time || new Date(event.timestamp).toLocaleTimeString(),
+      speed: event.speed || 0
+    };
+
+    // Keep only the latest 5 crashes
+    crashEvents.value.unshift(crashEvent);
+    if (crashEvents.value.length > 5) crashEvents.value = crashEvents.value.slice(0, 5);
+
+    // Update status
+    crashDisplayStatus.value  = 'Alert';
+    crashDisplayMessage.value = 'Crash Detected';
+
+    console.log('[CRASH] New crash event received:', crashEvent);
   });
 
   // Speed limit (sync from rider dashboard changes)
