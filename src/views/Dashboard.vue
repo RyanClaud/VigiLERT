@@ -550,16 +550,19 @@
 
       <!-- Recent Alerts Section -->
       <div id="alerts" class="relative overflow-hidden bg-white/5 backdrop-blur-lg rounded-2xl shadow-xl p-6 mb-6 border border-white/10 hover:border-white/20 transition-all duration-300">
-        <h3 class="font-bold text-lg mb-4 text-white flex items-center justify-between">
-          <span class="flex items-center gap-2">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
             <span class="material-icons text-[#7091E6]">notifications_active</span>
-            <span>Recent Alerts</span>
-            <span v-if="alerts.length > 0" class="bg-red-500/80 text-white text-xs px-2 py-0.5 rounded-full">{{ alerts.length }}</span>
-          </span>
+            <h3 class="font-bold text-lg text-white">Recent Alerts</h3>
+            <span v-if="alerts.length > 0"
+              class="bg-red-500/80 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+              {{ alerts.length }}
+            </span>
+          </div>
           <div class="flex gap-2">
             <button v-if="showStopSoundButton" @click="stopSound"
-              class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-500/20 border border-orange-400/30 text-orange-400 hover:bg-orange-500/30 transition-all animate-pulse">
-              <span class="material-icons text-sm mr-1">volume_off</span>Stop Sound
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-500/20 border border-orange-400/30 text-orange-400 hover:bg-orange-500/30 transition-all animate-pulse flex items-center gap-1">
+              <span class="material-icons text-sm">volume_off</span>Stop Sound
             </button>
             <button v-if="alerts.length > 0" @click="clearAllAlerts"
               class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-400/30 text-red-400 hover:bg-red-500/30 transition-all">
@@ -570,9 +573,78 @@
               {{ showAlerts ? 'Hide' : 'Show' }}
             </button>
           </div>
-        </h3>
-        <div v-if="showAlerts" class="relative max-h-64 overflow-y-auto custom-scrollbar">
-          <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
+        </div>
+
+        <!-- Alert list -->
+        <div v-if="showAlerts">
+          <!-- Empty state -->
+          <div v-if="alerts.length === 0" class="text-center py-10">
+            <span class="material-icons text-4xl text-white/10 mb-2 block">notifications_none</span>
+            <p class="text-white/30 text-sm">No alerts yet</p>
+            <p class="text-white/20 text-xs mt-1">Alerts from your motorcycle and helmet will appear here</p>
+          </div>
+
+          <!-- Alert items -->
+          <div v-else class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+            <div v-for="(alert, index) in alerts" :key="index"
+              :class="['group flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 hover:scale-[1.01]',
+                alert.type === 'danger' || alert.type === 'crash'
+                  ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+                  : alert.type === 'alcohol'
+                    ? 'bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/15'
+                  : alert.type === 'warning' || alert.type === 'theft'
+                    ? 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
+                  : alert.type === 'success'
+                    ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/15'
+                  : alert.type === 'speed'
+                    ? 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
+                  : 'bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15']">
+
+              <!-- Icon -->
+              <div :class="['flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5',
+                alert.type === 'danger' || alert.type === 'crash' ? 'bg-red-500/20' :
+                alert.type === 'alcohol' ? 'bg-orange-500/20' :
+                alert.type === 'warning' || alert.type === 'theft' ? 'bg-yellow-500/20' :
+                alert.type === 'success' ? 'bg-green-500/20' :
+                alert.type === 'speed' ? 'bg-amber-500/20' : 'bg-blue-500/20']">
+                <span :class="['material-icons text-base',
+                  alert.type === 'danger' || alert.type === 'crash' ? 'text-red-400' :
+                  alert.type === 'alcohol' ? 'text-orange-400' :
+                  alert.type === 'warning' ? 'text-yellow-400' :
+                  alert.type === 'theft' ? 'text-yellow-400' :
+                  alert.type === 'success' ? 'text-green-400' :
+                  alert.type === 'speed' ? 'text-amber-400' : 'text-blue-400']">
+                  {{ alert.type === 'crash' ? 'warning' :
+                     alert.type === 'alcohol' ? 'local_bar' :
+                     alert.type === 'speed' ? 'speed' :
+                     alert.type === 'theft' ? 'security' :
+                     alert.type === 'success' ? 'check_circle' :
+                     alert.type === 'warning' ? 'warning' :
+                     alert.type === 'info' ? 'info' : 'notifications' }}
+                </span>
+              </div>
+
+              <!-- Content -->
+              <div class="flex-1 min-w-0">
+                <p :class="['font-semibold text-sm leading-tight',
+                  alert.type === 'danger' || alert.type === 'crash' ? 'text-red-300' :
+                  alert.type === 'alcohol' ? 'text-orange-300' :
+                  alert.type === 'warning' || alert.type === 'theft' ? 'text-yellow-300' :
+                  alert.type === 'success' ? 'text-green-300' :
+                  alert.type === 'speed' ? 'text-amber-300' : 'text-blue-300']">
+                  {{ alert.message }}
+                </p>
+                <p v-if="alert.details" class="text-xs text-white/40 mt-0.5 truncate">{{ alert.details }}</p>
+                <p class="text-xs text-white/25 mt-0.5">{{ alert.time }}</p>
+              </div>
+
+              <!-- Delete button (visible on hover) -->
+              <button @click="alerts.splice(index, 1)"
+                class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-red-400 p-1 rounded-lg hover:bg-red-500/10">
+                <span class="material-icons text-sm">close</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

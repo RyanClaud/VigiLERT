@@ -397,28 +397,30 @@
 
       <!-- Tab: Speed Data -->
       <div v-show="activeTab === 'Speed Data'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10">
-        <h3 class="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
-          <span class="material-icons text-blue-500">speed</span>
+        <h3 class="text-lg font-bold text-white mb-5 flex items-center gap-2">
+          <span class="material-icons text-[#7091E6]">speed</span>
           Speed Monitoring
         </h3>
 
         <!-- Live Speed Gauge -->
-        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border-2 border-blue-200 mb-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 mb-4">
           <div class="flex items-center justify-between mb-4">
-            <h4 class="font-bold text-blue-800">Live Speed</h4>
-            <span :class="['px-3 py-1 rounded-full text-xs font-bold', isOverSpeed ? 'bg-red-500 text-white animate-pulse' : 'bg-green-500 text-white']">
+            <h4 class="font-bold text-white/70">Live Speed</h4>
+            <span :class="['px-3 py-1 rounded-full text-xs font-bold border',
+              isOverSpeed
+                ? 'bg-red-500/20 border-red-400/30 text-red-400 animate-pulse'
+                : 'bg-green-500/20 border-green-400/30 text-green-400']">
               {{ isOverSpeed ? 'OVER LIMIT' : 'SAFE' }}
             </span>
           </div>
           <div class="flex items-end gap-4">
-            <p :class="['text-6xl font-black', isOverSpeed ? 'text-red-600' : 'text-blue-700']">{{ currentSpeed.toFixed(0) }}</p>
+            <p :class="['text-6xl font-black', isOverSpeed ? 'text-red-400' : 'text-white']">{{ currentSpeed.toFixed(0) }}</p>
             <div class="pb-2">
-              <p class="text-gray-500 text-sm">km/h</p>
-              <p class="text-gray-400 text-xs">Limit: {{ speedLimit }} km/h</p>
+              <p class="text-white/40 text-sm">km/h</p>
+              <p class="text-white/30 text-xs">Limit: {{ speedLimit }} km/h</p>
             </div>
           </div>
-          <!-- Speed bar -->
-          <div class="mt-4 w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+          <div class="mt-4 w-full h-2 bg-white/10 rounded-full overflow-hidden">
             <div class="h-full rounded-full transition-all duration-500"
               :style="{ width: `${Math.min((currentSpeed / Math.max(speedLimit * 1.5, 1)) * 100, 100)}%`,
                         background: isOverSpeed ? '#ef4444' : '#3b82f6' }">
@@ -427,9 +429,9 @@
         </div>
 
         <!-- Speed History -->
-        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200">
-          <h4 class="font-bold text-green-800 mb-4 flex items-center gap-2">
-            <span class="material-icons">timeline</span> Recent Speed History
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <h4 class="font-bold text-white/60 mb-4 flex items-center gap-2 text-sm">
+            <span class="material-icons text-base text-[#7091E6]">timeline</span> Recent Speed History
           </h4>
           <div v-if="speedHistory.length > 0" class="flex items-end gap-1 h-16">
             <div v-for="(speed, i) in speedHistory.slice(-20)" :key="i"
@@ -439,43 +441,90 @@
               :title="`${speed.toFixed(0)} km/h`">
             </div>
           </div>
-          <p v-else class="text-green-600 text-sm text-center py-4">No speed history yet</p>
+          <p v-else class="text-white/30 text-sm text-center py-4">No speed history yet</p>
         </div>
       </div>
 
       <!-- Tab: Recent Alerts -->
       <div v-show="activeTab === 'Recent Alerts'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10">
         <div class="flex items-center justify-between mb-5">
-          <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <div class="bg-red-500 p-2 rounded-xl">
-              <span class="material-icons text-white">notifications_active</span>
-            </div>
-            Recent Alerts
-            <span v-if="alerts.length > 0" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">{{ alerts.length }}</span>
-          </h3>
-        </div>
-        <div v-if="alerts.length > 0" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
-          <div v-for="(alert, index) in alerts" :key="index"
-            :class="['p-4 rounded-xl border-l-4 transition-all',
-              alert.type === 'danger' || alert.type === 'crash' ? 'bg-red-50 border-red-500' :
-              alert.type === 'success' ? 'bg-green-50 border-green-500' :
-              alert.type === 'alcohol' ? 'bg-orange-50 border-orange-500' :
-              'bg-blue-50 border-blue-500']">
-            <div class="flex items-start justify-between gap-2">
-              <div class="flex-1">
-                <p :class="['font-bold text-sm',
-                  alert.type === 'danger' || alert.type === 'crash' ? 'text-red-800' :
-                  alert.type === 'success' ? 'text-green-800' :
-                  alert.type === 'alcohol' ? 'text-orange-800' : 'text-blue-800']">{{ alert.message }}</p>
-                <p v-if="alert.details" class="text-xs text-gray-500 mt-1">{{ alert.details }}</p>
-              </div>
-              <span class="text-xs text-gray-400 whitespace-nowrap">{{ alert.time }}</span>
-            </div>
+          <div class="flex items-center gap-2">
+            <span class="material-icons text-[#7091E6]">notifications_active</span>
+            <h3 class="text-lg font-bold text-white">Recent Alerts</h3>
+            <span v-if="alerts.length > 0" class="bg-red-500/80 text-white text-xs px-2 py-0.5 rounded-full font-bold">{{ alerts.length }}</span>
           </div>
+          <button v-if="alerts.length > 0" @click="alerts = []"
+            class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-400/30 text-red-400 hover:bg-red-500/30 transition-all">
+            Clear All
+          </button>
         </div>
-        <div v-else class="text-center py-12 text-gray-400">
-          <span class="material-icons text-5xl mb-3 block">notifications_none</span>
-          <p class="font-medium">No alerts since you opened this page</p>
+
+        <!-- Empty state -->
+        <div v-if="alerts.length === 0" class="text-center py-12">
+          <span class="material-icons text-5xl text-white/10 mb-3 block">notifications_none</span>
+          <p class="text-white/30 font-medium">No alerts since you opened this page</p>
+          <p class="text-white/20 text-xs mt-1">Alerts from the rider's motorcycle and helmet will appear here</p>
+        </div>
+
+        <!-- Alert items -->
+        <div v-else class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+          <div v-for="(alert, index) in alerts" :key="index"
+            :class="['group flex items-start gap-3 p-3 rounded-xl border transition-all duration-200',
+              alert.type === 'danger' || alert.type === 'crash'
+                ? 'bg-red-500/10 border-red-500/20'
+                : alert.type === 'alcohol'
+                  ? 'bg-orange-500/10 border-orange-500/20'
+                : alert.type === 'warning' || alert.type === 'theft'
+                  ? 'bg-yellow-500/10 border-yellow-500/20'
+                : alert.type === 'success'
+                  ? 'bg-green-500/10 border-green-500/20'
+                : alert.type === 'speed'
+                  ? 'bg-amber-500/10 border-amber-500/20'
+                : 'bg-blue-500/10 border-blue-500/20']">
+
+            <!-- Icon -->
+            <div :class="['flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5',
+              alert.type === 'danger' || alert.type === 'crash' ? 'bg-red-500/20' :
+              alert.type === 'alcohol' ? 'bg-orange-500/20' :
+              alert.type === 'warning' || alert.type === 'theft' ? 'bg-yellow-500/20' :
+              alert.type === 'success' ? 'bg-green-500/20' :
+              alert.type === 'speed' ? 'bg-amber-500/20' : 'bg-blue-500/20']">
+              <span :class="['material-icons text-base',
+                alert.type === 'danger' || alert.type === 'crash' ? 'text-red-400' :
+                alert.type === 'alcohol' ? 'text-orange-400' :
+                alert.type === 'warning' || alert.type === 'theft' ? 'text-yellow-400' :
+                alert.type === 'success' ? 'text-green-400' :
+                alert.type === 'speed' ? 'text-amber-400' : 'text-blue-400']">
+                {{ alert.type === 'crash' ? 'warning' :
+                   alert.type === 'alcohol' ? 'local_bar' :
+                   alert.type === 'speed' ? 'speed' :
+                   alert.type === 'theft' ? 'security' :
+                   alert.type === 'success' ? 'check_circle' :
+                   alert.type === 'warning' ? 'warning' :
+                   alert.type === 'info' ? 'info' : 'notifications' }}
+              </span>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 min-w-0">
+              <p :class="['font-semibold text-sm leading-tight',
+                alert.type === 'danger' || alert.type === 'crash' ? 'text-red-300' :
+                alert.type === 'alcohol' ? 'text-orange-300' :
+                alert.type === 'warning' || alert.type === 'theft' ? 'text-yellow-300' :
+                alert.type === 'success' ? 'text-green-300' :
+                alert.type === 'speed' ? 'text-amber-300' : 'text-blue-300']">
+                {{ alert.message }}
+              </p>
+              <p v-if="alert.details" class="text-xs text-white/40 mt-0.5 truncate">{{ alert.details }}</p>
+              <p class="text-xs text-white/25 mt-0.5">{{ alert.time }}</p>
+            </div>
+
+            <!-- Delete -->
+            <button @click="alerts.splice(index, 1)"
+              class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-red-400 p-1 rounded-lg hover:bg-red-500/10">
+              <span class="material-icons text-sm">close</span>
+            </button>
+          </div>
         </div>
       </div>
 
