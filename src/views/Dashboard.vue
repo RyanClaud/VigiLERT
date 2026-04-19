@@ -490,64 +490,6 @@
         </div>
       </div>
 
-      <!-- Sensor Health Panel -->
-      <SensorHealthPanel 
-        :gps-connected="gpsConnected"
-        :gsm-connected="gsmConnected"
-        :device-battery="deviceBattery"
-        :alcohol-status="alcoholStatus"
-        :helmet-paired="helmetPaired"
-        :motorcycle-paired="motorcyclePaired"
-        :sensor-data="sensorData"
-        class="mb-8"
-      />
-
-      <!-- Trip Statistics -->
-      <TripStatistics 
-        :stats="tripStats"
-        class="mb-8"
-      />
-
-      <!-- GPS Speed Monitoring Control -->
-      <div class="relative overflow-hidden bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-3xl shadow-2xl p-8 mb-8 transition-all duration-500 hover:shadow-3xl group">
-        <div class="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-        <div class="relative">
-          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div class="flex items-center gap-4">
-              <div class="bg-white/30 backdrop-blur-sm p-3 rounded-xl">
-                <span class="material-icons text-4xl text-white">speed</span>
-              </div>
-              <div>
-                <h3 class="font-bold text-white text-xl mb-1">Real-Time GPS Speed Monitoring</h3>
-                <p class="text-sm text-white/80">
-                  {{ isGPSSpeedActive ? 'Active - Using phone GPS for speed tracking' : 'Inactive - Using GPS module data' }}
-                </p>
-                <div class="flex items-center gap-2 mt-2">
-                  <span class="w-2 h-2 rounded-full" :class="isGPSSpeedActive ? 'bg-green-400 animate-pulse' : 'bg-gray-300'"></span>
-                  <span class="text-xs text-white/70 font-semibold">
-                    Source: {{ gpsSpeedSource === 'phone' ? 'Phone GPS' : 'GPS Module' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <button
-              @click="toggleGPSSpeedMonitoring"
-              :class="[
-                'inline-flex items-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
-                isGPSSpeedActive 
-                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                  : 'bg-white hover:bg-gray-100 text-blue-600'
-              ]"
-            >
-              <span class="material-icons text-2xl">
-                {{ isGPSSpeedActive ? 'gps_off' : 'gps_fixed' }}
-              </span>
-              <span>{{ isGPSSpeedActive ? 'Stop Monitoring' : 'Start Monitoring' }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- Tabs -->
       <div class="mb-6 relative z-10">
         <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-4 border border-white/50">
@@ -752,7 +694,7 @@
 
     <!-- 📱 MOBILE BOTTOM NAVIGATION -->
     <div class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-200 shadow-2xl z-50 md:hidden">
-      <div class="grid grid-cols-5 gap-1 px-2 py-2">
+      <div class="grid grid-cols-6 gap-1 px-2 py-2">
         <!-- Status -->
         <button @click="scrollToSection('status')" 
                 :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
@@ -795,6 +737,13 @@
             {{ alerts.length }}
           </div>
         </button>
+
+        <!-- Devices -->
+        <button @click="$router.push('/device-setup')" 
+                class="flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300 text-gray-600 hover:bg-gray-100">
+          <span class="material-icons text-lg">devices</span>
+          <span class="text-xs font-medium mt-1">Devices</span>
+        </button>
       </div>
     </div>
 
@@ -823,10 +772,7 @@ import TabGroup from '../components/TabGroup.vue';
 import DashboardCard from '../components/DashboardCard.vue';
 import LocationSection from '../components/LocationSection.vue';
 import SpeedDataSection from '../components/SpeedDataSection.vue';
-import DiagnosticsSection from '../components/DiagnosticsSection.vue';
 import RecentAlerts from '../components/RecentAlerts.vue';
-import SensorHealthPanel from '../components/SensorHealthPanel.vue';
-import TripStatistics from '../components/TripStatistics.vue';
 
 const authStore = useAuthStore();
 
@@ -1383,56 +1329,40 @@ const setupFirebaseListeners = () => {
         console.log(`[UPDATE] alcoholSubtitle AFTER update: ${alcoholSubtitle.value}`);
         console.log(`[UPDATE] alcoholDetected AFTER update: ${alcoholDetected.value}`);
         
-        // ✅ NEW: Check for severe intoxication (> 4000) and trigger alertness warning
-        const severeThreshold = 4000;
-        if (sensorValue >= severeThreshold) {
-          console.log('⚠️⚠️⚠️ SEVERE INTOXICATION DETECTED! ⚠️⚠️⚠️');
-          console.log(`   Value ${sensorValue} exceeds severe threshold ${severeThreshold}`);
-          console.log('   Triggering drowsiness/alertness warning!');
-          
-          // Update alertness status
-          alertnessStatus.value = 'Drowsy';
-          alertnessSubtitle.value = `Severe intoxication detected! Value: ${sensorValue}`;
-          
-          console.log(`[ALERTNESS] Status updated to: ${alertnessStatus.value}`);
-          console.log(`[ALERTNESS] Subtitle: ${alertnessSubtitle.value}`);
-          
+        // Add alcohol alert - only if this is a NEW detection (after app start)
+        const alcoholAlertTime = data.timestamp || Date.now();
+        const isNewAlcoholAlert = alcoholAlertTime > appStartTime.value && shouldShowAlert(alcoholAlertTime);
+        
+        if (isNewAlcoholAlert) {
           // Add severe intoxication alert
-          alerts.value.unshift({
+          if (sensorValue >= severeThreshold) {
+            alerts.value.unshift({
+              type: 'alcohol',
+              message: '⚠️ SEVERE INTOXICATION - DROWSINESS RISK!',
+              details: `Alcohol level ${sensorValue} indicates high drowsiness risk. DO NOT RIDE!`,
+              time: timestamp
+            });
+            playSound();
+          }
+          
+          const newAlert = {
             type: 'alcohol',
-            message: '⚠️ SEVERE INTOXICATION - DROWSINESS RISK!',
-            details: `Alcohol level ${sensorValue} indicates high drowsiness risk. DO NOT RIDE!`,
-            time: timestamp
-          });
+            message: '🚨 Alcohol Detected!',
+            details: `Sensor Value: ${sensorValue} (Threshold: ${threshold})`,
+            time: new Date().toLocaleTimeString()
+          };
+          alerts.value.unshift(newAlert);
+          console.log('[ALERT] ✅ Alcohol alert added:', newAlert);
           playSound();
+          if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
         } else {
-          // Moderate alcohol level - reset alertness to normal
-          alertnessStatus.value = 'Normal';
-          alertnessSubtitle.value = 'No drowsiness detected';
-          console.log(`[ALERTNESS] Moderate alcohol level - alertness normal`);
+          console.log('[ALERT] Skipping old/dismissed alcohol alert (status persisted from before app start)');
+          // Still update severe intoxication alertness state without adding alert
+          if (sensorValue >= severeThreshold) {
+            alertnessStatus.value = 'Drowsy';
+            alertnessSubtitle.value = `Severe intoxication detected! Value: ${sensorValue}`;
+          }
         }
-        
-        // Verify the update stuck
-        setTimeout(() => {
-          console.log(`[VERIFY] alcoholStatus 100ms later: ${alcoholStatus.value}`);
-          console.log(`[VERIFY] alcoholSubtitle 100ms later: ${alcoholSubtitle.value}`);
-          console.log(`[VERIFY] alertnessStatus 100ms later: ${alertnessStatus.value}`);
-        }, 100);
-        
-        // Add alcohol alert
-        const newAlert = {
-          type: 'alcohol',
-          message: '🚨 Alcohol Detected!',
-          details: `Sensor Value: ${sensorValue} (Threshold: ${threshold})`,
-          time: new Date().toLocaleTimeString()
-        };
-        alerts.value.unshift(newAlert);
-        console.log('[ALERT] ✅ Alcohol alert added:', newAlert);
-        console.log('[ALERT] Total alerts:', alerts.value.length);
-        playSound();
-        if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-        
-        console.log('[ALERT] Alert added to dashboard');
       } else {
         console.log('✓ Alcohol status: SAFE');
         alcoholStatus.value = 'Safe';
@@ -2100,18 +2030,9 @@ const initializeCrashListener = () => {
       console.log('[CRASH] App start:', new Date(appStartTime.value).toLocaleString());
       console.log('[CRASH] Dismissal time:', new Date(alertDismissalTime.value).toLocaleString());
       
-      // Still add to crash events array for map display (but no alert/sound)
-      const crashEvent = {
-        timestamp: eventTime,
-        impactStrength: event.impactStrength || "N/A",
-        roll: event.roll || event.leanAngle || 0,
-        location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
-        lat: event.lat,
-        lng: event.lng,
-        hasGPS: event.hasGPS || false
-      };
-      crashEvents.value = [crashEvent];
-      return; // Don't trigger alert/sound for old/dismissed crashes
+      // ✅ FIX: Do NOT add deleted/old crashes back to crashEvents for map display
+      // If the user deleted it from Firebase, it should stay gone
+      return;
     }
     
     // Add to crash events array (for map display)
@@ -2344,43 +2265,62 @@ const toggleAutoControl = async () => {
   }
 };
 
-// ✅ NEW: Manual engine status sync
+// ✅ FIXED: Manual engine status sync with better error handling
 const syncEngineStatus = async () => {
   console.log('[ENGINE] 🔄 Manual sync requested...');
   
-  // Check multiple Firebase paths for engine status
-  const pathsToCheck = [
-    `helmet_public/${userId.value}/live/engineRunning`,
-    `${userId.value}/engineControl/engineRunning`, 
-    `helmet_public/${userId.value}/engineRunning`,
-    `${userId.value}/live/engineRunning`,
-    `helmet_public/${userId.value}/live`,
-    `${userId.value}/engineControl`
-  ];
-  
-  for (const path of pathsToCheck) {
-    try {
-      const ref = dbRef(database, path);
-      const snapshot = await get(ref);
-      const data = snapshot.val();
+  try {
+    // ✅ PRIMARY: Check live data first (most reliable)
+    const liveRef = dbRef(database, `helmet_public/${userId.value}/live`);
+    const liveSnapshot = await get(liveRef);
+    const liveData = liveSnapshot.val();
+    
+    if (liveData && typeof liveData.engineRunning !== 'undefined') {
+      engineRunning.value = liveData.engineRunning;
+      console.log(`[ENGINE] ✅ Status synced from live data:`, liveData.engineRunning ? 'RUNNING' : 'STOPPED');
       
-      console.log(`[ENGINE] Checking path: ${path}`);
-      console.log(`[ENGINE] Data found:`, data);
-      
-      if (data !== null) {
-        if (typeof data === 'boolean') {
-          engineRunning.value = data;
-          console.log(`[ENGINE] ✅ Engine status synced from ${path}:`, data ? 'RUNNING' : 'STOPPED');
-          break;
-        } else if (typeof data === 'object' && data.engineRunning !== undefined) {
-          engineRunning.value = data.engineRunning;
-          console.log(`[ENGINE] ✅ Engine status synced from ${path}.engineRunning:`, data.engineRunning ? 'RUNNING' : 'STOPPED');
-          break;
-        }
+      // Also sync sensor data while we're here
+      if (liveData.mpu6050) {
+        sensorData.value.mpu6050 = {
+          accelX: liveData.mpu6050.accelX || 0,
+          accelY: liveData.mpu6050.accelY || 0,
+          accelZ: liveData.mpu6050.accelZ || 0,
+          totalAccel: liveData.mpu6050.totalAccel || 0,
+          roll: liveData.mpu6050.roll || 0,
+          pitch: liveData.mpu6050.pitch || 0,
+          lastUpdate: Date.now()
+        };
+        console.log(`[SENSORS] MPU6050 data synced - Accel: ${liveData.mpu6050.totalAccel}g, Roll: ${liveData.mpu6050.roll}°`);
       }
-    } catch (error) {
-      console.log(`[ENGINE] Error checking path ${path}:`, error);
+      
+      if (liveData.gpsValid && liveData.locationLat && liveData.locationLng) {
+        location.value = {
+          lat: liveData.locationLat,
+          lng: liveData.locationLng
+        };
+        currentSpeed.value = liveData.speed || 0;
+        gpsConnected.value = liveData.gpsValid;
+        console.log(`[SENSORS] GPS data synced - Speed: ${liveData.speed}km/h, Location: ${liveData.locationLat}, ${liveData.locationLng}`);
+      }
+      
+      return; // Success, no need to check other paths
     }
+    
+    // ✅ FALLBACK: Check device heartbeat
+    const deviceRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
+    const deviceSnapshot = await get(deviceRef);
+    const deviceData = deviceSnapshot.val();
+    
+    if (deviceData && typeof deviceData.engineRunning !== 'undefined') {
+      engineRunning.value = deviceData.engineRunning;
+      console.log(`[ENGINE] ✅ Status synced from device heartbeat:`, deviceData.engineRunning ? 'RUNNING' : 'STOPPED');
+      return;
+    }
+    
+    console.log('[ENGINE] ⚠️ No engine status found in any path');
+    
+  } catch (error) {
+    console.error('[ENGINE] ❌ Sync error:', error);
   }
   
   // Also sync alcohol status
@@ -2401,29 +2341,128 @@ const syncEngineStatus = async () => {
   console.log('[ENGINE] 🔄 Manual sync complete');
 };
 
-// ✅ NEW: Monitor engine status from Firebase - Multiple paths
+// ✅ FIXED: Monitor engine status from Firebase - Unified path
 const setupEngineStatusListener = () => {
-  // Monitor engine running status from multiple possible paths
-  const enginePaths = [
-    `helmet_public/${userId.value}/live/engineRunning`,
-    `${userId.value}/engineControl/engineRunning`,
-    `helmet_public/${userId.value}/engineRunning`,
-    `${userId.value}/live/engineRunning`
-  ];
+  console.log('[ENGINE] Setting up engine status listeners...');
   
-  // Try each path and use the first one that has data
-  enginePaths.forEach((path, index) => {
-    const engineRef = dbRef(database, path);
-    onValue(engineRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data !== null) {
-        engineRunning.value = data;
-        console.log(`[ENGINE] Status updated from path ${index + 1} (${path}):`, data ? 'RUNNING' : 'STOPPED');
+  // ✅ PRIMARY: Listen to live data from motorcycle module
+  const liveRef = dbRef(database, `helmet_public/${userId.value}/live`);
+  onValue(liveRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data && typeof data.engineRunning !== 'undefined') {
+      const newEngineState = data.engineRunning;
+      if (engineRunning.value !== newEngineState) {
+        engineRunning.value = newEngineState;
+        console.log(`[ENGINE] Status updated from live data:`, newEngineState ? 'RUNNING' : 'STOPPED');
+        
+        // Update sensor data from live feed
+        if (data.mpu6050) {
+          sensorData.value.mpu6050 = {
+            accelX: data.mpu6050.accelX || 0,
+            accelY: data.mpu6050.accelY || 0,
+            accelZ: data.mpu6050.accelZ || 0,
+            totalAccel: data.mpu6050.totalAccel || 0,
+            roll: data.mpu6050.roll || 0,
+            pitch: data.mpu6050.pitch || 0,
+            lastUpdate: Date.now()
+          };
+        }
+        
+        // Update GPS data
+        if (data.gpsValid && data.locationLat && data.locationLng) {
+          location.value = {
+            lat: data.locationLat,
+            lng: data.locationLng
+          };
+          currentSpeed.value = data.speed || 0;
+          gpsConnected.value = data.gpsValid;
+        }
+        
+        // ✅ CRITICAL: Update crash detection status with alert triggering
+        if (typeof data.crashDetected !== 'undefined') {
+          const wasCrashDetected = sensorData.value.crashDetected;
+          sensorData.value.crashDetected = data.crashDetected;
+          
+          console.log(`[CRASH] Status updated: ${data.crashDetected ? 'DETECTED' : 'CLEAR'}`);
+          
+          // ✅ Trigger crash alert only when crash NEWLY detected (not on initial page load)
+          // wasCrashDetected must be explicitly false (not undefined) to avoid false triggers on load
+          if (data.crashDetected && wasCrashDetected === false) {
+            console.log('[CRASH] 🚨 NEW CRASH DETECTED from live data!');
+            
+            // Add crash alert immediately
+            const crashAlert = {
+              type: 'crash',
+              message: '🚨 CRASH DETECTED!',
+              details: `Impact: ${data.mpu6050?.totalAccel?.toFixed(2) || 'N/A'} g | Roll: ${data.mpu6050?.roll?.toFixed(1) || 'N/A'}°`,
+              time: new Date().toLocaleTimeString(),
+              timestamp: Date.now()
+            };
+            
+            alerts.value.unshift(crashAlert);
+            if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+            
+            // Trigger crash animation and sound
+            flashCrashMessage();
+            playSound();
+            
+            console.log('[CRASH] ✅ Crash alert added to dashboard');
+          }
+        }
       }
-    });
+    }
   });
   
-  // ✅ REMOVED: Duplicate alcohol listener - using main listener at line ~1301 instead
+  // ✅ SECONDARY: Listen to device heartbeat for connection status
+  const deviceRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
+  onValue(deviceRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      // Update motorcycle connection status
+      const isConnected = data.status === 'On';
+      if (motorcyclePaired.value !== isConnected) {
+        motorcyclePaired.value = isConnected;
+        console.log(`[MOTORCYCLE] Connection status:`, isConnected ? 'CONNECTED' : 'DISCONNECTED');
+      }
+      
+      // Update engine status from heartbeat if available
+      if (typeof data.engineRunning !== 'undefined' && data.engineRunning !== engineRunning.value) {
+        engineRunning.value = data.engineRunning;
+        console.log(`[ENGINE] Status updated from device heartbeat:`, data.engineRunning ? 'RUNNING' : 'STOPPED');
+      }
+      
+      // Update sensor data from heartbeat
+      if (data.mpu6050) {
+        sensorData.value.mpu6050 = {
+          accelX: data.mpu6050.accelX || 0,
+          accelY: data.mpu6050.accelY || 0,
+          accelZ: data.mpu6050.accelZ || 0,
+          totalAccel: data.mpu6050.totalAccel || 0,
+          roll: data.mpu6050.roll || 0,
+          pitch: data.mpu6050.pitch || 0,
+          lastUpdate: Date.now()
+        };
+      }
+      
+      // Update other sensor data
+      if (data.gps) {
+        sensorData.value.gps = {
+          accuracy: data.gps.valid ? '5m' : 'No Fix',
+          satellites: data.gps.satellites || 0
+        };
+        gpsConnected.value = data.gps.valid || false;
+      }
+      
+      if (data.antiTheftArmed !== undefined) {
+        sensorData.value.antiTheftArmed = data.antiTheftArmed;
+      }
+      
+      if (data.vibrationSensor !== undefined) {
+        // Update vibration sensor reading
+        console.log('[VIBRATION] Sensor reading:', data.vibrationSensor);
+      }
+    }
+  });
   
   // Monitor auto control setting
   const autoRef = dbRef(database, `${userId.value}/engineControl/autoMode`);
@@ -2434,6 +2473,8 @@ const setupEngineStatusListener = () => {
       console.log('[ENGINE] Auto control updated:', data);
     }
   });
+  
+  console.log('[ENGINE] ✅ Engine status listeners initialized');
 };
 
 // ✅ NEW: Mobile Navigation Functions
@@ -2481,18 +2522,20 @@ const setupAntiTheftListener = () => {
     if (data && data.alertActive) {
       console.log('[ANTI-THEFT] Alert received:', data);
       
-      // Only show if this is a new alert (different timestamp)
-      if (data.lastVibration !== antiTheftAlert.value.timestamp) {
+      const alertTimestamp = data.lastVibration || 0;
+      
+      // ✅ FIX: Only show if alert is NEW (after app start) and not already shown
+      const isNew = alertTimestamp > appStartTime.value && shouldShowAlert(alertTimestamp);
+      if (isNew && alertTimestamp !== antiTheftAlert.value.timestamp) {
         antiTheftAlert.value = {
           active: true,
           message: 'Unauthorized movement detected on your motorcycle!',
-          time: new Date(data.lastVibration).toLocaleTimeString(),
+          time: new Date(alertTimestamp).toLocaleTimeString(),
           level: data.alertLevel || 1,
           severity: data.alertLevel >= 3 ? 'high' : (data.alertLevel >= 2 ? 'medium' : 'low'),
-          timestamp: data.lastVibration
+          timestamp: alertTimestamp
         };
         
-        // Add to alerts list
         alerts.value.unshift({
           type: 'theft',
           message: '🚨 Anti-Theft Alert',
@@ -2501,8 +2544,9 @@ const setupAntiTheftListener = () => {
         });
         
         playSound();
-        
         if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+      } else {
+        console.log('[ANTI-THEFT] Skipping old/dismissed anti-theft status alert');
       }
     }
   });
@@ -2513,20 +2557,25 @@ const setupAntiTheftListener = () => {
     const alert = snapshot.val();
     console.log('[ANTI-THEFT] New theft alert event:', alert);
     
-    if (alert && alert.timestamp !== antiTheftAlert.value.timestamp) {
+    if (!alert) return;
+    
+    const alertTimestamp = alert.timestamp || 0;
+    
+    // ✅ FIX: Only show if alert happened AFTER app started and is not dismissed
+    const isNew = alertTimestamp > appStartTime.value && shouldShowAlert(alertTimestamp);
+    if (isNew && alertTimestamp !== antiTheftAlert.value.timestamp) {
       const severity = alert.severity || 'low';
       const alertLevel = alert.alertLevel || 1;
       
       antiTheftAlert.value = {
         active: true,
         message: alert.message || 'Unauthorized movement detected!',
-        time: new Date(alert.timestamp).toLocaleTimeString(),
+        time: new Date(alertTimestamp).toLocaleTimeString(),
         level: alertLevel,
         severity: severity,
-        timestamp: alert.timestamp
+        timestamp: alertTimestamp
       };
       
-      // Add to alerts list
       alerts.value.unshift({
         type: 'danger',
         message: '🚨 Anti-Theft Alert',
@@ -2535,8 +2584,9 @@ const setupAntiTheftListener = () => {
       });
       
       playSound();
-      
       if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+    } else {
+      console.log('[ANTI-THEFT] Skipping old/dismissed theft alert event');
     }
   });
 };

@@ -152,10 +152,15 @@ bool theftAlertSent = false;
 int theftDetectionCount = 0;
 const int THEFT_DETECTION_REQUIRED = 1;  // ✅ Immediate alert on first detection
 unsigned long lastVibrationTime = 0;
-const unsigned long VIBRATION_DEBOUNCE = 10;  // ✅ Ultra-fast response (10ms)
+const unsigned long VIBRATION_DEBOUNCE = 500;  // ✅ Increased debounce to reduce false alarms (500ms)
 
-// Escalating buzzer alert system
+// ✅ ENHANCED: Anti-theft with false alarm prevention
 int consecutiveVibrations = 0;
+int vibrationConfirmationCount = 0;  // Count confirmations before triggering
+const int VIBRATION_CONFIRMATION_REQUIRED = 3;  // Need 3 confirmations within time window
+unsigned long firstVibrationTime = 0;
+const unsigned long VIBRATION_WINDOW = 5000;  // 5-second window for confirmations
+bool vibrationSequenceActive = false;
 
 // GSM status
 bool gsmReady = false;
@@ -212,7 +217,7 @@ void setup() {
   pinMode(relayPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
   pinMode(lightIndicatorPin, OUTPUT);
-  pinMode(vibrationSensorPin, INPUT);
+  pinMode(vibrationSensorPin, INPUT_PULLUP);  // ✅ FIX: Add pull-up resistor to prevent floating
   pinMode(physicalKeyPin, INPUT_PULLUP);  // ✅ NEW: Physical key switch
 
   // ✅ FIX: Initialize relay to OFF (LOW for ACTIVE-HIGH relay)
@@ -234,12 +239,26 @@ void setup() {
   sendMotorcycleHeartbeat(true);
   lastHeartbeat = millis();
 
+  // ✅ VIBRATION SENSOR: Baseline verification
+  delay(500);  // Let pin stabilize
+  int baselineReading = digitalRead(vibrationSensorPin);
+  Serial.printf("\n[VIBRATION] 🔍 Sensor baseline check:\n");
+  Serial.printf("[VIBRATION] Pin %d reading: %s (with INPUT_PULLUP)\n", 
+                vibrationSensorPin, baselineReading ? "HIGH" : "LOW");
+  
+  if (baselineReading == HIGH) {
+    Serial.println("[VIBRATION] ✅ Sensor ready (HIGH baseline = no vibration)");
+  } else {
+    Serial.println("[VIBRATION] ⚠️  WARNING: Sensor reading LOW - check wiring!");
+  }
+
   Serial.println("\n📋 SERIAL COMMANDS:");
   Serial.println("   START ENGINE / STOP ENGINE");
   Serial.println("   ARM THEFT / DISARM THEFT");
   Serial.println("   SECURITY ON / SECURITY OFF");
   Serial.println("   SECURITY STATUS");
   Serial.println("   TEST VIBRATION");
+  Serial.println("   VIBRATION STATUS / VIBRATION RESET");
   Serial.println("   MONITOR (10s real-time data)");
   Serial.println("   STATUS\n");
 }
@@ -525,12 +544,18 @@ bool sendMotorcycleHeartbeat(bool isActive) {
 }
 
 void handleAntiTheftWithVibrationSensor() {
-  // ✅ FAST DEBUG: Show current sensor reading every 500ms
+  // ✅ VIBRATION SENSOR LOGIC WITH INPUT_PULLUP:
+  // - Normal state: HIGH (pulled up by internal resistor)
+  // - Vibration detected: LOW (sensor connects pin to ground)
+  // - Only count HIGH→LOW transitions as real vibrations
+  // - This prevents false alarms from floating pins or electrical noise
+  
+  // ✅ MINIMAL DEBUG: Show sensor status every 30 seconds (prevent spam)
   static unsigned long lastSensorDebug = 0;
-  if (millis() - lastSensorDebug > 500) {
+  if (millis() - lastSensorDebug > 30000) {
     int currentReading = digitalRead(vibrationSensorPin);
-    Serial.printf("[VIBRATION] Pin %d = %d | Armed: %s | Enabled: %s\n", 
-                  vibrationSensorPin, currentReading,
+    Serial.printf("[VIBRATION] Status check - Pin %d: %s | Armed: %s | Enabled: %s\n", 
+                  vibrationSensorPin, currentReading ? "HIGH" : "LOW",
                   antiTheftArmed ? "YES" : "NO",
                   antiTheftEnabled ? "YES" : "NO");
     lastSensorDebug = millis();
@@ -563,71 +588,109 @@ void handleAntiTheftWithVibrationSensor() {
 
   if (antiTheftArmed) {
     int vibrationDetected = digitalRead(vibrationSensorPin);
+    unsigned long currentTime = millis();
     
-    // ✅ ENHANCED: More sensitive detection
-    if (vibrationDetected == HIGH) {
-      unsigned long timeSinceLastVibration = millis() - lastVibrationTime;
+    // ✅ ENHANCED: Only trigger on LOW→HIGH transitions (actual vibration events)
+    static int lastVibrationState = HIGH;  // Start with HIGH due to INPUT_PULLUP
+    
+    // ✅ ROBUST: Only count HIGH→LOW transitions as real vibrations (with INPUT_PULLUP)
+    if (vibrationDetected == LOW && lastVibrationState == HIGH) {
+      // Real vibration detected (sensor went from HIGH to LOW with pull-up)
+      unsigned long timeSinceLastVibration = currentTime - lastVibrationTime;
       
-      // ✅ ULTRA-FAST: Reduced debounce to 10ms
+      // ✅ DEBOUNCE: Ignore rapid successive triggers
       if (timeSinceLastVibration >= VIBRATION_DEBOUNCE) {
-        theftDetectionCount++;
-        consecutiveVibrations++;
-        lastVibrationTime = millis();
         
-        Serial.printf("\n🚨🚨 [ANTI-THEFT] VIBRATION DETECTED #%d! 🚨🚨\n", consecutiveVibrations);
-        Serial.printf("[ANTI-THEFT] 📍 GPIO %d went HIGH!\n", vibrationSensorPin);
-
-        // ✅ IMMEDIATE buzzer response
-        digitalWrite(buzzerPin, HIGH);
-        digitalWrite(lightIndicatorPin, HIGH);
-        delay(200);  // Longer initial beep
-        digitalWrite(buzzerPin, LOW);
-        digitalWrite(lightIndicatorPin, LOW);
-        
-        // ✅ Additional alert sequence
-        for (int i = 0; i < 5; i++) {
-          digitalWrite(buzzerPin, HIGH);
-          digitalWrite(lightIndicatorPin, HIGH);
-          delay(100);
-          digitalWrite(buzzerPin, LOW);
-          digitalWrite(lightIndicatorPin, LOW);
-          delay(100);
+        // ✅ START NEW SEQUENCE: First vibration in a while
+        if (!vibrationSequenceActive) {
+          vibrationSequenceActive = true;
+          firstVibrationTime = currentTime;
+          vibrationConfirmationCount = 1;
+          Serial.printf("\n[ANTI-THEFT] 🔍 Vibration sequence started (confirmation 1/%d)\n", VIBRATION_CONFIRMATION_REQUIRED);
         }
-
-        // ✅ ALWAYS send SMS alert on vibration (with cooldown to prevent spam)
-        unsigned long timeSinceLastAlert = millis() - lastTheftAlert;
+        // ✅ CONTINUE SEQUENCE: Additional vibrations within window
+        else if (currentTime - firstVibrationTime <= VIBRATION_WINDOW) {
+          vibrationConfirmationCount++;
+          Serial.printf("[ANTI-THEFT] 🔍 Vibration confirmation %d/%d\n", vibrationConfirmationCount, VIBRATION_CONFIRMATION_REQUIRED);
+        }
+        // ✅ SEQUENCE EXPIRED: Reset if too much time passed
+        else {
+          vibrationSequenceActive = true;  // Restart sequence
+          firstVibrationTime = currentTime;
+          vibrationConfirmationCount = 1;
+          Serial.println("[ANTI-THEFT] ⏰ Vibration sequence reset (timeout)");
+        }
         
-        if (timeSinceLastAlert >= THEFT_ALERT_COOLDOWN) {
-          Serial.println("[ANTI-THEFT] 📱 Sending SMS + Firebase alert...");
-          triggerTheftAlert();
-          lastTheftAlert = millis();
-          theftAlertSent = true;
-          theftDetectionCount = 0;
-        } else {
-          Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\n", 
-                        (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
+        lastVibrationTime = currentTime;
+        
+        // ✅ TRIGGER ALERT: Only after sufficient confirmations
+        if (vibrationConfirmationCount >= VIBRATION_CONFIRMATION_REQUIRED) {
+          consecutiveVibrations++;
+          
+          Serial.printf("\n🚨🚨 [ANTI-THEFT] CONFIRMED THEFT ATTEMPT #%d! 🚨🚨\n", consecutiveVibrations);
+          Serial.printf("[ANTI-THEFT] 📍 %d vibrations confirmed within %lu seconds\n", 
+                        VIBRATION_CONFIRMATION_REQUIRED, VIBRATION_WINDOW / 1000);
+
+          // ✅ MODERATE buzzer response (not too aggressive)
+          for (int i = 0; i < 3; i++) {
+            digitalWrite(buzzerPin, HIGH);
+            digitalWrite(lightIndicatorPin, HIGH);
+            delay(150);
+            digitalWrite(buzzerPin, LOW);
+            digitalWrite(lightIndicatorPin, LOW);
+            delay(150);
+          }
+
+          // ✅ SMS alert with cooldown
+          unsigned long timeSinceLastAlert = currentTime - lastTheftAlert;
+          
+          if (timeSinceLastAlert >= THEFT_ALERT_COOLDOWN) {
+            Serial.println("[ANTI-THEFT] 📱 Sending SMS + Firebase alert...");
+            triggerTheftAlert();
+            lastTheftAlert = currentTime;
+            theftAlertSent = true;
+          } else {
+            Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\n", 
+                          (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
+          }
+          
+          // ✅ RESET SEQUENCE: Prevent immediate re-triggering
+          vibrationSequenceActive = false;
+          vibrationConfirmationCount = 0;
         }
       } else {
-        // Still in debounce period
-        Serial.printf("[VIBRATION] Debounce active (%lu ms remaining)\n", 
+        // Still in debounce period - ignore this trigger
+        Serial.printf("[VIBRATION] 🚫 Ignored (debounce: %lu ms remaining)\n", 
                       VIBRATION_DEBOUNCE - timeSinceLastVibration);
       }
     }
     
-    // ✅ ENHANCED: Show LOW to HIGH transitions
-    static int lastVibrationReading = LOW;
-    if (vibrationDetected != lastVibrationReading) {
-      Serial.printf("[VIBRATION] Pin %d changed: %s → %s\n", 
-                    vibrationSensorPin,
-                    lastVibrationReading ? "HIGH" : "LOW",
-                    vibrationDetected ? "HIGH" : "LOW");
-      lastVibrationReading = vibrationDetected;
+    // ✅ SEQUENCE TIMEOUT: Reset if no vibrations for too long
+    if (vibrationSequenceActive && (currentTime - firstVibrationTime > VIBRATION_WINDOW)) {
+      vibrationSequenceActive = false;
+      vibrationConfirmationCount = 0;
+      Serial.println("[ANTI-THEFT] ⏰ Vibration sequence expired");
     }
     
-    // Reset counters after 10 seconds of no vibration
-    if (consecutiveVibrations > 0 && (millis() - lastVibrationTime) > 10000) {
+    // ✅ ENHANCED: Show state transitions for debugging
+    if (vibrationDetected != lastVibrationState) {
+      Serial.printf("[VIBRATION] Pin %d: %s → %s | Sequence: %s (%d/%d)\n", 
+                    vibrationSensorPin,
+                    lastVibrationState ? "HIGH" : "LOW",
+                    vibrationDetected ? "HIGH" : "LOW",
+                    vibrationSequenceActive ? "ACTIVE" : "INACTIVE",
+                    vibrationConfirmationCount, VIBRATION_CONFIRMATION_REQUIRED);
+    }
+    
+    // ✅ UPDATE: Track state for next iteration
+    lastVibrationState = vibrationDetected;
+    
+    // ✅ RESET COUNTERS: After long period of inactivity
+    if (consecutiveVibrations > 0 && (currentTime - lastVibrationTime) > 30000) {  // 30 seconds
       consecutiveVibrations = 0;
-      Serial.println("[ANTI-THEFT] ✓ Vibration counter reset");
+      vibrationSequenceActive = false;
+      vibrationConfirmationCount = 0;
+      Serial.println("[ANTI-THEFT] ✓ All counters reset (30s inactivity)");
     }
   }
 }

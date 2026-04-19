@@ -39,6 +39,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/device-setup',
+    name: 'DeviceSetup',
+    component: () => import(/* webpackChunkName: "device-setup" */ '../views/DeviceSetup.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/emergency-login',
     name: 'EmergencyContactLogin',
     component: () => import(/* webpackChunkName: "emergency" */ '../views/EmergencyContactLogin.vue')

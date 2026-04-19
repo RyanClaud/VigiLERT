@@ -1,35 +1,120 @@
-<template>
-  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0]">
-    <!-- Header -->
-    <div class="bg-gradient-to-r from-[#7091E6] via-[#5571c6] to-[#3D52A0] shadow-xl">
-      <div class="px-4 md:px-8 py-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
-              <span class="material-icons text-white text-3xl">shield</span>
+﻿<template>
+  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0] pb-20">
+
+    <!-- ===== HEADER ===== -->
+    <div class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#5571c6] to-[#7091E6] py-8 px-4 md:px-8 shadow-2xl">
+      <div class="absolute inset-0 overflow-hidden">
+        <div class="absolute -top-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
+        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" style="animation-delay:1s"></div>
+      </div>
+      <div class="relative max-w-7xl mx-auto">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+
+          <!-- Left: Identity -->
+          <div class="flex items-center gap-5">
+            <div class="relative">
+              <div class="absolute inset-0 bg-gradient-to-r from-red-400 to-orange-400 rounded-full blur-lg opacity-70"></div>
+              <div class="relative bg-gradient-to-br from-white/20 to-white/10 backdrop-blur-sm p-4 rounded-full border-4 border-white shadow-2xl">
+                <span class="material-icons text-5xl text-white">shield</span>
+                <div class="absolute -bottom-1 -right-1 flex items-center gap-1 bg-orange-500 px-2 py-1 rounded-full border-2 border-white shadow-lg">
+                  <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span class="text-xs font-bold text-white">Monitoring</span>
+                </div>
+              </div>
             </div>
             <div>
-              <h1 class="font-bold text-xl text-white">Emergency Contact Dashboard</h1>
-              <p class="text-sm text-white/80">Monitoring Rider Safety</p>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="material-icons text-red-300 text-sm animate-pulse">emergency</span>
+                <p class="text-xs text-white/80 font-semibold uppercase tracking-widest">Emergency Contact</p>
+              </div>
+              <h1 class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                Safety Monitor,
+                <span class="bg-gradient-to-r from-red-300 to-orange-300 bg-clip-text text-transparent">Guardian</span>
+              </h1>
+              <div class="flex items-center gap-3 text-white/70 text-sm mt-1">
+                <span class="material-icons text-sm">visibility</span>
+                <span>Monitoring Rider Safety</span>
+                <span class="material-icons text-sm ml-2">schedule</span>
+                <span>{{ currentTime }}</span>
+              </div>
             </div>
           </div>
-          <!-- Log Out Button -->
-          <button
-            @click="logout"
-            class="inline-flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
-          >
-            <span class="material-icons text-lg">logout</span>
-            <span class="hidden sm:inline">Log Out</span>
-          </button>
+
+          <!-- Right: SOS + Quick Stats -->
+          <div class="flex flex-col gap-3 items-end">
+            <!-- SOS Button -->
+            <button @click="triggerSOS"
+              class="relative overflow-hidden bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-2xl px-6 py-4 shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border-2 border-red-300/50">
+              <div class="absolute inset-0 bg-white/10 animate-pulse rounded-2xl"></div>
+              <div class="relative flex items-center gap-3">
+                <span class="material-icons text-3xl animate-pulse">emergency</span>
+                <div class="text-left">
+                  <p class="font-bold text-lg leading-tight">Emergency SOS</p>
+                  <p class="text-red-200 text-xs">Tap to alert rider</p>
+                </div>
+              </div>
+            </button>
+
+            <!-- Quick Stats Row -->
+            <div class="flex gap-3">
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center min-w-[80px]">
+                <span :class="['material-icons text-2xl', engineRunning ? 'text-green-300' : 'text-gray-400']">power_settings_new</span>
+                <p class="text-xs font-bold text-white mt-1">{{ engineRunning ? 'ON' : 'OFF' }}</p>
+                <p class="text-xs text-white/60">Engine</p>
+              </div>
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center min-w-[80px]">
+                <span class="material-icons text-2xl text-blue-300">speed</span>
+                <p class="text-xs font-bold text-white mt-1">{{ currentSpeed.toFixed(0) }}</p>
+                <p class="text-xs text-white/60">km/h</p>
+              </div>
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center min-w-[80px]">
+                <span :class="['material-icons text-2xl', alcoholStatus === 'Safe' ? 'text-green-300' : 'text-red-300 animate-pulse']">local_bar</span>
+                <p class="text-xs font-bold text-white mt-1">{{ alcoholStatus }}</p>
+                <p class="text-xs text-white/60">Alcohol</p>
+              </div>
+              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center min-w-[80px]">
+                <span :class="['material-icons text-2xl', alerts.length > 0 ? 'text-yellow-300 animate-pulse' : 'text-white/50']">notifications_active</span>
+                <p class="text-xs font-bold text-white mt-1">{{ alerts.length }}</p>
+                <p class="text-xs text-white/60">Alerts</p>
+              </div>
+            </div>
+
+            <!-- Logout -->
+            <button @click="logout" class="bg-white/10 hover:bg-white/20 border border-white/30 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2">
+              <span class="material-icons text-sm">logout</span>Logout
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Main Dashboard -->
-    <main class="flex-1 px-4 md:px-8 py-6">
-      <!-- System Status Bar -->
-      <div id="status" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <!-- Helmet-Motorcycle Pairing Status -->
+    <!-- ===== CRASH ALERT BANNER ===== -->
+    <div v-if="crashDisplayStatus !== 'Stable'"
+      class="mx-4 md:mx-8 mt-4 relative overflow-hidden bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-2xl shadow-2xl border-4 border-red-300 animate-pulse">
+      <div class="relative p-5 flex items-center gap-4">
+        <div class="bg-white/20 p-3 rounded-full animate-bounce">
+          <span class="material-icons text-4xl text-white">warning</span>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-xl font-bold text-white flex items-center gap-2">
+            <span>🚨</span> CRASH DETECTED
+          </h3>
+          <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} — Check on rider immediately!</p>
+          <a v-if="location.lat && location.lng"
+            :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" target="_blank"
+            class="inline-flex items-center gap-1 mt-2 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1 rounded-lg transition-all">
+            <span class="material-icons text-sm">map</span> View Location
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MAIN ===== -->
+    <main class="flex-1 px-4 md:px-8 py-6 max-w-7xl mx-auto w-full">
+
+      <!-- Row 1: Pairing + Engine Status -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <!-- Device Pairing -->
         <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -37,7 +122,7 @@
                 <span class="material-icons text-white text-2xl">link</span>
               </div>
               <div>
-                <p class="text-xs text-gray-500 font-medium uppercase">Pairing Status</p>
+                <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Device Pairing</p>
                 <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-600' : 'text-red-600']">
                   {{ helmetPaired && motorcyclePaired ? 'Connected' : 'Disconnected' }}
                 </p>
@@ -45,954 +130,604 @@
             </div>
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="helmetPaired ? 'text-green-500' : 'text-gray-400'">sports_motorsports</span>
-                <span class="text-xs font-medium" :class="helmetPaired ? 'text-green-600' : 'text-gray-500'">Helmet</span>
+                <span :class="['material-icons text-sm', helmetPaired ? 'text-green-500' : 'text-gray-400']">sports_motorsports</span>
+                <span :class="['text-xs font-medium', helmetPaired ? 'text-green-600' : 'text-gray-400']">Helmet</span>
+                <span :class="['w-2 h-2 rounded-full', helmetPaired ? 'bg-green-400 animate-pulse' : 'bg-gray-300']"></span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="motorcyclePaired ? 'text-green-500' : 'text-gray-400'">two_wheeler</span>
-                <span class="text-xs font-medium" :class="motorcyclePaired ? 'text-green-600' : 'text-gray-500'">Motorcycle</span>
+                <span :class="['material-icons text-sm', motorcyclePaired ? 'text-green-500' : 'text-gray-400']">two_wheeler</span>
+                <span :class="['text-xs font-medium', motorcyclePaired ? 'text-green-600' : 'text-gray-400']">Motorcycle</span>
+                <span :class="['w-2 h-2 rounded-full', motorcyclePaired ? 'bg-green-400 animate-pulse' : 'bg-gray-300']"></span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Device Health -->
-        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+        <!-- Engine Status -->
+        <div :class="['relative overflow-hidden rounded-2xl shadow-lg p-5 border border-white/50 transition-all duration-500',
+          engineRunning ? 'bg-gradient-to-br from-green-500 to-green-600 text-white' : 'bg-white/80 backdrop-blur-lg']">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600">
-                <span class="material-icons text-white text-2xl">battery_charging_full</span>
+              <div :class="['p-3 rounded-xl', engineRunning ? 'bg-white/20' : 'bg-gray-200']">
+                <span :class="['material-icons text-2xl', engineRunning ? 'text-white' : 'text-gray-500']">power_settings_new</span>
               </div>
               <div>
-                <p class="text-xs text-gray-500 font-medium uppercase">Device Health</p>
-                <p class="text-lg font-bold text-blue-600">{{ deviceBattery }}%</p>
+                <p :class="['text-xs font-medium uppercase tracking-wide', engineRunning ? 'text-green-100' : 'text-gray-500']">Engine Status</p>
+                <p :class="['text-lg font-bold', engineRunning ? 'text-white' : 'text-gray-700']">
+                  {{ engineRunning ? 'Running' : 'Stopped' }}
+                </p>
               </div>
             </div>
-            <div class="flex flex-col gap-1 text-right">
-              <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="gsmConnected ? 'text-green-500' : 'text-red-500'">signal_cellular_alt</span>
-                <span class="text-xs font-medium">GSM</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="gpsConnected ? 'text-green-500' : 'text-red-500'">gps_fixed</span>
-                <span class="text-xs font-medium">GPS</span>
-              </div>
-            </div>
+            <div :class="['w-4 h-4 rounded-full', engineRunning ? 'bg-green-200 animate-pulse' : 'bg-gray-300']"></div>
           </div>
-        </div>
-
-        <!-- Emergency SOS Button -->
-        <div class="relative overflow-hidden bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-5 border border-white/50 cursor-pointer hover:scale-105 transition-all duration-300" @click="triggerSOS">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="p-3 rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
-                <span class="material-icons text-white text-3xl">emergency</span>
-              </div>
-              <div>
-                <p class="text-xs text-white/80 font-medium uppercase">Emergency</p>
-                <p class="text-xl font-bold text-white">SOS Alert</p>
-              </div>
-            </div>
-            <span class="material-icons text-white text-4xl">touch_app</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Rider Status Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 mb-8">
-        <!-- Rider Status -->
-        <div :class="[
-          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          riderStatus === 'Inactive' ? 'bg-gradient-to-br from-red-600 via-red-500 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70]'
-        ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-          <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div :class="['p-3 rounded-xl', riderStatus === 'Inactive' ? 'bg-white/30 animate-bounce' : 'bg-white/20']">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                </svg>
-              </div>
-              <div :class="['w-3 h-3 rounded-full', riderStatus === 'Inactive' ? 'bg-yellow-300 animate-ping' : 'bg-green-400 animate-pulse']"></div>
-            </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Rider Status</p>
-              <p class="text-2xl font-bold">{{ riderStatus }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ riderSubtitle }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Current Speed -->
-        <div :class="[
-          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          isOverSpeed ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#7091E6] via-[#6081d6] to-[#5571c6]'
-        ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-          <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                </svg>
-              </div>
-              <div :class="['w-3 h-3 rounded-full', isOverSpeed ? 'bg-yellow-300 animate-pulse' : 'bg-blue-300']"></div>
-            </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Current Speed</p>
-              <p class="text-2xl font-bold">{{ currentSpeedText }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ isOverSpeed ? 'Over speed limit!' : speedSubtitle }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Alertness -->
-        <div :class="[
-          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          alertnessStatus === 'Normal' ? 'bg-gradient-to-br from-[#8697C4] via-[#7687b4] to-[#6677a4] text-white' : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-gray-800'
-        ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-          <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10" :class="alertnessStatus === 'Normal' ? 'text-white' : 'text-gray-800'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-              </div>
-              <div :class="['w-3 h-3 rounded-full', alertnessStatus === 'Normal' ? 'bg-green-400' : 'bg-orange-400 animate-pulse']"></div>
-            </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Alertness</p>
-              <p class="text-2xl font-bold">{{ alertnessStatus }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ alertnessSubtitle }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Alcohol Detection -->
-        <div :class="[
-          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          alcoholStatus === 'Safe' ? 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70] text-white' : 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white'
-        ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-          <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                </svg>
-              </div>
-              <div :class="['w-3 h-3 rounded-full', alcoholStatus === 'Safe' ? 'bg-green-400' : 'bg-red-300 animate-pulse']"></div>
-            </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Alcohol Detection</p>
-              <p class="text-2xl font-bold">{{ alcoholStatus }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ alcoholSubtitle }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Crash Detection Card -->
-        <div :class="[
-          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          crashDisplayStatus === 'Stable' ? 'bg-gradient-to-br from-green-600 via-green-700 to-green-800 text-white' : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 text-white animate-pulse'
-        ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-          <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                </svg>
-              </div>
-              <div :class="['w-3 h-3 rounded-full', crashDisplayStatus === 'Stable' ? 'bg-emerald-300' : 'bg-yellow-300 animate-pulse']"></div>
-            </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Vehicle Status</p>
-              <p class="text-2xl font-bold">{{ crashDisplayMessage }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ crashDisplayStatus === 'Stable' ? 'No incidents' : 'Alert active' }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Speed Limit Control -->
-      <div class="relative overflow-hidden bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 rounded-3xl shadow-2xl p-6 mb-8 transition-all duration-500 hover:shadow-3xl group">
-        <div class="absolute inset-0 bg-gradient-to-r from-yellow-300/20 to-amber-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-        <div class="relative">
-          <div class="flex justify-between items-center mb-4">
-            <div class="flex items-center gap-3">
-              <div class="bg-white/30 backdrop-blur-sm p-2 rounded-xl">
-                <span class="material-icons text-3xl text-gray-800">tune</span>
-              </div>
-              <label for="speed-limit" class="font-bold text-gray-900 text-lg">Set Rider Speed Limit</label>
-            </div>
-            <div class="relative">
-              <div class="absolute inset-0 bg-white/40 blur-xl rounded-2xl"></div>
-              <span class="relative text-3xl font-black text-gray-900 bg-white/60 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border border-white/50">
-                {{ speedLimit }} <span class="text-xl font-semibold">km/h</span>
-              </span>
-            </div>
-          </div>
-          <div class="relative">
-            <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
-              @change="updateSpeedLimitInFirebase"
-              class="w-full h-4 bg-white/40 backdrop-blur-sm rounded-full cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/50 accent-gray-800 transition-all appearance-none slider-thumb" />
-            <div class="flex justify-between mt-3 text-sm font-bold text-gray-800">
-              <span class="bg-white/30 px-3 py-1 rounded-lg">0 km/h</span>
-              <span class="bg-white/30 px-3 py-1 rounded-lg">120 km/h</span>
-            </div>
-          </div>
-          <p class="text-sm text-gray-700 mt-3 text-center font-medium">
-            ⚠️ Rider will be alerted when exceeding this speed
+          <p :class="['text-xs mt-2', engineRunning ? 'text-green-100' : 'text-gray-500']">
+            {{ engineRunning ? 'Rider is currently on the road' : 'Motorcycle engine is off' }}
           </p>
         </div>
       </div>
 
-      <!-- Emergency Contact Location Tracking -->
-      <div class="relative overflow-hidden bg-gradient-to-r from-green-500 via-green-600 to-green-700 rounded-3xl shadow-2xl p-6 mb-8 text-white border-2 border-white/30 hover:shadow-3xl transition-all duration-300">
-        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <div class="p-4 bg-white/20 rounded-2xl backdrop-blur-sm">
-              <span class="material-icons text-4xl">my_location</span>
+      <!-- Row 2: Status Cards (mirrors user dashboard) -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <!-- Rider Status -->
+        <div :class="['group relative overflow-hidden text-white rounded-3xl shadow-xl p-5 transition-all duration-500 hover:scale-105 col-span-1',
+          engineRunning ? 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70]' : 'bg-gradient-to-br from-red-600 via-red-500 to-red-700 animate-pulse']">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
+          <div class="relative">
+            <div class="flex items-center justify-between mb-3">
+              <div :class="['p-2 rounded-xl', engineRunning ? 'bg-white/20' : 'bg-white/30 animate-bounce']">
+                <span class="material-icons text-2xl">person</span>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', engineRunning ? 'bg-green-400 animate-pulse' : 'bg-yellow-300 animate-ping']"></div>
             </div>
-            <div>
-              <h3 class="text-2xl font-bold mb-1">Track Rider Location</h3>
-              <p class="text-green-100 text-sm">
-                {{ isTrackingRider ? 'Tracking active - Your location shared with rider' : 'Enable to see rider\'s real-time location' }}
-              </p>
-              <p v-if="emergencyContactLocation.lat" class="text-green-200 text-xs mt-1">
-                Your Location: {{ formatLatLng(emergencyContactLocation.lat, emergencyContactLocation.lng) }}
-              </p>
+            <p class="text-xs opacity-70 mb-1">Rider Status</p>
+            <p class="text-xl font-bold">{{ engineRunning ? 'Active' : 'Inactive' }}</p>
+            <p class="text-xs opacity-60 mt-1">{{ engineRunning ? 'On the road' : 'Engine off' }}</p>
+          </div>
+        </div>
+
+        <!-- Speed -->
+        <div :class="['group relative overflow-hidden text-white rounded-3xl shadow-xl p-5 transition-all duration-500 hover:scale-105 col-span-1',
+          isOverSpeed ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#7091E6] via-[#6081d6] to-[#5571c6]']">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
+          <div class="relative">
+            <div class="flex items-center justify-between mb-3">
+              <div class="bg-white/20 p-2 rounded-xl">
+                <span class="material-icons text-2xl">speed</span>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', isOverSpeed ? 'bg-yellow-300 animate-pulse' : 'bg-blue-300']"></div>
+            </div>
+            <p class="text-xs opacity-70 mb-1">Current Speed</p>
+            <p class="text-xl font-bold">{{ currentSpeedText }}</p>
+            <p class="text-xs opacity-60 mt-1">{{ isOverSpeed ? 'Over speed limit!' : `Limit: ${speedLimit} km/h` }}</p>
+          </div>
+        </div>
+
+        <!-- Alertness -->
+        <div class="group relative overflow-hidden bg-gradient-to-br from-[#8697C4] via-[#7687b4] to-[#6677a4] text-white rounded-3xl shadow-xl p-5 transition-all duration-500 hover:scale-105 col-span-1">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
+          <div class="relative">
+            <div class="flex items-center justify-between mb-3">
+              <div class="bg-white/20 p-2 rounded-xl">
+                <span class="material-icons text-2xl">visibility</span>
+              </div>
+              <div class="w-3 h-3 rounded-full bg-green-400"></div>
+            </div>
+            <p class="text-xs opacity-70 mb-1">Alertness</p>
+            <p class="text-xl font-bold">{{ alcoholStatus === 'Safe' ? 'Normal' : 'Impaired' }}</p>
+            <p class="text-xs opacity-60 mt-1">{{ alcoholStatus === 'Safe' ? 'No impairment' : 'Alcohol detected' }}</p>
+          </div>
+        </div>
+
+        <!-- Alcohol -->
+        <div :class="['group relative overflow-hidden text-white rounded-3xl shadow-xl p-5 transition-all duration-500 hover:scale-105 col-span-1',
+          alcoholStatus === 'Safe' ? 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70]' : 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 animate-pulse']">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
+          <div class="relative">
+            <div class="flex items-center justify-between mb-3">
+              <div class="bg-white/20 p-2 rounded-xl">
+                <span class="material-icons text-2xl">local_bar</span>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', alcoholStatus === 'Safe' ? 'bg-green-400' : 'bg-red-300 animate-pulse']"></div>
+            </div>
+            <p class="text-xs opacity-70 mb-1">Alcohol</p>
+            <p class="text-xl font-bold">{{ alcoholStatus }}</p>
+            <p class="text-xs opacity-60 mt-1">{{ alcoholStatus === 'Safe' ? 'No alcohol detected' : 'Danger level!' }}</p>
+          </div>
+        </div>
+
+        <!-- Crash -->
+        <div :class="['group relative overflow-hidden text-white rounded-3xl shadow-xl p-5 transition-all duration-500 hover:scale-105 col-span-1',
+          crashDisplayStatus === 'Stable' ? 'bg-gradient-to-br from-green-600 via-green-700 to-green-800' : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 animate-pulse']">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
+          <div class="relative">
+            <div class="flex items-center justify-between mb-3">
+              <div class="bg-white/20 p-2 rounded-xl">
+                <span class="material-icons text-2xl">warning</span>
+              </div>
+              <div :class="['w-3 h-3 rounded-full', crashDisplayStatus === 'Stable' ? 'bg-emerald-300' : 'bg-yellow-300 animate-pulse']"></div>
+            </div>
+            <p class="text-xs opacity-70 mb-1">Vehicle Status</p>
+            <p class="text-xl font-bold">{{ crashDisplayStatus }}</p>
+            <p class="text-xs opacity-60 mt-1">{{ crashDisplayStatus === 'Stable' ? 'No incidents' : 'Alert active' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Speed Limit Control (color-changing progress bar) -->
+      <div class="relative overflow-hidden rounded-3xl shadow-2xl p-6 md:p-8 mb-6 transition-all duration-500"
+        :style="{ background: speedLimitGradient }">
+        <div class="relative">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="bg-white/20 backdrop-blur-sm p-3 rounded-2xl">
+                <span class="material-icons text-3xl text-white">tune</span>
+              </div>
+              <div>
+                <h3 class="text-lg font-bold text-white">Speed Limit Control</h3>
+                <p class="text-white/70 text-xs">Drag to set rider speed limit</p>
+              </div>
+            </div>
+            <div class="relative">
+              <div class="absolute inset-0 bg-white/20 blur-xl rounded-2xl"></div>
+              <span class="relative text-3xl font-black text-white bg-white/20 backdrop-blur-md px-5 py-2 rounded-2xl border border-white/30">
+                {{ speedLimit }} <span class="text-base font-semibold">km/h</span>
+              </span>
             </div>
           </div>
-          <button
-            @click="toggleRiderTracking"
-            :class="[
-              'inline-flex items-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 whitespace-nowrap',
-              isTrackingRider 
-                ? 'bg-red-500 hover:bg-red-600 text-white' 
-                : 'bg-white hover:bg-gray-100 text-green-600'
-            ]"
-          >
-            <span class="material-icons text-2xl">
-              {{ isTrackingRider ? 'location_off' : 'gps_fixed' }}
-            </span>
-            <span>{{ isTrackingRider ? 'Stop Tracking' : 'Start Tracking' }}</span>
+
+          <!-- Color-coded progress bar track -->
+          <div class="relative mb-3">
+            <!-- Background gradient track -->
+            <div class="w-full h-4 rounded-full overflow-hidden bg-white/20">
+              <div class="h-full rounded-full transition-all duration-300"
+                :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }">
+              </div>
+            </div>
+            <!-- Range input overlaid -->
+            <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
+              @input="updateSpeedLimitInFirebase"
+              class="absolute inset-0 w-full h-4 opacity-0 cursor-pointer" />
+          </div>
+
+          <!-- Labels -->
+          <div class="flex justify-between text-xs font-bold text-white/80">
+            <span class="bg-white/20 px-2 py-1 rounded-lg">0 km/h</span>
+            <span class="bg-white/20 px-2 py-1 rounded-lg">30</span>
+            <span class="bg-white/20 px-2 py-1 rounded-lg">60</span>
+            <span class="bg-white/20 px-2 py-1 rounded-lg">90</span>
+            <span class="bg-white/20 px-2 py-1 rounded-lg">120 km/h</span>
+          </div>
+
+          <!-- Speed zone indicator -->
+          <div class="mt-4 flex items-center gap-2">
+            <div :class="['w-3 h-3 rounded-full', speedZoneColor]"></div>
+            <span class="text-white/90 text-sm font-semibold">{{ speedZoneLabel }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Location + Speed Tabs -->
+      <div class="mb-4">
+        <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-2 border border-white/50 flex gap-2">
+          <button v-for="tab in ['Rider Location', 'Speed Data', 'Recent Alerts']" :key="tab"
+            @click="activeTab = tab"
+            :class="['flex-1 px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300',
+              activeTab === tab ? 'bg-gradient-to-r from-[#3D52A0] to-[#7091E6] text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100']">
+            {{ tab }}
           </button>
         </div>
       </div>
 
-      <!-- Tabs -->
-      <div class="mb-6">
-        <TabGroup :tabs="['My Location', 'Speed Data', 'Diagnostics']" v-model="activeTab"
-          class="bg-[#ADBBD4] rounded-lg p-2 flex flex-wrap gap-2" />
-      </div>
-
-      <!-- Tab Content -->
-      <div v-if="activeTab === 'My Location'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <LocationSection :location="location" :user="user" />
-      </div>
-      <div v-else-if="activeTab === 'Speed Data'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <SpeedDataSection
-          :speedData="speedHistory"
-          :speedLimit="speedLimit"
-          @overspeed="handleOverspeed"
+      <!-- Tab: Rider Location -->
+      <div v-show="activeTab === 'Rider Location'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50">
+        <h3 class="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
+          <span class="material-icons text-[#3D52A0]">location_on</span>
+          Rider Location Monitoring
+          <span class="ml-auto flex items-center gap-1 text-xs font-normal text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            Live GPS Module
+          </span>
+        </h3>
+        <EmergencyRiderMap
+          :location="location"
+          :speed="currentSpeed"
+          :speed-limit="speedLimit"
+          :satellites="satelliteCount"
+          :is-over-speed="isOverSpeed"
         />
       </div>
-      <div v-else-if="activeTab === 'Diagnostics'" class="bg-white rounded-lg shadow p-4 md:p-6 mb-4">
-        <DiagnosticsSection :diagnostics="diagnostics" />
-      </div>
 
-      <!-- Recent Alerts Section -->
-      <div id="alerts" class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/50 transition-all duration-300 hover:shadow-3xl">
-        <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#7091E6]/10 to-[#3D52A0]/10 rounded-full -mr-32 -mt-32"></div>
-        <h3 class="relative font-bold text-2xl mb-6 text-[#3D52A0] flex items-center justify-between">
-          <span class="flex items-center gap-3">
-            <div class="bg-gradient-to-br from-[#7091E6] to-[#3D52A0] p-3 rounded-2xl shadow-lg">
-              <span class="material-icons text-3xl text-white">notifications_active</span>
-            </div>
-            <span>Recent Alerts</span>
-            <span v-if="alerts.length > 0" class="bg-red-500 text-white text-sm px-3 py-1 rounded-full">
-              {{ alerts.length }}
-            </span>
-          </span>
-          <button @click="toggleAlerts"
-            class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-            {{ showAlerts ? 'Hide' : 'Show' }}
-          </button>
+      <!-- Tab: Speed Data -->
+      <div v-show="activeTab === 'Speed Data'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50">
+        <h3 class="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
+          <span class="material-icons text-blue-500">speed</span>
+          Speed Monitoring
         </h3>
-        <div v-if="showAlerts" class="relative max-h-64 overflow-y-auto custom-scrollbar">
-          <RecentAlerts :alerts="alerts" :crash-events="crashEvents" />
+
+        <!-- Live Speed Gauge -->
+        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border-2 border-blue-200 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="font-bold text-blue-800">Live Speed</h4>
+            <span :class="['px-3 py-1 rounded-full text-xs font-bold', isOverSpeed ? 'bg-red-500 text-white animate-pulse' : 'bg-green-500 text-white']">
+              {{ isOverSpeed ? 'OVER LIMIT' : 'SAFE' }}
+            </span>
+          </div>
+          <div class="flex items-end gap-4">
+            <p :class="['text-6xl font-black', isOverSpeed ? 'text-red-600' : 'text-blue-700']">{{ currentSpeed.toFixed(0) }}</p>
+            <div class="pb-2">
+              <p class="text-gray-500 text-sm">km/h</p>
+              <p class="text-gray-400 text-xs">Limit: {{ speedLimit }} km/h</p>
+            </div>
+          </div>
+          <!-- Speed bar -->
+          <div class="mt-4 w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-500"
+              :style="{ width: `${Math.min((currentSpeed / Math.max(speedLimit * 1.5, 1)) * 100, 100)}%`,
+                        background: isOverSpeed ? '#ef4444' : '#3b82f6' }">
+            </div>
+          </div>
+        </div>
+
+        <!-- Speed History -->
+        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200">
+          <h4 class="font-bold text-green-800 mb-4 flex items-center gap-2">
+            <span class="material-icons">timeline</span> Recent Speed History
+          </h4>
+          <div v-if="speedHistory.length > 0" class="flex items-end gap-1 h-16">
+            <div v-for="(speed, i) in speedHistory.slice(-20)" :key="i"
+              class="flex-1 rounded-t transition-all duration-300"
+              :style="{ height: `${Math.min((speed / Math.max(speedLimit * 1.5, 1)) * 100, 100)}%`,
+                        background: speed > speedLimit ? '#ef4444' : '#22c55e' }"
+              :title="`${speed.toFixed(0)} km/h`">
+            </div>
+          </div>
+          <p v-else class="text-green-600 text-sm text-center py-4">No speed history yet</p>
         </div>
       </div>
 
-      <!-- Recent Trips Preview -->
-      <section id="trips" class="mb-6">
-        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/50 transition-all duration-300 hover:shadow-3xl">
-          <div class="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-[#3D52A0]/10 to-[#7091E6]/10 rounded-full -ml-32 -mt-32"></div>
-          <h3 class="relative text-2xl font-bold text-[#3D52A0] mb-6 flex items-center gap-3">
-            <div class="bg-gradient-to-br from-[#3D52A0] to-[#2a3a70] p-3 rounded-2xl shadow-lg">
-              <span class="material-icons text-3xl text-white">route</span>
+      <!-- Tab: Recent Alerts -->
+      <div v-show="activeTab === 'Recent Alerts'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <div class="bg-red-500 p-2 rounded-xl">
+              <span class="material-icons text-white">notifications_active</span>
             </div>
-            <span>Recent Trips</span>
+            Recent Alerts
+            <span v-if="alerts.length > 0" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">{{ alerts.length }}</span>
           </h3>
-          <div v-if="recentTrips.length > 0"
-            class="relative space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
-            <div v-for="trip in recentTrips" :key="trip.id" 
-              class="group relative overflow-hidden p-6 border-2 border-white/50 rounded-2xl hover:border-[#7091E6] hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-white to-[#EDE8F5]/30 backdrop-blur-sm">
-              <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#7091E6]/10 to-transparent rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-              <div class="relative">
-                <div class="flex items-center gap-2 mb-3">
-                  <div class="bg-gradient-to-r from-[#7091E6] to-[#5571c6] px-3 py-1 rounded-lg">
-                    <p class="text-xs text-white font-bold uppercase tracking-wider">Route Details</p>
-                  </div>
-                </div>
-                <div class="space-y-2 mb-4">
-                  <p class="text-sm flex items-start gap-2">
-                    <span class="material-icons text-[#3D52A0] text-lg">trip_origin</span>
-                    <span><strong class="text-[#3D52A0]">From:</strong> <span class="text-gray-700">{{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</span></span>
-                  </p>
-                  <p class="text-sm flex items-start gap-2">
-                    <span class="material-icons text-[#3D52A0] text-lg">location_on</span>
-                    <span><strong class="text-[#3D52A0]">To:</strong> <span class="text-gray-700">{{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</span></span>
-                  </p>
-                  <p class="text-sm flex items-center gap-2">
-                    <span class="material-icons text-[#3D52A0] text-lg">speed</span>
-                    <span><strong class="text-[#3D52A0]">Max Speed:</strong> <span class="text-gray-700 font-semibold">{{ trip.maxSpeed || 'N/A' }} km/h</span></span>
-                  </p>
-                </div>
-                <div class="flex gap-3">
-                  <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
-                    class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">navigation</span>
-                    Navigate
-                  </a>
-                </div>
+        </div>
+        <div v-if="alerts.length > 0" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
+          <div v-for="(alert, index) in alerts" :key="index"
+            :class="['p-4 rounded-xl border-l-4 transition-all',
+              alert.type === 'danger' || alert.type === 'crash' ? 'bg-red-50 border-red-500' :
+              alert.type === 'success' ? 'bg-green-50 border-green-500' :
+              alert.type === 'alcohol' ? 'bg-orange-50 border-orange-500' :
+              'bg-blue-50 border-blue-500']">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1">
+                <p :class="['font-bold text-sm',
+                  alert.type === 'danger' || alert.type === 'crash' ? 'text-red-800' :
+                  alert.type === 'success' ? 'text-green-800' :
+                  alert.type === 'alcohol' ? 'text-orange-800' : 'text-blue-800']">{{ alert.message }}</p>
+                <p v-if="alert.details" class="text-xs text-gray-500 mt-1">{{ alert.details }}</p>
               </div>
+              <span class="text-xs text-gray-400 whitespace-nowrap">{{ alert.time }}</span>
             </div>
-          </div>
-          <div v-else class="relative p-12 text-center">
-            <div class="inline-block p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-4">
-              <span class="material-icons text-7xl text-gray-400">explore_off</span>
-            </div>
-            <p class="text-gray-600 font-semibold text-lg">No trips found yet</p>
-            <p class="text-sm text-gray-400 mt-2">Trip history will appear here</p>
           </div>
         </div>
-      </section>
+        <div v-else class="text-center py-12 text-gray-400">
+          <span class="material-icons text-5xl mb-3 block">notifications_none</span>
+          <p class="font-medium">No alerts since you opened this page</p>
+        </div>
+      </div>
 
-      <!-- Crash Events -->
-      <section class="mt-8" v-if="crashEvents.length > 0">
-        <div class="relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100/50 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border-l-8 border-red-500">
-          <div class="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full -mr-48 -mt-48"></div>
-          <h3 class="relative font-bold text-2xl mb-6 text-red-600 flex items-center gap-3">
-            <div class="bg-gradient-to-br from-red-500 to-red-600 p-3 rounded-2xl shadow-lg animate-pulse">
-              <span class="material-icons text-3xl text-white">warning</span>
-            </div>
-            <span>Crash Site Locations</span>
-          </h3>
-          <div class="relative max-h-64 overflow-y-auto space-y-4 custom-scrollbar">
-            <div v-for="(event, index) in crashEvents" :key="index" 
-              class="group relative overflow-hidden p-6 border-2 border-red-300 rounded-2xl bg-white hover:shadow-xl transition-all duration-300">
-              <div class="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-              <div class="relative">
-                <div class="space-y-2 mb-4">
-                  <p class="text-sm flex items-center gap-2">
-                    <span class="material-icons text-red-600 text-lg">flash_on</span>
-                    <span><strong class="text-red-700">Impact:</strong> <span class="text-gray-700 font-semibold">{{ event.impactStrength }} g</span></span>
-                  </p>
-                  <p class="text-sm flex items-start gap-2">
-                    <span class="material-icons text-red-600 text-lg">location_on</span>
-                    <span><strong class="text-red-700">Location:</strong> <span class="text-gray-700">{{ event.location }}</span></span>
-                  </p>
-                </div>
-                <div class="flex flex-wrap gap-3">
-                  <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
-                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">location_on</span>
-                    See Location
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
 
     <!-- Footer -->
-    <footer class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#4a5fb8] to-[#3D52A0] text-center py-6 text-white border-t-4 border-white/20 mt-auto backdrop-blur-sm">
-      <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
-      <div class="relative">
-        <p class="font-semibold text-sm tracking-wide">© 2025 VIGILERT. All rights reserved.</p>
-        <p class="text-xs text-white/70 mt-1">Emergency Contact Monitoring System</p>
-      </div>
+    <footer class="bg-gradient-to-r from-[#3D52A0] via-[#4a5fb8] to-[#3D52A0] text-center py-5 text-white border-t-4 border-white/20">
+      <p class="font-semibold text-sm">© 2025 VIGILERT. All rights reserved.</p>
+      <p class="text-xs text-white/60 mt-1">Emergency Contact Monitoring System</p>
     </footer>
   </div>
 </template>
 
-<style scoped>
-/* Custom Scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #7091E6, #3D52A0);
-  border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #5571c6, #2a3a70);
-}
-</style>
-
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue, onChildAdded, remove } from 'firebase/database';
-
-// Components
-import TabGroup from '../components/TabGroup.vue';
-import DashboardCard from '../components/DashboardCard.vue';
-import LocationSection from '../components/LocationSection.vue';
-import SpeedDataSection from '../components/SpeedDataSection.vue';
-import DiagnosticsSection from '../components/DiagnosticsSection.vue';
-import RecentAlerts from '../components/RecentAlerts.vue';
+import { ref as dbRef, set, onValue, push } from 'firebase/database';
+import EmergencyRiderMap from '../components/EmergencyRiderMap.vue';
 
 const router = useRouter();
+const appStartTime = Date.now();
 
-// States
-const riderStatus = ref('Inactive');
-const riderSubtitle = ref('Helmet not connected');
-const alertnessStatus = ref('Normal');
-const alertnessSubtitle = ref('No drowsiness detected');
-const alcoholStatus = ref('Safe');
-const alcoholSubtitle = ref('No alcohol detected');
-const currentSpeed = ref(0);
-const speedHistory = ref([]);
-const speedLimit = ref(80); // Default value
-const speedSubtitle = ref('GPS Module')
-const diagnostics = ref([]);
-const alerts = ref([]);
-const activeTab = ref('Speed Data');
-const location = ref({ lat: null, lng: null });
-const user = ref({ name: 'Loading...' });
-const recentTrips = ref([]);
-const crashEvents = ref([]);
-const isOverSpeed = ref(false);
-const showAlerts = ref(true);
-
-// Crash UI
-const crashDisplayStatus = ref('Stable'); // Stable | Alerting
-const crashDisplayMessage = ref('Vehicle Stable');
-let crashInterval = null;
-let flashCount = 0;
-let lastCrashTimestamp = null;
-
-const userId = 'MnzBjTBslZNijOkq732PE91hHa23'; // Firebase UID
-
-// Emergency Contact Tracking States
-const isTrackingRider = ref(false);
+// ── State ──────────────────────────────────────────────────────────────────
+const helmetPaired      = ref(false);
+const motorcyclePaired  = ref(false);
+const engineRunning     = ref(false);
+const currentSpeed      = ref(0);
+const speedLimit        = ref(60);
+const isOverSpeed       = ref(false);
+const alcoholStatus     = ref('Safe');
+const crashDisplayStatus  = ref('Stable');
+const crashDisplayMessage = ref('Normal');
+const isTrackingRider   = ref(false);
 const emergencyContactLocation = ref({ lat: null, lng: null });
-let gpsWatchId = null;
+const activeTab         = ref('Rider Location');
+const alerts            = ref([]);
+const speedHistory      = ref([]);
+const location          = ref({ lat: null, lng: null });
+const currentTime       = ref(new Date().toLocaleTimeString());
+const satelliteCount    = ref(0);
 
-// System Status States
-const helmetPaired = ref(false);
-const motorcyclePaired = ref(false);
-const deviceBattery = ref(85);
-const gsmConnected = ref(true);
-const gpsConnected = ref(true);
+// ── Heartbeat tracking (mirrors user dashboard logic) ──────────────────────
+const DISCONNECT_TIMEOUT = 10000; // 10 seconds — same as user dashboard
+const lastHelmetUpdate     = ref(0);
+const lastMotorcycleUpdate = ref(0);
+let helmetDisconnectTimer     = null;
+let motorcycleDisconnectTimer = null;
+let heartbeatCheckInterval    = null;
+let clockInterval             = null;
 
-// Helpers
-const formatLatLng = (lat, lng) => {
-  return lat && lng ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : 'N/A';
-};
+// ── Computed ───────────────────────────────────────────────────────────────
+const currentSpeedText = computed(() =>
+  `${currentSpeed.value.toFixed(1)} km/h`
+);
 
-const currentSpeedText = computed(() => currentSpeed.value.toFixed(2) + ' kph');
-
-const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
-  let startLat, startLng, endLat, endLng;
-  if (lng === undefined) {
-    startLat = parseFloat(tripOrLat.startLat);
-    startLng = parseFloat(tripOrLat.startLng);
-    endLat = parseFloat(tripOrLat.endLat);
-    endLng = parseFloat(tripOrLat.endLng);
-  } else {
-    startLat = parseFloat(tripOrLat);
-    startLng = parseFloat(lng);
-    endLat = startLat;
-    endLng = startLng;
-  }
-  const isValidCoord = (lat, lng) =>
-    lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng);
-  if (!isValidCoord(startLat, startLng)) return 'https://www.google.com/maps'; 
-  const zoomLevel = 14;
-  return `https://www.google.com/maps/dir/?api=1&origin=${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
-};
-
-// Play alert sound
-const playSound = () => {
-  try {
-    const audio = new Audio('/sounds/alert.mp3');
-    audio.play().catch(err => {
-      console.warn("Audio playback failed:", err);
-    });
-  } catch (err) {
-    console.error("Error creating audio object:", err);
-  }
-};
-
-// Flash Crash Message
-const flashCrashMessage = () => {
-  clearInterval(crashInterval);
-  flashCount = 0;
-  crashDisplayStatus.value = 'Alerting';
-  crashDisplayMessage.value = 'Crash Detected';
-  playSound();
-  alerts.value.unshift({
-    type: 'danger',
-    message: 'Crash Detected',
-    details: 'Impact Strength: High',
-    time: new Date().toLocaleTimeString()
-  });
-  if (alerts.value.length > 5) alerts.value.pop();
-  crashInterval = setInterval(() => {
-    if (flashCount >= 3) {
-      clearInterval(crashInterval);
-      crashDisplayStatus.value = 'Stable';
-      crashDisplayMessage.value = 'Vehicle Stable';
-    }
-    crashDisplayMessage.value = crashDisplayMessage.value === 'Crash Detected' ? 'Vehicle Stable' : 'Crash Detected';
-    flashCount++;
-  }, 2000);
-};
-
-// Handle Overspeed Event
-const handleOverspeed = (payload) => {
-  playSound(); // Triggers alert sound
-  alerts.value.unshift({
-    type: 'danger',
-    message: 'Speed Limit Exceeded!',
-    details: `Current: ${payload.speed} kph | Limit: ${payload.limit} kph`,
-    time: new Date().toLocaleTimeString()
-  });
-  if (alerts.value.length > 5) alerts.value.pop();
-};
-
-// Firebase References
-const helmetPublicRef = dbRef(database, `helmet_public/${userId}`);
-const helmetRef = dbRef(database, `helmet_public/${userId}/helmetStatus/status`);
-const tripsRef = dbRef(database, `helmet_public/${userId}/trips`);
-const crashRef = dbRef(database, `helmet_public/${userId}/crashes`);
-const alcoholRef = dbRef(database, `helmet_public/${userId}/alcohol/status`);
-const speedLimitRef = dbRef(database, `helmet_public/${userId}/settings/speedLimit`);
-
-onMounted(() => {
-  const storedLastCrashTime = localStorage.getItem(`lastCrashTimestamp_${userId}`);
-  if (storedLastCrashTime) lastCrashTimestamp = parseInt(storedLastCrashTime);
-
-  onValue(speedLimitRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data !== null) speedLimit.value = data;
-  });
-
-  initializeCrashListener();
-
-  // ✅ Listen for SOS alerts from Rider
-  const sosRef = dbRef(database, `helmet_public/${userId}/sos`);
-  onChildAdded(sosRef, (snapshot) => {
-    const sosData = snapshot.val();
-    if (!sosData) return;
-    
-    // Check if SOS was triggered by rider (manual)
-    if (sosData.triggeredBy === 'manual') {
-      const sosTime = sosData.timestamp;
-      
-      // Only show if SOS is recent (within last 5 minutes)
-      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-      const appStartTime = Date.now() - 60000; // Consider SOS from last minute on load
-      
-      if (sosTime > fiveMinutesAgo && sosTime > appStartTime) {
-        console.log('[SOS] Rider triggered SOS:', sosData);
-        
-        // Play alert sound
-        playSound();
-        
-        // Add alert
-        alerts.value.unshift({
-          type: 'danger',
-          message: '🆘 RIDER SOS ALERT!',
-          details: `Rider has triggered emergency SOS! ${sosData.location?.lat ? `Location: ${sosData.location.lat.toFixed(6)}, ${sosData.location.lng.toFixed(6)}` : 'Location unknown'}`,
-          time: new Date().toLocaleTimeString()
-        });
-        if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-        
-        // Show browser notification if permitted
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('🆘 Rider Emergency SOS', {
-            body: 'The rider has triggered an emergency SOS alert!',
-            icon: '/favicon.ico',
-            tag: 'sos-alert'
-          });
-        }
-      }
-    }
-  });
-
-  // ✅ FIXED: Listen for device pairing status with heartbeat validation
-  const helmetStatusRef = dbRef(database, `helmet_public/${userId}/devices/helmet`);
-  onValue(helmetStatusRef, (snapshot) => {
-    const data = snapshot.val();
-    
-    // Check both status and heartbeat timestamp
-    let isConnected = false;
-    if (data && data.status === 'On' && data.lastHeartbeat) {
-      const now = Date.now();
-      const lastBeat = data.lastHeartbeat;
-      
-      // If timestamp is in Arduino format (small number), consider it connected
-      // Otherwise check if heartbeat is within last 10 seconds
-      if (lastBeat < 1577836800000) { // Before 2020 = Arduino millis()
-        isConnected = true;
-      } else {
-        isConnected = (now - lastBeat) < 10000; // Within 10 seconds
-      }
-    }
-    
-    helmetPaired.value = isConnected;
-    console.log(`[EC DASHBOARD] Helmet status: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'}`, data);
-  });
-
-  const motorcycleStatusRef = dbRef(database, `helmet_public/${userId}/devices/motorcycle`);
-  onValue(motorcycleStatusRef, (snapshot) => {
-    const data = snapshot.val();
-    
-    // Check both status and heartbeat timestamp
-    let isConnected = false;
-    if (data && data.status === 'On' && data.lastHeartbeat) {
-      const now = Date.now();
-      const lastBeat = data.lastHeartbeat;
-      
-      // If timestamp is in Arduino format (small number), consider it connected
-      // Otherwise check if heartbeat is within last 10 seconds
-      if (lastBeat < 1577836800000) { // Before 2020 = Arduino millis()
-        isConnected = true;
-      } else {
-        isConnected = (now - lastBeat) < 10000; // Within 10 seconds
-      }
-    }
-    
-    motorcyclePaired.value = isConnected;
-    console.log(`[EC DASHBOARD] Motorcycle status: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'}`, data);
-  });
-
-  // Listen for device health
-  const deviceHealthRef = dbRef(database, `helmet_public/${userId}/deviceHealth`);
-  onValue(deviceHealthRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      deviceBattery.value = data.battery || 85;
-      gsmConnected.value = data.gsm !== false;
-      gpsConnected.value = data.gps !== false;
-    }
-  });
-
-  onValue(alcoholRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data && data.status === "Danger") {
-      alcoholStatus.value = 'Danger';
-      alcoholSubtitle.value = `Alcohol Detected! Value: ${data.sensorValue}`;
-      alerts.value.unshift({
-        type: 'danger',
-        message: 'Alcohol Detected!',
-        details: `Sensor Value: ${data.sensorValue}`,
-        time: new Date().toLocaleTimeString()
-      });
-      playSound();
-      if (alerts.value.length > 5) alerts.value.pop();
-    } else {
-      alcoholStatus.value = 'Safe';
-      alcoholSubtitle.value = 'No alcohol detected';
-    }
-  });
-
-  onValue(helmetPublicRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data?.live) {
-      const liveData = data.live;
-      location.value = {
-        lat: Number(liveData.locationLat),
-        lng: Number(liveData.locationLng)
-      };
-      const rawSpeed = parseFloat(liveData.speed) || 0;
-      currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
-      speedHistory.value.push(currentSpeed.value);
-      if (speedHistory.value.length > 10) speedHistory.value.shift();
-
-      const isOverspeed = currentSpeed.value > speedLimit.value;
-      isOverSpeed.value = isOverspeed;
-
-      if (isOverspeed) {
-        handleOverspeed({
-          speed: currentSpeed.value,
-          limit: speedLimit.value
-        });
-      }
-    }
-  });
-
-  onValue(helmetRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      // ✅ FIXED: Use actual pairing status from helmetPaired and motorcyclePaired refs
-      const bothDevicesOn = helmetPaired.value && motorcyclePaired.value;
-      
-      riderStatus.value = bothDevicesOn ? 'Active' : 'Inactive';
-      
-      if (bothDevicesOn) {
-        riderSubtitle.value = 'Helmet connected';
-      } else if (!helmetPaired.value && !motorcyclePaired.value) {
-        riderSubtitle.value = 'Both devices disconnected';
-      } else if (!helmetPaired.value) {
-        riderSubtitle.value = 'Helmet not connected';
-      } else {
-        riderSubtitle.value = 'Motorcycle not connected';
-      }
-      
-      console.log(`[EC DASHBOARD] Rider Status: ${riderStatus.value} (Helmet: ${helmetPaired.value}, Motorcycle: ${motorcyclePaired.value})`);
-      
-      alertnessStatus.value = data.alertnessStatus || 'Normal';
-      alertnessSubtitle.value = alertnessStatus.value === 'Normal' ? 'No drowsiness detected' : 'Drowsiness detected!';
-      alcoholStatus.value = data.alcoholLevel > 0.05 ? 'Danger' : 'Safe';
-      alcoholSubtitle.value = alcoholStatus.value === 'Danger'
-        ? `Alcohol detected: ${data.alcoholLevel.toFixed(2)}%`
-        : 'No alcohol detected';
-      if (alertnessStatus.value !== 'Normal' || alcoholStatus.value === 'Danger') {
-        alerts.value.unshift({
-          type: 'danger',
-          message: alertnessStatus.value !== 'Normal' ? 'Drowsiness Detected' : 'Alcohol Detected!',
-          details: alertnessStatus.value !== 'Normal' ? alertnessSubtitle.value : alcoholSubtitle.value,
-          time: new Date().toLocaleTimeString()
-        });
-        playSound();
-        if (alerts.value.length > 5) alerts.value.pop();
-      }
-    }
-  });
-
-  onValue(tripsRef, async (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      const tripList = Object.entries(data).map(([id, trip]) => ({ id, ...trip }));
-      tripList.sort((a, b) => {
-        const aTime = typeof a.startTime === 'string' ? parseInt(a.startTime) : a.startTime;
-        const bTime = typeof b.startTime === 'string' ? parseInt(b.startTime) : b.startTime;
-        return bTime - aTime;
-      });
-      recentTrips.value = tripList.slice(0, 5);
-    }
-  });
+// Speed limit gradient background (green → yellow → orange → red)
+const speedLimitGradient = computed(() => {
+  const pct = speedLimit.value / 120;
+  if (pct <= 0.25)      return 'linear-gradient(135deg, #16a34a, #22c55e)';
+  if (pct <= 0.5)       return 'linear-gradient(135deg, #ca8a04, #eab308)';
+  if (pct <= 0.75)      return 'linear-gradient(135deg, #ea580c, #f97316)';
+  return                       'linear-gradient(135deg, #dc2626, #ef4444)';
 });
 
-// Show/Hide Alerts Panel
-const toggleAlerts = () => {
-  showAlerts.value = !showAlerts.value;
-};
+// Progress bar fill color
+const speedBarColor = computed(() => {
+  const pct = speedLimit.value / 120;
+  if (pct <= 0.25) return '#22c55e';
+  if (pct <= 0.5)  return '#eab308';
+  if (pct <= 0.75) return '#f97316';
+  return '#ef4444';
+});
 
-// Update speed limit in Firebase
-const updateSpeedLimitInFirebase = () => {
-  set(dbRef(database, `helmet_public/${userId}/settings/speedLimit`), speedLimit.value).catch(error => {
-    console.error("Failed to update speed limit:", error);
-  });
-};
+const speedZoneColor = computed(() => {
+  const pct = speedLimit.value / 120;
+  if (pct <= 0.25) return 'bg-green-400';
+  if (pct <= 0.5)  return 'bg-yellow-400';
+  if (pct <= 0.75) return 'bg-orange-400';
+  return 'bg-red-500';
+});
 
-// Initialize crash event listener
-const initializeCrashListener = () => {
-  onChildAdded(crashRef, (snapshot) => {
-    const event = snapshot.val();
-    if (!event || !event.timestamp || typeof event.roll !== 'number') {
-      console.warn("Invalid crash event received", event);
-      return;
-    }
-    const eventTime = event.timestamp;
-    const rollTriggered = event.roll < -40 || event.roll > 40;
-    if (
-      rollTriggered &&
-      (!lastCrashTimestamp || eventTime > lastCrashTimestamp)
-    ) {
-      lastCrashTimestamp = eventTime;
-      localStorage.setItem(`lastCrashTimestamp_${userId}`, eventTime.toString());
-      crashEvents.value.push({
-        timestamp: eventTime,
-        impactStrength: "N/A",
-        location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
-        lat: event.lat,
-        lng: event.lng
-      });
-      flashCrashMessage();
-    }
-  }, (error) => {
-    console.error("Firebase crash listener error:", error);
-  });
-};
+const speedZoneLabel = computed(() => {
+  if (speedLimit.value <= 30)  return 'School / Residential Zone';
+  if (speedLimit.value <= 60)  return 'City / Urban Zone';
+  if (speedLimit.value <= 90)  return 'Highway Zone';
+  return 'Expressway Zone';
+});
 
-// Toggle Rider Tracking
+// ── Methods ────────────────────────────────────────────────────────────────
+const logout = () => router.push('/emergency-login');
+
 const toggleRiderTracking = () => {
-  if (isTrackingRider.value) {
-    stopRiderTracking();
-  } else {
-    startRiderTracking();
-  }
+  isTrackingRider.value = !isTrackingRider.value;
 };
 
-// Start tracking rider's location
-const startRiderTracking = () => {
-  if (!navigator.geolocation) {
-    alert('Geolocation is not supported by your browser');
-    return;
-  }
-
-  isTrackingRider.value = true;
-
-  // Get emergency contact's location and share it
-  gpsWatchId = navigator.geolocation.watchPosition(
-    (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-      
-      emergencyContactLocation.value = { lat, lng };
-      
-      // Save emergency contact location to Firebase so rider can see it
-      set(dbRef(database, `helmet_public/${userId}/emergencyContact/location`), {
-        lat,
-        lng,
-        timestamp: Date.now(),
-        tracking: true
-      }).catch(error => {
-        console.error('Failed to update emergency contact location:', error);
-      });
-      
-      console.log('[Emergency Contact] Location shared:', lat, lng);
-    },
-    (error) => {
-      console.error('GPS tracking error:', error);
-      let errorMessage = 'Unable to track location. ';
-      
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMessage += 'Please allow location access in your browser settings.';
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMessage += 'Location information is unavailable.';
-          break;
-        case error.TIMEOUT:
-          errorMessage += 'Location request timed out.';
-          break;
-        default:
-          errorMessage += 'An unknown error occurred.';
-      }
-      
-      alert(errorMessage);
-      stopRiderTracking();
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
-  );
-  
-  alerts.value.unshift({
-    type: 'success',
-    message: 'Rider Tracking Active',
-    details: 'You can now see rider\'s real-time location',
-    time: new Date().toLocaleTimeString()
-  });
-  if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+const updateSpeedLimitInFirebase = () => {
+  const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
+  set(dbRef(database, `${userUID}/speedLimit`), speedLimit.value)
+    .then(() => console.log('[SPEED LIMIT] Updated to', speedLimit.value))
+    .catch(err => console.error('[SPEED LIMIT] Error:', err));
 };
 
-// Stop tracking rider's location
-const stopRiderTracking = () => {
-  if (gpsWatchId !== null) {
-    navigator.geolocation.clearWatch(gpsWatchId);
-    gpsWatchId = null;
-    isTrackingRider.value = false;
-    
-    // Update Firebase to indicate tracking stopped
-    set(dbRef(database, `helmet_public/${userId}/emergencyContact/location`), {
-      lat: emergencyContactLocation.value.lat,
-      lng: emergencyContactLocation.value.lng,
-      timestamp: Date.now(),
-      tracking: false
-    }).catch(error => {
-      console.error('Failed to update tracking status:', error);
-    });
-    
-    alerts.value.unshift({
-      type: 'info',
-      message: 'Rider Tracking Stopped',
-      details: 'Location sharing disabled',
-      time: new Date().toLocaleTimeString()
-    });
-    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-  }
-};
-
-// Trigger SOS Alert
+// ── SOS: writes to Firebase path that Dashboard.vue listens on ─────────────
 const triggerSOS = async () => {
-  const confirmed = confirm('⚠️ EMERGENCY SOS\n\nThis will send an emergency alert to the rider with your current location.\n\nAre you sure you want to trigger SOS?');
-  
+  const confirmed = confirm(
+    '🚨 EMERGENCY SOS\n\nThis will send an emergency alert to the rider.\n\nAre you sure?'
+  );
   if (!confirmed) return;
-  
+
+  const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
   try {
-    // Play alert sound
-    playSound();
-    
-    // Add to alerts
+    const sosRef = dbRef(database, `helmet_public/${userUID}/sos`);
+    await push(sosRef, {
+      timestamp: Date.now(),
+      triggeredBy: 'emergency_contact',
+      emergencyContactLocation: {
+        lat: emergencyContactLocation.value.lat,
+        lng: emergencyContactLocation.value.lng
+      },
+      status: 'active'
+    });
+
+    // Add local alert
     alerts.value.unshift({
       type: 'danger',
-      message: '🆘 EMERGENCY SOS TRIGGERED',
-      details: `Emergency contact has triggered SOS alert. Location: ${location.value.lat ? `${location.value.lat.toFixed(6)}, ${location.value.lng.toFixed(6)}` : 'Unknown'}`,
+      message: '🆘 SOS Alert Sent to Rider!',
+      details: 'Emergency contact triggered SOS',
       time: new Date().toLocaleTimeString()
     });
-    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-    
-    // Log SOS event to Firebase
-    const sosRef = dbRef(database, `helmet_public/${userId}/sos/${Date.now()}`);
-    await set(sosRef, {
-      timestamp: Date.now(),
-      location: {
-        lat: location.value.lat,
-        lng: location.value.lng
-      },
-      triggeredBy: 'emergency_contact',
-      status: 'active',
-      emergencyContactLocation: emergencyContactLocation.value
-    });
-    
-    alert('✅ SOS Alert Sent!\n\nRider has been notified of your emergency alert with location.');
-  } catch (error) {
-    console.error('Failed to trigger SOS:', error);
-    alert('❌ Failed to send SOS alert. Please try again or call emergency services directly.');
+
+    alert('✅ SOS Alert sent! The rider has been notified.');
+  } catch (err) {
+    console.error('[SOS] Error:', err);
+    alert('❌ Failed to send SOS. Please try again.');
   }
 };
 
-// Logout Function for Emergency Contact
-const logout = () => {
-  // Stop tracking before logout
-  if (isTrackingRider.value) {
-    stopRiderTracking();
-  }
-  router.push({ name: 'EmergencyContactLogin' }); // Make sure this route exists
+// ── Firebase Listeners ─────────────────────────────────────────────────────
+const setupFirebaseListeners = () => {
+  const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
+
+  // ── Helmet: heartbeat-aware connection detection ──────────────────────────
+  onValue(dbRef(database, `helmet_public/${userUID}/devices/helmet`), snap => {
+    const d = snap.val();
+
+    if (d && d.status === 'On') {
+      // Fresh heartbeat received — device is online
+      lastHelmetUpdate.value = Date.now();
+
+      if (!helmetPaired.value) {
+        helmetPaired.value = true;
+        console.log('[HELMET] ✓ Connected');
+      }
+
+      // Cancel any pending disconnect timer
+      if (helmetDisconnectTimer) {
+        clearTimeout(helmetDisconnectTimer);
+        helmetDisconnectTimer = null;
+      }
+    } else {
+      // Firebase fired but status is not 'On' — start disconnect countdown
+      if (helmetPaired.value) {
+        console.log('[HELMET] No heartbeat — waiting 10s to confirm disconnect...');
+        if (helmetDisconnectTimer) clearTimeout(helmetDisconnectTimer);
+        helmetDisconnectTimer = setTimeout(() => {
+          helmetPaired.value = false;
+          console.log('[HELMET] ✗ Disconnected (confirmed after 10s)');
+        }, DISCONNECT_TIMEOUT);
+      }
+    }
+  });
+
+  // ── Motorcycle: heartbeat-aware connection detection ──────────────────────
+  onValue(dbRef(database, `helmet_public/${userUID}/devices/motorcycle`), snap => {
+    const d = snap.val();
+
+    if (d && d.status === 'On') {
+      lastMotorcycleUpdate.value = Date.now();
+
+      if (!motorcyclePaired.value) {
+        motorcyclePaired.value = true;
+        console.log('[MOTORCYCLE] ✓ Connected');
+      }
+
+      if (motorcycleDisconnectTimer) {
+        clearTimeout(motorcycleDisconnectTimer);
+        motorcycleDisconnectTimer = null;
+      }
+
+      // GPS satellite count from motorcycle heartbeat
+      if (d.gps && d.gps.satellites !== undefined) {
+        satelliteCount.value = d.gps.satellites;
+      }
+    } else {
+      if (motorcyclePaired.value) {
+        console.log('[MOTORCYCLE] No heartbeat — waiting 10s to confirm disconnect...');
+        if (motorcycleDisconnectTimer) clearTimeout(motorcycleDisconnectTimer);
+        motorcycleDisconnectTimer = setTimeout(() => {
+          motorcyclePaired.value = false;
+          console.log('[MOTORCYCLE] ✗ Disconnected (confirmed after 10s)');
+        }, DISCONNECT_TIMEOUT);
+      }
+    }
+  });
+
+  // ── Heartbeat staleness check (runs every 5s, same logic as user dashboard) ─
+  heartbeatCheckInterval = setInterval(() => {
+    const now = Date.now();
+
+    // Helmet stale check
+    if (lastHelmetUpdate.value > 0 && now - lastHelmetUpdate.value > DISCONNECT_TIMEOUT && helmetPaired.value) {
+      helmetPaired.value = false;
+      console.log('[HELMET] ✗ Stale heartbeat — marked disconnected');
+    }
+
+    // Motorcycle stale check
+    if (lastMotorcycleUpdate.value > 0 && now - lastMotorcycleUpdate.value > DISCONNECT_TIMEOUT && motorcyclePaired.value) {
+      motorcyclePaired.value = false;
+      console.log('[MOTORCYCLE] ✗ Stale heartbeat — marked disconnected');
+    }
+  }, 5000);
+
+  // Live data
+  onValue(dbRef(database, `helmet_public/${userUID}/live`), snap => {
+    const d = snap.val();
+    if (!d) return;
+
+    // Engine — this is the source of truth for rider status
+    engineRunning.value = !!d.engineRunning;
+
+    // Speed
+    const spd = d.speed || 0;
+    currentSpeed.value = spd;
+    isOverSpeed.value = spd > speedLimit.value;
+    if (spd > 0) {
+      speedHistory.value.push(spd);
+      if (speedHistory.value.length > 50) speedHistory.value.shift();
+    }
+
+    // Location
+    if (d.locationLat && d.locationLng) {
+      location.value = { lat: d.locationLat, lng: d.locationLng };
+    }
+
+    // Satellite count from GPS module
+    if (d.gps && d.gps.satellites !== undefined) {
+      satelliteCount.value = d.gps.satellites;
+    } else if (d.satellites !== undefined) {
+      satelliteCount.value = d.satellites;
+    }
+
+    // Alcohol
+    alcoholStatus.value = d.alcoholDetected ? 'Danger' : 'Safe';
+
+    // Crash
+    crashDisplayStatus.value  = d.crashDetected ? 'Alert'         : 'Stable';
+    crashDisplayMessage.value = d.crashDetected ? 'Crash Detected' : 'Normal';
+  });
+
+  // Speed limit (sync from rider dashboard changes)
+  onValue(dbRef(database, `${userUID}/speedLimit`), snap => {
+    const d = snap.val();
+    if (d !== null && d !== undefined) speedLimit.value = d;
+  });
+
+  // Alerts — only show ones created after this page opened
+  onValue(dbRef(database, `helmet_public/${userUID}/alerts`), snap => {
+    const d = snap.val();
+    if (!d) return;
+    const fresh = Object.values(d)
+      .filter(a => (a.timestamp || 0) > appStartTime)
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, 20);
+    alerts.value = fresh;
+  });
 };
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMounted(() => {
+  setupFirebaseListeners();
+
+  clockInterval = setInterval(() => {
+    currentTime.value = new Date().toLocaleTimeString();
+  }, 1000);
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        emergencyContactLocation.value = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        };
+      },
+      err => console.warn('[GEO] Error:', err)
+    );
+  }
+});
+
+onUnmounted(() => {
+  if (clockInterval) clearInterval(clockInterval);
+  if (heartbeatCheckInterval) clearInterval(heartbeatCheckInterval);
+  if (helmetDisconnectTimer) clearTimeout(helmetDisconnectTimer);
+  if (motorcycleDisconnectTimer) clearTimeout(motorcycleDisconnectTimer);
+});
 </script>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #7091E6, #3D52A0); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3D52A0; }
+</style>
