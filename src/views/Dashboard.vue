@@ -1580,6 +1580,9 @@ const setupFirebaseListeners = () => {
 
   // ✅ NEW: Listen for anti-theft alerts
   setupAntiTheftListener();
+
+  // ✅ Listen for Arduino-generated alerts (alcohol, helmet, crash, speed, etc.)
+  setupArduinoAlertsListener();
 };
 
 // ✅ FIXED: Wait for user authentication before setting up Firebase
@@ -2507,6 +2510,57 @@ const handleScroll = () => {
       }
     }
   }
+};
+
+// ✅ Listen for alerts written by the Arduino to helmet_public/{uid}/alerts/
+// These include: alcohol detected, helmet disconnect, crash, speed violations, etc.
+const setupArduinoAlertsListener = () => {
+  if (!userId.value) return;
+  console.log('[ALERTS] Setting up Arduino alerts listener...');
+
+  const arduinoAlertsRef = dbRef(database, `helmet_public/${userId.value}/alerts`);
+
+  onChildAdded(arduinoAlertsRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    const alertTimestamp = data.timestamp || 0;
+
+    // Only show alerts that happened AFTER the app was opened
+    if (alertTimestamp <= appStartTime.value) {
+      console.log('[ALERTS] Skipping old Arduino alert:', data.message);
+      return;
+    }
+
+    // Skip if already dismissed
+    if (!shouldShowAlert(alertTimestamp)) {
+      console.log('[ALERTS] Skipping dismissed Arduino alert:', data.message);
+      return;
+    }
+
+    console.log('[ALERTS] ✅ New Arduino alert received:', data.message, '| Type:', data.type);
+
+    // Map Arduino alert types to dashboard alert types
+    const type = data.type || 'info';
+
+    // Add to alerts list
+    alerts.value.unshift({
+      type,
+      message: data.message || 'System Alert',
+      details: data.details || '',
+      time: data.time || new Date(alertTimestamp).toLocaleTimeString(),
+      timestamp: alertTimestamp
+    });
+
+    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+
+    // Play sound for danger/warning alerts
+    if (type === 'danger' || type === 'warning' || type === 'crash' || type === 'alcohol') {
+      playSound();
+    }
+  });
+
+  console.log('[ALERTS] ✅ Arduino alerts listener active');
 };
 
 // ✅ NEW: Setup anti-theft alert listener
