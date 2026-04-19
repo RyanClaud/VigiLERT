@@ -1,12 +1,15 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0] pb-20">
+  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0f1e] via-[#0f1729] to-[#0a0f1e] pb-20">
     <!-- Enhanced User Profile Header -->
-    <div class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#5571c6] to-[#7091E6] py-8 px-4 md:px-8 shadow-2xl">
+    <div class="relative overflow-hidden bg-gradient-to-r from-[#0a0f1e] via-[#1a2a5e] to-[#0a0f1e] py-8 px-4 md:px-8 shadow-2xl border-b border-white/5">
       <!-- Animated Background Elements -->
       <div class="absolute inset-0 overflow-hidden">
-        <div class="absolute -top-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
+        <div class="absolute -top-24 -left-24 w-96 h-96 bg-[#3D52A0]/20 rounded-full blur-3xl animate-pulse"></div>
+        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-[#7091E6]/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
       </div>
+      <!-- Grid overlay -->
+      <div class="absolute inset-0 opacity-3"
+        style="background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 40px 40px;"></div>
       
       <div class="relative max-w-7xl mx-auto">
         <div class="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -203,254 +206,276 @@
       <!-- System Status Bar -->
       <div id="status" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <!-- Helmet-Motorcycle Pairing Status -->
-        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+        <div class="relative overflow-hidden bg-white/5 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/10 hover:border-white/20 transition-all duration-300">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div :class="['p-3 rounded-xl', helmetPaired && motorcyclePaired ? 'bg-green-500' : 'bg-red-500']">
-                <span class="material-icons text-white text-2xl">link</span>
+              <div :class="['p-3 rounded-xl', helmetPaired && motorcyclePaired ? 'bg-green-500/20 border border-green-400/30' : 'bg-red-500/20 border border-red-400/30']">
+                <span :class="['material-icons text-2xl', helmetPaired && motorcyclePaired ? 'text-green-400' : 'text-red-400']">link</span>
               </div>
               <div>
-                <p class="text-xs text-gray-500 font-medium uppercase">Pairing Status</p>
-                <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-600' : 'text-red-600']">
+                <p class="text-xs text-white/40 font-medium uppercase tracking-wide">Device Pairing</p>
+                <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-400' : 'text-red-400']">
                   {{ helmetPaired && motorcyclePaired ? 'Connected' : 'Disconnected' }}
                 </p>
               </div>
             </div>
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1.5">
               <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="helmetPaired ? 'text-green-500' : 'text-gray-400'">sports_motorsports</span>
-                <span class="text-xs font-medium" :class="helmetPaired ? 'text-green-600' : 'text-gray-500'">Helmet</span>
+                <span :class="['material-icons text-sm', helmetPaired ? 'text-green-400' : 'text-white/20']">sports_motorsports</span>
+                <span :class="['text-xs font-medium', helmetPaired ? 'text-green-400' : 'text-white/30']">Helmet</span>
+                <span :class="['w-1.5 h-1.5 rounded-full', helmetPaired ? 'bg-green-400 animate-pulse' : 'bg-white/10']"></span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="material-icons text-sm" :class="motorcyclePaired ? 'text-green-500' : 'text-gray-400'">two_wheeler</span>
-                <span class="text-xs font-medium" :class="motorcyclePaired ? 'text-green-600' : 'text-gray-500'">Motorcycle</span>
+                <span :class="['material-icons text-sm', motorcyclePaired ? 'text-green-400' : 'text-white/20']">two_wheeler</span>
+                <span :class="['text-xs font-medium', motorcyclePaired ? 'text-green-400' : 'text-white/30']">Motorcycle</span>
+                <span :class="['w-1.5 h-1.5 rounded-full', motorcyclePaired ? 'bg-green-400 animate-pulse' : 'bg-white/10']"></span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Emergency SOS Button -->
-        <div class="relative overflow-hidden bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-5 border border-white/50 cursor-pointer hover:scale-105 transition-all duration-300" @click="triggerSOS">
-          <div class="flex items-center justify-between">
+        <div class="relative overflow-hidden bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:border-red-400/40 rounded-2xl shadow-lg p-5 cursor-pointer transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 group" @click="triggerSOS">
+          <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent rounded-2xl"></div>
+          <div class="relative flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="p-3 rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
-                <span class="material-icons text-white text-3xl">emergency</span>
+              <div class="p-3 rounded-xl bg-red-500/20 border border-red-400/30 group-hover:bg-red-500/30 transition-colors">
+                <span class="material-icons text-red-400 text-3xl animate-pulse">emergency</span>
               </div>
               <div>
-                <p class="text-xs text-white/80 font-medium uppercase">Emergency</p>
+                <p class="text-xs text-red-400/70 font-medium uppercase tracking-wide">Emergency</p>
                 <p class="text-xl font-bold text-white">SOS Alert</p>
               </div>
             </div>
-            <span class="material-icons text-white text-4xl">touch_app</span>
+            <span class="material-icons text-red-400/50 text-4xl group-hover:text-red-400 transition-colors">touch_app</span>
           </div>
         </div>
       </div>
 
-      <!-- ⚡ ENGINE CONTROL (Moved to Top for Quick Access) -->
-      <div id="engine" class="bg-gradient-to-br from-green-500 via-green-600 to-green-700 rounded-3xl shadow-2xl p-6 md:p-8 text-white border-2 border-white/30 hover:shadow-3xl transition-all duration-300 mb-8">
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-4">
-            <div class="p-4 bg-white/20 rounded-2xl backdrop-blur-sm">
-              <span class="material-icons text-4xl">power_settings_new</span>
-            </div>
-            <div>
-              <h3 class="text-2xl font-bold mb-1">Engine Control</h3>
-              <p class="text-green-100 text-sm">
-                Status: {{ engineRunning ? 'Running' : 'Stopped' }}
-              </p>
-              <p class="text-green-200 text-xs mt-1">
-                Last Update: {{ new Date().toLocaleTimeString() }}
-              </p>
-            </div>
-          </div>
-          <div class="flex flex-col items-end gap-2">
-            <div :class="['w-4 h-4 rounded-full', engineRunning ? 'bg-green-300 animate-pulse' : 'bg-gray-400']"></div>
-            <span class="text-xs text-green-100">{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
-          </div>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Engine Turn On/Off Button -->
-          <button
-            @click="toggleEngine"
-            :disabled="(alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
-            :class="[
-              'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
-              engineRunning 
-                ? 'bg-red-500 hover:bg-red-600 text-white' 
-                : (alcoholDetected || !helmetPaired || !motorcyclePaired)
-                  ? 'bg-gray-500 cursor-not-allowed text-gray-300'
-                  : 'bg-white hover:bg-gray-100 text-green-600'
-            ]"
-          >
-            <span class="material-icons text-2xl">
-              {{ engineRunning ? 'stop' : 'play_arrow' }}
-            </span>
-            <span>{{ engineRunning ? 'Turn Off Engine' : 'Turn On Engine' }}</span>
-          </button>
+      <!-- ⚡ ENGINE CONTROL -->
+      <div id="engine" class="relative overflow-hidden rounded-3xl shadow-2xl mb-6 transition-all duration-500"
+        :class="engineRunning ? 'bg-gradient-to-br from-[#0f1729] via-[#1a2a5e] to-[#0f1729] border border-green-500/30' : 'bg-gradient-to-br from-[#0f1729] via-[#1a2a5e] to-[#0f1729] border border-white/10'">
 
-          <!-- Auto Control Toggle -->
-          <button
-            @click="toggleAutoControl"
-            :class="[
-              'inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105',
-              autoEngineControl 
-                ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                : 'bg-white/20 hover:bg-white/30 text-white border-2 border-white/30'
-            ]"
-          >
-            <span class="material-icons text-2xl">
-              {{ autoEngineControl ? 'smart_toy' : 'person' }}
-            </span>
-            <span>{{ autoEngineControl ? 'Auto Mode' : 'Manual Mode' }}</span>
-          </button>
+        <!-- Animated background glow when running -->
+        <div v-if="engineRunning" class="absolute inset-0 bg-green-500/5 animate-pulse rounded-3xl pointer-events-none"></div>
+        <div class="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+          <div class="absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-20"
+            :class="engineRunning ? 'bg-green-400' : 'bg-[#3D52A0]'"></div>
         </div>
 
-        <!-- Status Sync Button -->
-        <div class="mt-4">
+        <div class="relative p-6 md:p-8">
+          <!-- Header row -->
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+              <!-- Power icon with ring animation when running -->
+              <div class="relative">
+                <div v-if="engineRunning" class="absolute inset-0 rounded-full bg-green-400/20 animate-ping"></div>
+                <div :class="['relative w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500',
+                  engineRunning ? 'bg-green-500/20 border border-green-400/40' : 'bg-white/5 border border-white/10']">
+                  <span :class="['material-icons text-3xl transition-colors duration-500',
+                    engineRunning ? 'text-green-400' : 'text-white/40']">power_settings_new</span>
+                </div>
+              </div>
+              <div>
+                <p class="text-white/50 text-xs font-semibold uppercase tracking-widest mb-0.5">Engine Control</p>
+                <div class="flex items-center gap-2">
+                  <span :class="['w-2 h-2 rounded-full transition-all duration-500',
+                    enginePending ? 'bg-yellow-400 animate-pulse' :
+                    engineRunning ? 'bg-green-400 animate-pulse' : 'bg-white/20']"></span>
+                  <p class="text-white font-bold text-lg">
+                    {{ enginePending ? (engineRunning ? 'Stopping...' : 'Starting...') : (engineRunning ? 'Engine Running' : 'Engine Stopped') }}
+                  </p>
+                </div>
+                <p class="text-white/30 text-xs mt-0.5">
+                  {{ autoEngineControl ? '⚡ Auto mode active' : '🔧 Manual control' }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Mode badge -->
+            <button @click="toggleAutoControl"
+              :class="['flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-300 border',
+                autoEngineControl
+                  ? 'bg-blue-500/20 border-blue-400/30 text-blue-300 hover:bg-blue-500/30'
+                  : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10']">
+              <span class="material-icons text-sm">{{ autoEngineControl ? 'smart_toy' : 'person' }}</span>
+              {{ autoEngineControl ? 'Auto' : 'Manual' }}
+            </button>
+          </div>
+
+          <!-- Main engine toggle button -->
           <button
-            @click="syncEngineStatus"
-            class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm bg-white/10 hover:bg-white/20 text-white border border-white/30 transition-all duration-300"
-          >
-            <span class="material-icons text-lg">refresh</span>
-            <span>Sync Status</span>
+            @click="handleEngineToggle"
+            :disabled="enginePending || (alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
+            :class="['w-full relative overflow-hidden rounded-2xl py-5 font-bold text-lg transition-all duration-300 flex items-center justify-center gap-3 shadow-xl',
+              enginePending
+                ? 'bg-yellow-500/20 border border-yellow-400/30 text-yellow-300 cursor-wait'
+                : engineRunning
+                  ? 'bg-red-500/20 border border-red-400/30 text-red-300 hover:bg-red-500/30 hover:border-red-400/50 active:scale-98'
+                  : (alcoholDetected || !helmetPaired || !motorcyclePaired)
+                    ? 'bg-white/5 border border-white/10 text-white/25 cursor-not-allowed'
+                    : 'bg-green-500/20 border border-green-400/30 text-green-300 hover:bg-green-500/30 hover:border-green-400/50 active:scale-98 hover:-translate-y-0.5']">
+
+            <!-- Shimmer effect on hover when enabled -->
+            <div v-if="!enginePending && !engineRunning && helmetPaired && motorcyclePaired && !alcoholDetected"
+              class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-700 pointer-events-none"></div>
+
+            <span v-if="enginePending" class="material-icons text-2xl animate-spin">refresh</span>
+            <span v-else class="material-icons text-2xl">{{ engineRunning ? 'power_settings_new' : 'power_settings_new' }}</span>
+
+            <span>
+              {{ enginePending
+                  ? (engineRunning ? 'Stopping Engine...' : 'Starting Engine...')
+                  : engineRunning
+                    ? 'Stop Engine'
+                    : (alcoholDetected ? 'Blocked — Alcohol Detected'
+                      : (!helmetPaired || !motorcyclePaired) ? 'Devices Not Connected'
+                      : 'Start Engine') }}
+            </span>
           </button>
+
+          <!-- Blocking reason -->
+          <div v-if="!engineRunning && (alcoholDetected || !helmetPaired || !motorcyclePaired) && !enginePending"
+            class="mt-3 flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
+            <span class="material-icons text-red-400 text-sm">block</span>
+            <p class="text-red-400 text-xs font-medium">
+              {{ alcoholDetected ? 'Alcohol detected — engine start blocked for safety'
+                : !helmetPaired ? 'Helmet not connected — wear your helmet first'
+                : 'Motorcycle module not connected' }}
+            </p>
+          </div>
+
+          <!-- Pending feedback -->
+          <div v-if="enginePending"
+            class="mt-3 flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-2.5">
+            <span class="material-icons text-yellow-400 text-sm animate-pulse">hourglass_top</span>
+            <p class="text-yellow-400 text-xs font-medium">
+              Command sent — waiting for motorcycle to respond...
+            </p>
+          </div>
         </div>
       </div>
 
       <!-- 📱 MOBILE: Collapsible Rider Status Cards -->
-      <div class="mb-8">
+      <div class="mb-6">
         <button @click="showRiderCards = !showRiderCards" 
-                class="w-full md:hidden flex items-center justify-between p-4 bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg mb-4 border border-white/50">
+                class="w-full md:hidden flex items-center justify-between p-4 bg-white/5 backdrop-blur-lg rounded-2xl shadow-lg mb-4 border border-white/10">
           <div class="flex items-center gap-3">
-            <span class="material-icons text-blue-600">person</span>
-            <span class="font-bold text-gray-800">Rider Status</span>
+            <span class="material-icons text-[#7091E6]">person</span>
+            <span class="font-bold text-white">Rider Status</span>
           </div>
-          <span class="material-icons text-gray-600 transition-transform duration-300" 
+          <span class="material-icons text-white/40 transition-transform duration-300" 
                 :class="showRiderCards ? 'rotate-180' : ''">expand_more</span>
         </button>
         
-        <div :class="['grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 transition-all duration-300', 
+        <div :class="['grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 transition-all duration-300', 
                       showRiderCards ? 'grid' : 'hidden md:grid']">
         <!-- Rider Status -->
         <div :class="[
-          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          riderStatus === 'Inactive' ? 'bg-gradient-to-br from-red-600 via-red-500 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70]'
+          'group relative overflow-hidden text-white rounded-2xl shadow-xl p-5 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer border',
+          riderStatus === 'Inactive'
+            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+            : 'bg-white/5 border-white/10 hover:bg-white/8'
         ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 blur-2xl opacity-30"
+            :class="riderStatus === 'Inactive' ? 'bg-red-500' : 'bg-[#3D52A0]'"></div>
           <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div :class="['p-3 rounded-xl', riderStatus === 'Inactive' ? 'bg-white/30 animate-bounce' : 'bg-white/20']">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                </svg>
+            <div class="flex items-center justify-between mb-3">
+              <div :class="['p-2 rounded-xl', riderStatus === 'Inactive' ? 'bg-red-500/20' : 'bg-white/10']">
+                <span :class="['material-icons text-xl', riderStatus === 'Inactive' ? 'text-red-400' : 'text-[#7091E6]']">person</span>
               </div>
-              <div :class="['w-3 h-3 rounded-full', riderStatus === 'Inactive' ? 'bg-yellow-300 animate-ping' : 'bg-green-400 animate-pulse']"></div>
+              <div :class="['w-2 h-2 rounded-full', riderStatus === 'Inactive' ? 'bg-red-400 animate-ping' : 'bg-green-400 animate-pulse']"></div>
             </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Rider Status</p>
-              <p class="text-2xl font-bold">{{ riderStatus }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ riderSubtitle }}</p>
-              <p v-if="riderStatus === 'Inactive'" class="text-xs font-bold text-yellow-300 mt-2 animate-pulse">
-                ⚠️ HELMET REMOVED!
-              </p>
-            </div>
+            <p class="text-xs text-white/40 mb-1">Rider Status</p>
+            <p :class="['text-lg font-bold', riderStatus === 'Inactive' ? 'text-red-400' : 'text-white']">{{ riderStatus }}</p>
+            <p class="text-xs text-white/30 mt-1">{{ riderSubtitle }}</p>
           </div>
         </div>
         
         <!-- Current Speed -->
         <div :class="[
-          'group relative overflow-hidden text-white rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          isOverSpeed ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 animate-pulse' : 'bg-gradient-to-br from-[#7091E6] via-[#6081d6] to-[#5571c6]'
+          'group relative overflow-hidden text-white rounded-2xl shadow-xl p-5 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer border',
+          isOverSpeed
+            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+            : 'bg-white/5 border-white/10 hover:bg-white/8'
         ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 blur-2xl opacity-30"
+            :class="isOverSpeed ? 'bg-red-500' : 'bg-[#7091E6]'"></div>
           <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                </svg>
+            <div class="flex items-center justify-between mb-3">
+              <div :class="['p-2 rounded-xl', isOverSpeed ? 'bg-red-500/20' : 'bg-white/10']">
+                <span :class="['material-icons text-xl', isOverSpeed ? 'text-red-400' : 'text-[#7091E6]']">speed</span>
               </div>
-              <div :class="['w-3 h-3 rounded-full', isOverSpeed ? 'bg-yellow-300 animate-pulse' : 'bg-blue-300']"></div>
+              <div :class="['w-2 h-2 rounded-full', isOverSpeed ? 'bg-red-400 animate-pulse' : 'bg-blue-400']"></div>
             </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Current Speed</p>
-              <p class="text-2xl font-bold">{{ currentSpeedText }}</p>
-              <div class="flex items-center gap-2 mt-1">
-                <span class="material-icons text-xs opacity-70">{{ gpsSpeedSource === 'phone' ? 'smartphone' : 'router' }}</span>
-                <p class="text-xs opacity-70">{{ isOverSpeed ? 'Over speed limit!' : gpsSpeedSource === 'phone' ? 'Phone GPS' : 'GPS Module' }}</p>
-              </div>
-            </div>
+            <p class="text-xs text-white/40 mb-1">Current Speed</p>
+            <p :class="['text-lg font-bold', isOverSpeed ? 'text-red-400' : 'text-white']">{{ currentSpeedText }}</p>
+            <p class="text-xs text-white/30 mt-1">{{ isOverSpeed ? 'Over limit!' : `Limit: ${speedLimit} km/h` }}</p>
           </div>
         </div>
         
         <!-- Alertness -->
         <div :class="[
-          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          alertnessStatus === 'Normal' ? 'bg-gradient-to-br from-[#8697C4] via-[#7687b4] to-[#6677a4] text-white' : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-gray-800'
+          'group relative overflow-hidden text-white rounded-2xl shadow-xl p-5 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer border',
+          alertnessStatus !== 'Normal'
+            ? 'bg-yellow-500/10 border-yellow-500/20'
+            : 'bg-white/5 border-white/10 hover:bg-white/8'
         ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 blur-2xl opacity-30 bg-[#8697C4]"></div>
           <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10" :class="alertnessStatus === 'Normal' ? 'text-white' : 'text-gray-800'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
+            <div class="flex items-center justify-between mb-3">
+              <div class="p-2 rounded-xl bg-white/10">
+                <span class="material-icons text-xl text-[#8697C4]">visibility</span>
               </div>
-              <div :class="['w-3 h-3 rounded-full', alertnessStatus === 'Normal' ? 'bg-green-400' : 'bg-orange-400 animate-pulse']"></div>
+              <div :class="['w-2 h-2 rounded-full', alertnessStatus === 'Normal' ? 'bg-green-400' : 'bg-yellow-400 animate-pulse']"></div>
             </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Alertness</p>
-              <p class="text-2xl font-bold">{{ alertnessStatus }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ alertnessSubtitle }}</p>
-            </div>
+            <p class="text-xs text-white/40 mb-1">Alertness</p>
+            <p class="text-lg font-bold text-white">{{ alertnessStatus }}</p>
+            <p class="text-xs text-white/30 mt-1">{{ alertnessSubtitle }}</p>
           </div>
         </div>
         
         <!-- Alcohol Detection -->
         <div :class="[
-          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          alcoholStatus === 'Safe' ? 'bg-gradient-to-br from-[#3D52A0] via-[#4a5fb8] to-[#2a3a70] text-white' : 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white'
+          'group relative overflow-hidden text-white rounded-2xl shadow-xl p-5 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer border',
+          alcoholStatus !== 'Safe'
+            ? 'bg-red-500/10 border-red-500/20 animate-pulse'
+            : 'bg-white/5 border-white/10 hover:bg-white/8'
         ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 blur-2xl opacity-30"
+            :class="alcoholStatus !== 'Safe' ? 'bg-red-500' : 'bg-[#3D52A0]'"></div>
           <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                </svg>
+            <div class="flex items-center justify-between mb-3">
+              <div :class="['p-2 rounded-xl', alcoholStatus !== 'Safe' ? 'bg-red-500/20' : 'bg-white/10']">
+                <span :class="['material-icons text-xl', alcoholStatus !== 'Safe' ? 'text-red-400' : 'text-[#7091E6]']">local_bar</span>
               </div>
-              <div :class="['w-3 h-3 rounded-full', alcoholStatus === 'Safe' ? 'bg-green-400' : 'bg-red-300 animate-pulse']"></div>
+              <div :class="['w-2 h-2 rounded-full', alcoholStatus === 'Safe' ? 'bg-green-400' : 'bg-red-400 animate-pulse']"></div>
             </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Alcohol Detection</p>
-              <p class="text-2xl font-bold">{{ alcoholStatus }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ alcoholSubtitle }}</p>
-            </div>
+            <p class="text-xs text-white/40 mb-1">Alcohol</p>
+            <p :class="['text-lg font-bold', alcoholStatus !== 'Safe' ? 'text-red-400' : 'text-white']">{{ alcoholStatus }}</p>
+            <p class="text-xs text-white/30 mt-1">{{ alcoholSubtitle }}</p>
           </div>
         </div>
         
         <!-- Crash Detection Card -->
         <div :class="[
-          'group relative overflow-hidden rounded-3xl shadow-xl p-6 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer',
-          crashDisplayStatus === 'Stable' ? 'bg-gradient-to-br from-green-600 via-green-700 to-green-800 text-white' : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 text-white animate-pulse'
+          'group relative overflow-hidden text-white rounded-2xl shadow-xl p-5 transition-all duration-500 hover:scale-105 hover:shadow-2xl cursor-pointer border',
+          crashDisplayStatus !== 'Stable'
+            ? 'bg-red-500/10 border-red-500/20 animate-pulse'
+            : 'bg-white/5 border-white/10 hover:bg-white/8'
         ]">
-          <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 blur-2xl opacity-30"
+            :class="crashDisplayStatus !== 'Stable' ? 'bg-red-500' : 'bg-green-600'"></div>
           <div class="relative flex flex-col h-full">
-            <div class="flex items-center justify-between mb-4">
-              <div class="bg-white/20 p-3 rounded-xl">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                </svg>
+            <div class="flex items-center justify-between mb-3">
+              <div :class="['p-2 rounded-xl', crashDisplayStatus !== 'Stable' ? 'bg-red-500/20' : 'bg-white/10']">
+                <span :class="['material-icons text-xl', crashDisplayStatus !== 'Stable' ? 'text-red-400' : 'text-green-400']">warning</span>
               </div>
-              <div :class="['w-3 h-3 rounded-full', crashDisplayStatus === 'Stable' ? 'bg-emerald-300' : 'bg-yellow-300 animate-pulse']"></div>
+              <div :class="['w-2 h-2 rounded-full', crashDisplayStatus === 'Stable' ? 'bg-green-400' : 'bg-yellow-400 animate-pulse']"></div>
             </div>
-            <div class="mt-auto">
-              <p class="text-sm opacity-80 mb-1">Vehicle Status</p>
-              <p class="text-2xl font-bold">{{ crashDisplayMessage }}</p>
-              <p class="text-xs opacity-70 mt-1">{{ crashDisplayStatus === 'Stable' ? 'No incidents' : 'Alert active' }}</p>
-            </div>
+            <p class="text-xs text-white/40 mb-1">Vehicle Status</p>
+            <p :class="['text-lg font-bold', crashDisplayStatus !== 'Stable' ? 'text-red-400' : 'text-white']">{{ crashDisplayMessage }}</p>
+            <p class="text-xs text-white/30 mt-1">{{ crashDisplayStatus === 'Stable' ? 'No incidents' : 'Alert active' }}</p>
           </div>
         </div>
         </div>
@@ -461,48 +486,59 @@
 
 
       <!-- Speed Limit Control -->
-      <div class="relative overflow-hidden bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 rounded-3xl shadow-2xl p-8 mb-8 transition-all duration-500 hover:shadow-3xl group">
-        <div class="absolute inset-0 bg-gradient-to-r from-yellow-300/20 to-amber-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+      <div class="relative overflow-hidden bg-white/5 border border-white/10 rounded-2xl shadow-xl p-6 mb-6 hover:border-white/20 transition-all duration-300">
+        <div class="flex justify-between items-center mb-5">
+          <div class="flex items-center gap-3">
+            <div class="bg-white/10 p-2 rounded-xl">
+              <span class="material-icons text-2xl text-[#7091E6]">tune</span>
+            </div>
+            <div>
+              <p class="text-white font-bold">Speed Limit</p>
+              <p class="text-white/40 text-xs">Drag to set maximum speed</p>
+            </div>
+          </div>
+          <span class="text-2xl font-black text-white bg-white/10 px-4 py-2 rounded-xl border border-white/10">
+            {{ speedLimit }} <span class="text-sm font-semibold text-white/60">km/h</span>
+          </span>
+        </div>
         <div class="relative">
-          <div class="flex justify-between items-center mb-5">
-            <label for="speed-limit" class="font-bold text-gray-900 flex items-center gap-3 text-lg">
-              <div class="bg-white/30 backdrop-blur-sm p-2 rounded-xl">
-                <span class="material-icons text-3xl text-gray-800">tune</span>
-              </div>
-              <span>Speed Limit Control</span>
-            </label>
-            <div class="relative">
-              <div class="absolute inset-0 bg-white/40 blur-xl rounded-2xl"></div>
-              <span class="relative text-3xl font-black text-gray-900 bg-white/60 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border border-white/50">
-                {{ speedLimit }} <span class="text-xl font-semibold">km/h</span>
-              </span>
-            </div>
+          <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-1">
+            <div class="h-full rounded-full transition-all duration-300"
+              :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }"></div>
           </div>
-          <div class="relative">
-            <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
-              @change="updateSpeedLimitInFirebase"
-              class="w-full h-4 bg-white/40 backdrop-blur-sm rounded-full cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/50 accent-gray-800 transition-all appearance-none slider-thumb" />
-            <div class="flex justify-between mt-3 text-sm font-bold text-gray-800">
-              <span class="bg-white/30 px-3 py-1 rounded-lg">1 km/h</span>
-              <span class="bg-white/30 px-3 py-1 rounded-lg">120 km/h</span>
-            </div>
-          </div>
+          <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
+            @change="updateSpeedLimitInFirebase"
+            class="w-full h-2 opacity-0 cursor-pointer absolute inset-0" />
+        </div>
+        <div class="flex justify-between mt-2 text-xs text-white/30">
+          <span>0</span><span>30</span><span>60</span><span>90</span><span>120 km/h</span>
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+          <div :class="['w-2 h-2 rounded-full', speedZoneColor]"></div>
+          <span class="text-white/50 text-xs">{{ speedZoneLabel }}</span>
         </div>
       </div>
 
       <!-- Tabs -->
-      <div class="mb-6 relative z-10">
-        <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-4 border border-white/50">
-          <TabGroup :tabs="['My Location', 'Speed Data']" v-model="activeTab" />
+      <div class="mb-4 relative z-10">
+        <div class="bg-white/5 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 flex gap-1.5">
+          <button v-for="tab in ['My Location', 'Speed Data']" :key="tab"
+            @click="activeTab = tab"
+            :class="['flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300',
+              activeTab === tab
+                ? 'bg-gradient-to-r from-[#3D52A0] to-[#7091E6] text-white shadow-lg'
+                : 'text-white/40 hover:text-white/70 hover:bg-white/5']">
+            {{ tab }}
+          </button>
         </div>
       </div>
 
       <!-- Tab Content -->
       <div id="map" class="relative z-0">
-        <div v-show="activeTab === 'My Location'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50 transition-all duration-300">
+        <div v-show="activeTab === 'My Location'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10 transition-all duration-300">
           <LocationSection :location="location" :user="user" :crash-events="crashEvents" @update-location="handleLocationUpdate" />
         </div>
-        <div v-show="activeTab === 'Speed Data'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50 transition-all duration-300">
+        <div v-show="activeTab === 'Speed Data'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10 transition-all duration-300">
           <SpeedDataSection
             :currentSpeed="currentSpeed"
             :speedLimit="speedLimit"
@@ -513,31 +549,24 @@
       </div>
 
       <!-- Recent Alerts Section -->
-      <div id="alerts" class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/50 transition-all duration-300 hover:shadow-3xl">
-        <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#7091E6]/10 to-[#3D52A0]/10 rounded-full -mr-32 -mt-32"></div>
-        <h3 class="relative font-bold text-2xl mb-6 text-[#3D52A0] flex items-center justify-between">
-          <span class="flex items-center gap-3">
-            <div class="bg-gradient-to-br from-[#7091E6] to-[#3D52A0] p-3 rounded-2xl shadow-lg">
-              <span class="material-icons text-3xl text-white">notifications_active</span>
-            </div>
+      <div id="alerts" class="relative overflow-hidden bg-white/5 backdrop-blur-lg rounded-2xl shadow-xl p-6 mb-6 border border-white/10 hover:border-white/20 transition-all duration-300">
+        <h3 class="font-bold text-lg mb-4 text-white flex items-center justify-between">
+          <span class="flex items-center gap-2">
+            <span class="material-icons text-[#7091E6]">notifications_active</span>
             <span>Recent Alerts</span>
-            <span v-if="alerts.length > 0" class="bg-red-500 text-white text-sm px-3 py-1 rounded-full">
-              {{ alerts.length }}
-            </span>
+            <span v-if="alerts.length > 0" class="bg-red-500/80 text-white text-xs px-2 py-0.5 rounded-full">{{ alerts.length }}</span>
           </span>
           <div class="flex gap-2">
-            <!-- ✅ NEW: Stop Sound Button -->
             <button v-if="showStopSoundButton" @click="stopSound"
-              class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 animate-pulse">
-              <span class="material-icons text-lg mr-2">volume_off</span>
-              Stop Sound
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-500/20 border border-orange-400/30 text-orange-400 hover:bg-orange-500/30 transition-all animate-pulse">
+              <span class="material-icons text-sm mr-1">volume_off</span>Stop Sound
             </button>
             <button v-if="alerts.length > 0" @click="clearAllAlerts"
-              class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-400/30 text-red-400 hover:bg-red-500/30 transition-all">
               Clear All
             </button>
             <button @click="toggleAlerts"
-              class="text-sm font-semibold px-6 py-3 rounded-xl bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition-all">
               {{ showAlerts ? 'Hide' : 'Show' }}
             </button>
           </div>
@@ -549,105 +578,80 @@
 
       <!-- Recent Trips Preview -->
       <section id="trips" class="mb-6">
-        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/50 transition-all duration-300 hover:shadow-3xl">
-          <div class="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-[#3D52A0]/10 to-[#7091E6]/10 rounded-full -ml-32 -mt-32"></div>
-          <h3 class="relative text-2xl font-bold text-[#3D52A0] mb-6 flex items-center gap-3">
-            <div class="bg-gradient-to-br from-[#3D52A0] to-[#2a3a70] p-3 rounded-2xl shadow-lg">
-              <span class="material-icons text-3xl text-white">route</span>
-            </div>
+        <div class="relative overflow-hidden bg-white/5 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/10 hover:border-white/20 transition-all duration-300">
+          <h3 class="text-lg font-bold text-white mb-5 flex items-center gap-2">
+            <span class="material-icons text-[#7091E6]">route</span>
             <span>Recent Trips</span>
           </h3>
-          <div v-if="recentTrips.length > 0"
-            class="relative space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+          <div v-if="recentTrips.length > 0" class="relative space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
             <div v-for="trip in recentTrips" :key="trip.id" 
-              class="group relative overflow-hidden p-6 border-2 border-white/50 rounded-2xl hover:border-[#7091E6] hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-white to-[#EDE8F5]/30 backdrop-blur-sm">
-              <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#7091E6]/10 to-transparent rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-              <div class="relative">
-                <div class="flex items-center gap-2 mb-3">
-                  <div class="bg-gradient-to-r from-[#7091E6] to-[#5571c6] px-3 py-1 rounded-lg">
-                    <p class="text-xs text-white font-bold uppercase tracking-wider">Route Details</p>
-                  </div>
-                </div>
-                <div class="space-y-2 mb-4">
-                  <p class="text-sm flex items-start gap-2">
-                    <span class="material-icons text-[#3D52A0] text-lg">trip_origin</span>
-                    <span><strong class="text-[#3D52A0]">From:</strong> <span class="text-gray-700">{{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</span></span>
-                  </p>
-                  <p class="text-sm flex items-start gap-2">
-                    <span class="material-icons text-[#3D52A0] text-lg">location_on</span>
-                    <span><strong class="text-[#3D52A0]">To:</strong> <span class="text-gray-700">{{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</span></span>
-                  </p>
-                  <p class="text-sm flex items-center gap-2">
-                    <span class="material-icons text-[#3D52A0] text-lg">speed</span>
-                    <span><strong class="text-[#3D52A0]">Max Speed:</strong> <span class="text-gray-700 font-semibold">{{ trip.maxSpeed || 'N/A' }} km/h</span></span>
-                  </p>
-                </div>
-                <div class="flex gap-3">
-                  <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
-                    class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">navigation</span>
-                    Navigate
-                  </a>
-                  <button @click="deleteTrip(trip.id)"
-                    class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-semibold rounded-xl hover:from-red-600 hover:to-red-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">delete</span>
-                  </button>
-                </div>
+              class="group relative overflow-hidden p-4 border border-white/10 rounded-xl hover:border-white/20 hover:bg-white/5 transition-all duration-300">
+              <div class="space-y-1.5 mb-3">
+                <p class="text-sm flex items-start gap-2 text-white/70">
+                  <span class="material-icons text-[#7091E6] text-base">trip_origin</span>
+                  <span><strong class="text-white/50">From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</span>
+                </p>
+                <p class="text-sm flex items-start gap-2 text-white/70">
+                  <span class="material-icons text-[#7091E6] text-base">location_on</span>
+                  <span><strong class="text-white/50">To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</span>
+                </p>
+                <p class="text-sm flex items-center gap-2 text-white/70">
+                  <span class="material-icons text-[#7091E6] text-base">speed</span>
+                  <span><strong class="text-white/50">Max:</strong> {{ trip.maxSpeed || 'N/A' }} km/h</span>
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <a :href="getGoogleMapsLink(trip)" target="_blank" rel="noopener noreferrer"
+                  class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#3D52A0]/30 border border-[#7091E6]/30 text-[#7091E6] text-xs font-semibold rounded-lg hover:bg-[#3D52A0]/50 transition-all">
+                  <span class="material-icons text-sm">navigation</span>Navigate
+                </a>
+                <button @click="deleteTrip(trip.id)"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-red-500/10 border border-red-400/20 text-red-400 text-xs font-semibold rounded-lg hover:bg-red-500/20 transition-all">
+                  <span class="material-icons text-sm">delete</span>
+                </button>
               </div>
             </div>
           </div>
-          <div v-else class="relative p-12 text-center">
-            <div class="inline-block p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-4">
-              <span class="material-icons text-7xl text-gray-400">explore_off</span>
-            </div>
-            <p class="text-gray-600 font-semibold text-lg">No trips found yet</p>
-            <p class="text-sm text-gray-400 mt-2">Your trip history will appear here</p>
+          <div v-else class="text-center py-10">
+            <span class="material-icons text-5xl text-white/10 mb-3 block">explore_off</span>
+            <p class="text-white/30 font-medium">No trips recorded yet</p>
           </div>
         </div>
       </section>
 
       <!-- Crash Events -->
-      <section class="mt-8" v-if="crashEvents.length > 0">
-        <div class="relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100/50 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border-l-8 border-red-500">
-          <div class="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full -mr-48 -mt-48"></div>
-          <h3 class="relative font-bold text-2xl mb-6 text-red-600 flex items-center gap-3">
-            <div class="bg-gradient-to-br from-red-500 to-red-600 p-3 rounded-2xl shadow-lg animate-pulse">
-              <span class="material-icons text-3xl text-white">warning</span>
-            </div>
+      <section class="mb-6" v-if="crashEvents.length > 0">
+        <div class="relative overflow-hidden bg-red-500/5 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-red-500/20">
+          <h3 class="font-bold text-lg mb-4 text-red-400 flex items-center gap-2">
+            <span class="material-icons animate-pulse">warning</span>
             <span>Crash Site Locations</span>
           </h3>
-          <div class="relative max-h-64 overflow-y-auto space-y-4 custom-scrollbar">
+          <div class="relative max-h-64 overflow-y-auto space-y-3 custom-scrollbar">
             <div v-for="(event, index) in crashEvents" :key="index" 
-              class="group relative overflow-hidden p-6 border-2 border-red-300 rounded-2xl bg-white hover:shadow-xl transition-all duration-300">
-              <div class="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-              <div class="relative">
-                <div class="space-y-2 mb-4">
-                  <p class="text-sm flex items-center gap-2">
-                    <span class="material-icons text-red-600 text-lg">flash_on</span>
-                    <span><strong class="text-red-700">Impact:</strong> <span class="text-gray-700 font-semibold">{{ event.impactStrength }} g</span></span>
-                  </p>
-                  <p class="text-sm flex items-start gap-2">
-                    <span class="material-icons text-red-600 text-lg">location_on</span>
-                    <span><strong class="text-red-700">Location:</strong> <span class="text-gray-700">{{ event.location }}</span></span>
-                  </p>
-                </div>
-                <div class="flex flex-wrap gap-3">
-                  <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
-                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">location_on</span>
-                    See Location
-                  </a>
-                  <button @click="deleteCrashEvent(index)"
-                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white text-sm font-semibold rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">delete</span>
-                    Delete
-                  </button>
-                  <button v-if="isCrashActive(index)" @click="clearCrashAlert(index)"
-                    class="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-sm font-semibold rounded-xl hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <span class="material-icons text-lg">clear</span>
-                    Clear Alert
-                  </button>
-                </div>
+              class="group relative overflow-hidden p-4 border border-red-500/20 rounded-xl bg-red-500/5 hover:bg-red-500/10 transition-all duration-300">
+              <div class="space-y-1.5 mb-3">
+                <p class="text-sm flex items-center gap-2 text-white/70">
+                  <span class="material-icons text-red-400 text-base">flash_on</span>
+                  <span><strong class="text-red-400/70">Impact:</strong> {{ event.impactStrength }} g</span>
+                </p>
+                <p class="text-sm flex items-start gap-2 text-white/70">
+                  <span class="material-icons text-red-400 text-base">location_on</span>
+                  <span><strong class="text-red-400/70">Location:</strong> {{ event.location }}</span>
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <a :href="getGoogleMapsLink(event.lat, event.lng)" target="_blank" rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-green-500/10 border border-green-400/20 text-green-400 text-xs font-semibold rounded-lg hover:bg-green-500/20 transition-all">
+                  <span class="material-icons text-sm">location_on</span>View
+                </a>
+                <button @click="deleteCrashEvent(index)"
+                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-red-500/10 border border-red-400/20 text-red-400 text-xs font-semibold rounded-lg hover:bg-red-500/20 transition-all">
+                  <span class="material-icons text-sm">delete</span>Delete
+                </button>
+                <button v-if="isCrashActive(index)" @click="clearCrashAlert(index)"
+                  class="inline-flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 text-white/50 text-xs font-semibold rounded-lg hover:bg-white/10 transition-all">
+                  <span class="material-icons text-sm">clear</span>Clear
+                </button>
               </div>
             </div>
           </div>
@@ -656,91 +660,69 @@
     </main>
 
     <!-- Footer -->
-    <footer class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#4a5fb8] to-[#3D52A0] text-center py-6 text-white border-t-4 border-white/20 mt-auto backdrop-blur-sm">
-      <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
-      <div class="relative">
-        <p class="font-semibold text-sm tracking-wide">© 2025 VIGILERT. All rights reserved.</p>
-        <p class="text-xs text-white/70 mt-1">Smart Helmet Safety System</p>
-      </div>
+    <footer class="relative bg-[#0a0f1e] text-center py-5 text-white border-t border-white/5">
+      <p class="font-semibold text-sm text-white/40 tracking-wide">© 2025 VIGILERT. All rights reserved.</p>
+      <p class="text-xs text-white/20 mt-1">Smart Motorcycle Safety System</p>
     </footer>
 
     <!-- 🚀 FLOATING ACTION BUTTON (Mobile Only) -->
     <div class="fixed bottom-28 right-6 z-40 md:hidden">
-      <button @click="toggleEngine" 
-              :disabled="(alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
+      <button @click="handleEngineToggle" 
+              :disabled="enginePending || (alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
               :class="[
-                'w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-110',
-                engineRunning 
-                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                  : (alcoholDetected || !helmetPaired || !motorcyclePaired)
-                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                    : 'bg-green-500 hover:bg-green-600 text-white'
+                'w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 border',
+                enginePending
+                  ? 'bg-yellow-500/20 border-yellow-400/30 text-yellow-400 cursor-wait'
+                  : engineRunning 
+                    ? 'bg-red-500/20 border-red-400/30 text-red-400 animate-pulse' 
+                    : (alcoholDetected || !helmetPaired || !motorcyclePaired)
+                      ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+                      : 'bg-green-500/20 border-green-400/30 text-green-400'
               ]">
-        <span class="material-icons text-2xl">
-          {{ engineRunning ? 'stop' : 'play_arrow' }}
+        <span :class="['material-icons text-2xl', enginePending ? 'animate-spin' : '']">
+          {{ enginePending ? 'refresh' : 'power_settings_new' }}
         </span>
       </button>
-      
-      <!-- Status Indicator -->
-      <div class="absolute -top-2 -left-2 flex flex-col gap-1">
-        <div v-if="alcoholDetected" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
-          🍺 Alcohol
-        </div>
-        <div :class="['text-xs px-2 py-1 rounded-full', engineRunning ? 'bg-green-500 text-white' : 'bg-gray-500 text-white']">
-          {{ engineRunning ? '🟢 ON' : '🔴 OFF' }}
-        </div>
-      </div>
     </div>
 
     <!-- 📱 MOBILE BOTTOM NAVIGATION -->
-    <div class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-200 shadow-2xl z-50 md:hidden">
+    <div class="fixed bottom-0 left-0 right-0 bg-[#0a0f1e]/95 backdrop-blur-lg border-t border-white/5 shadow-2xl z-50 md:hidden">
       <div class="grid grid-cols-6 gap-1 px-2 py-2">
-        <!-- Status -->
         <button @click="scrollToSection('status')" 
                 :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'status' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100']">
+                         activeSection === 'status' ? 'bg-[#3D52A0]/50 text-[#7091E6]' : 'text-white/30 hover:text-white/60']">
           <span class="material-icons text-lg">dashboard</span>
           <span class="text-xs font-medium mt-1">Status</span>
         </button>
-
-        <!-- Engine -->
         <button @click="scrollToSection('engine')" 
                 :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'engine' ? 'bg-green-500 text-white' : 'text-gray-600 hover:bg-gray-100']">
+                         activeSection === 'engine' ? 'bg-green-500/20 text-green-400' : 'text-white/30 hover:text-white/60']">
           <span class="material-icons text-lg">power_settings_new</span>
           <span class="text-xs font-medium mt-1">Engine</span>
         </button>
-
-        <!-- Map -->
         <button @click="scrollToSection('map')" 
                 :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'map' ? 'bg-purple-500 text-white' : 'text-gray-600 hover:bg-gray-100']">
+                         activeSection === 'map' ? 'bg-purple-500/20 text-purple-400' : 'text-white/30 hover:text-white/60']">
           <span class="material-icons text-lg">map</span>
           <span class="text-xs font-medium mt-1">Map</span>
         </button>
-
-        <!-- Trips -->
         <button @click="scrollToSection('trips')" 
                 :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'trips' ? 'bg-orange-500 text-white' : 'text-gray-600 hover:bg-gray-100']">
+                         activeSection === 'trips' ? 'bg-orange-500/20 text-orange-400' : 'text-white/30 hover:text-white/60']">
           <span class="material-icons text-lg">route</span>
           <span class="text-xs font-medium mt-1">Trips</span>
         </button>
-
-        <!-- Alerts -->
         <button @click="scrollToSection('alerts')" 
-                :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'alerts' ? 'bg-red-500 text-white' : 'text-gray-600 hover:bg-gray-100']">
+                :class="['relative flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
+                         activeSection === 'alerts' ? 'bg-red-500/20 text-red-400' : 'text-white/30 hover:text-white/60']">
           <span class="material-icons text-lg">warning</span>
           <span class="text-xs font-medium mt-1">Alerts</span>
-          <div v-if="alerts.length > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+          <div v-if="alerts.length > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
             {{ alerts.length }}
           </div>
         </button>
-
-        <!-- Devices -->
         <button @click="$router.push('/device-setup')" 
-                class="flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300 text-gray-600 hover:bg-gray-100">
+                class="flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300 text-white/30 hover:text-white/60">
           <span class="material-icons text-lg">devices</span>
           <span class="text-xs font-medium mt-1">Devices</span>
         </button>
@@ -917,6 +899,7 @@ const previousHelmetState = ref(null);
 
 // ✅ NEW: Engine Control States
 const engineRunning = ref(false);
+const enginePending = ref(false);  // optimistic pending state — shows spinner during Firebase round-trip
 const autoEngineControl = ref(false);
 const alcoholDetected = ref(false);
 
@@ -2244,6 +2227,20 @@ const toggleEngine = async () => {
   }
 };
 
+// ✅ NEW: handleEngineToggle — wraps toggleEngine with optimistic pending state
+// This eliminates the confusion of the button appearing to do nothing during the Firebase round-trip
+const handleEngineToggle = async () => {
+  if (enginePending.value) return;
+  enginePending.value = true;
+  try {
+    await toggleEngine();
+    // Auto-clear pending after 8 seconds max (in case Firebase doesn't respond)
+    setTimeout(() => { enginePending.value = false; }, 8000);
+  } catch {
+    enginePending.value = false;
+  }
+};
+
 const toggleAutoControl = async () => {
   try {
     autoEngineControl.value = !autoEngineControl.value;
@@ -2353,6 +2350,7 @@ const setupEngineStatusListener = () => {
       const newEngineState = data.engineRunning;
       if (engineRunning.value !== newEngineState) {
         engineRunning.value = newEngineState;
+        enginePending.value = false; // Firebase confirmed — clear pending state
         console.log(`[ENGINE] Status updated from live data:`, newEngineState ? 'RUNNING' : 'STOPPED');
         
         // Update sensor data from live feed

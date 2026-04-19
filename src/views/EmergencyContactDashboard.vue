@@ -1,12 +1,14 @@
 ﻿<template>
-  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#EDE8F5] via-[#f5f3f7] to-[#e8e4f0] pb-20">
+  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0f1e] via-[#0f1729] to-[#0a0f1e] pb-20">
 
     <!-- ===== HEADER ===== -->
-    <div class="relative overflow-hidden bg-gradient-to-r from-[#3D52A0] via-[#5571c6] to-[#7091E6] py-8 px-4 md:px-8 shadow-2xl">
+    <div class="relative overflow-hidden bg-gradient-to-r from-[#0a0f1e] via-[#1a2a5e] to-[#0a0f1e] py-8 px-4 md:px-8 shadow-2xl border-b border-white/5">
       <div class="absolute inset-0 overflow-hidden">
-        <div class="absolute -top-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" style="animation-delay:1s"></div>
+        <div class="absolute -top-24 -left-24 w-96 h-96 bg-red-900/15 rounded-full blur-3xl animate-pulse"></div>
+        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-[#3D52A0]/15 rounded-full blur-3xl animate-pulse" style="animation-delay:1s"></div>
       </div>
+      <div class="absolute inset-0 opacity-3"
+        style="background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 40px 40px;"></div>
       <div class="relative max-w-7xl mx-auto">
         <div class="flex flex-col md:flex-row items-center justify-between gap-6">
 
@@ -115,52 +117,52 @@
       <!-- Row 1: Pairing + Engine Status -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <!-- Device Pairing -->
-        <div class="relative overflow-hidden bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/50">
+        <div class="relative overflow-hidden bg-white/5 backdrop-blur-lg rounded-2xl shadow-lg p-5 border border-white/10 hover:border-white/20 transition-all duration-300">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div :class="['p-3 rounded-xl', helmetPaired && motorcyclePaired ? 'bg-green-500' : 'bg-red-500']">
-                <span class="material-icons text-white text-2xl">link</span>
+              <div :class="['p-3 rounded-xl border', helmetPaired && motorcyclePaired ? 'bg-green-500/20 border-green-400/30' : 'bg-red-500/20 border-red-400/30']">
+                <span :class="['material-icons text-2xl', helmetPaired && motorcyclePaired ? 'text-green-400' : 'text-red-400']">link</span>
               </div>
               <div>
-                <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Device Pairing</p>
-                <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-600' : 'text-red-600']">
+                <p class="text-xs text-white/40 font-medium uppercase tracking-wide">Device Pairing</p>
+                <p :class="['text-lg font-bold', helmetPaired && motorcyclePaired ? 'text-green-400' : 'text-red-400']">
                   {{ helmetPaired && motorcyclePaired ? 'Connected' : 'Disconnected' }}
                 </p>
               </div>
             </div>
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1.5">
               <div class="flex items-center gap-2">
-                <span :class="['material-icons text-sm', helmetPaired ? 'text-green-500' : 'text-gray-400']">sports_motorsports</span>
-                <span :class="['text-xs font-medium', helmetPaired ? 'text-green-600' : 'text-gray-400']">Helmet</span>
-                <span :class="['w-2 h-2 rounded-full', helmetPaired ? 'bg-green-400 animate-pulse' : 'bg-gray-300']"></span>
+                <span :class="['material-icons text-sm', helmetPaired ? 'text-green-400' : 'text-white/20']">sports_motorsports</span>
+                <span :class="['text-xs font-medium', helmetPaired ? 'text-green-400' : 'text-white/30']">Helmet</span>
+                <span :class="['w-1.5 h-1.5 rounded-full', helmetPaired ? 'bg-green-400 animate-pulse' : 'bg-white/10']"></span>
               </div>
               <div class="flex items-center gap-2">
-                <span :class="['material-icons text-sm', motorcyclePaired ? 'text-green-500' : 'text-gray-400']">two_wheeler</span>
-                <span :class="['text-xs font-medium', motorcyclePaired ? 'text-green-600' : 'text-gray-400']">Motorcycle</span>
-                <span :class="['w-2 h-2 rounded-full', motorcyclePaired ? 'bg-green-400 animate-pulse' : 'bg-gray-300']"></span>
+                <span :class="['material-icons text-sm', motorcyclePaired ? 'text-green-400' : 'text-white/20']">two_wheeler</span>
+                <span :class="['text-xs font-medium', motorcyclePaired ? 'text-green-400' : 'text-white/30']">Motorcycle</span>
+                <span :class="['w-1.5 h-1.5 rounded-full', motorcyclePaired ? 'bg-green-400 animate-pulse' : 'bg-white/10']"></span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Engine Status -->
-        <div :class="['relative overflow-hidden rounded-2xl shadow-lg p-5 border border-white/50 transition-all duration-500',
-          engineRunning ? 'bg-gradient-to-br from-green-500 to-green-600 text-white' : 'bg-white/80 backdrop-blur-lg']">
+        <div :class="['relative overflow-hidden rounded-2xl shadow-lg p-5 border transition-all duration-500',
+          engineRunning ? 'bg-green-500/10 border-green-400/20' : 'bg-white/5 border-white/10']">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div :class="['p-3 rounded-xl', engineRunning ? 'bg-white/20' : 'bg-gray-200']">
-                <span :class="['material-icons text-2xl', engineRunning ? 'text-white' : 'text-gray-500']">power_settings_new</span>
+              <div :class="['p-3 rounded-xl border', engineRunning ? 'bg-green-500/20 border-green-400/30' : 'bg-white/5 border-white/10']">
+                <span :class="['material-icons text-2xl', engineRunning ? 'text-green-400' : 'text-white/30']">power_settings_new</span>
               </div>
               <div>
-                <p :class="['text-xs font-medium uppercase tracking-wide', engineRunning ? 'text-green-100' : 'text-gray-500']">Engine Status</p>
-                <p :class="['text-lg font-bold', engineRunning ? 'text-white' : 'text-gray-700']">
+                <p :class="['text-xs font-medium uppercase tracking-wide', engineRunning ? 'text-green-400/60' : 'text-white/40']">Engine Status</p>
+                <p :class="['text-lg font-bold', engineRunning ? 'text-green-400' : 'text-white/60']">
                   {{ engineRunning ? 'Running' : 'Stopped' }}
                 </p>
               </div>
             </div>
-            <div :class="['w-4 h-4 rounded-full', engineRunning ? 'bg-green-200 animate-pulse' : 'bg-gray-300']"></div>
+            <div :class="['w-3 h-3 rounded-full', engineRunning ? 'bg-green-400 animate-pulse' : 'bg-white/10']"></div>
           </div>
-          <p :class="['text-xs mt-2', engineRunning ? 'text-green-100' : 'text-gray-500']">
+          <p :class="['text-xs mt-2', engineRunning ? 'text-green-400/50' : 'text-white/25']">
             {{ engineRunning ? 'Rider is currently on the road' : 'Motorcycle engine is off' }}
           </p>
         </div>
@@ -319,12 +321,12 @@
       </div>
 
       <!-- Tab: Rider Location -->
-      <div v-show="activeTab === 'Rider Location'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50">
-        <h3 class="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
-          <span class="material-icons text-[#3D52A0]">location_on</span>
+      <div v-show="activeTab === 'Rider Location'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10">
+        <h3 class="text-lg font-bold text-white mb-5 flex items-center gap-2">
+          <span class="material-icons text-[#7091E6]">location_on</span>
           Rider Location Monitoring
-          <span class="ml-auto flex items-center gap-1 text-xs font-normal text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-200">
-            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+          <span class="ml-auto flex items-center gap-1 text-xs font-normal text-green-400 bg-green-500/10 px-3 py-1 rounded-full border border-green-400/20">
+            <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
             Live GPS Module
           </span>
         </h3>
@@ -338,7 +340,7 @@
       </div>
 
       <!-- Tab: Speed Data -->
-      <div v-show="activeTab === 'Speed Data'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50">
+      <div v-show="activeTab === 'Speed Data'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10">
         <h3 class="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
           <span class="material-icons text-blue-500">speed</span>
           Speed Monitoring
@@ -386,7 +388,7 @@
       </div>
 
       <!-- Tab: Recent Alerts -->
-      <div v-show="activeTab === 'Recent Alerts'" class="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-white/50">
+      <div v-show="activeTab === 'Recent Alerts'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10">
         <div class="flex items-center justify-between mb-5">
           <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
             <div class="bg-red-500 p-2 rounded-xl">
@@ -424,9 +426,9 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-gradient-to-r from-[#3D52A0] via-[#4a5fb8] to-[#3D52A0] text-center py-5 text-white border-t-4 border-white/20">
-      <p class="font-semibold text-sm">© 2025 VIGILERT. All rights reserved.</p>
-      <p class="text-xs text-white/60 mt-1">Emergency Contact Monitoring System</p>
+    <footer class="bg-[#0a0f1e] text-center py-5 text-white border-t border-white/5">
+      <p class="font-semibold text-sm text-white/40">© 2025 VIGILERT. All rights reserved.</p>
+      <p class="text-xs text-white/20 mt-1">Emergency Contact Monitoring System</p>
     </footer>
   </div>
 </template>
