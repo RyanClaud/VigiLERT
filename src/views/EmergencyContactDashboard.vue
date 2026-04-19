@@ -677,7 +677,8 @@ const playAlertSound = () => {
 
 const updateSpeedLimitInFirebase = () => {
   const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
-  set(dbRef(database, `${userUID}/speedLimit`), speedLimit.value)
+  // Write to the same path the user dashboard reads from
+  set(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), speedLimit.value)
     .then(() => console.log('[SPEED LIMIT] Updated to', speedLimit.value))
     .catch(err => console.error('[SPEED LIMIT] Error:', err));
 };
@@ -874,8 +875,8 @@ const setupFirebaseListeners = () => {
     console.log('[CRASH] New crash event received:', crashEvent);
   });
 
-  // Speed limit (sync from rider dashboard changes)
-  onValue(dbRef(database, `${userUID}/speedLimit`), snap => {
+  // Speed limit — read from the same path the user dashboard uses
+  onValue(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), snap => {
     const d = snap.val();
     if (d !== null && d !== undefined) speedLimit.value = d;
   });
