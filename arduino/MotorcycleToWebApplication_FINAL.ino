@@ -261,14 +261,23 @@ void stopSiren() {
   Serial.println("[SIREN] Siren stopped");
 }
 
-// ✅ NEW: Function declarations for security system
+// Forward declarations — security system
 void checkComprehensiveSecurity();
 void triggerSecurityShutdown(String reason);
 void logSecurityEventToFirebase(String eventType);
 void printSecurityStatus();
-// SMS alert functions
+void checkWiFiWatchdog();
+void checkHelmetConnection();
+// Engine / trip
+void startTrip();
+void endTrip();
+void updateTripData();
+void saveTripToFirebase();
+float calculateDistance(double lat1, double lng1, double lat2, double lng2);
+// SMS
 bool sendSMS(String phoneNumber, String message);
 void sendSMSToAllContacts(String message, String alertType);
+// Dashboard
 void checkAutoMode();
 
 void setup() {
@@ -1808,13 +1817,6 @@ void triggerSecurityShutdown(String reason) {
   Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — engine cut\n", relayPin);
 
   startSiren();
-  logSecurityEventToFirebase(reason);
-}
-
-  // Start siren (non-blocking — keeps going while Firebase write runs)
-  startSiren();
-
-  // Log security event to Firebase
   logSecurityEventToFirebase(reason);
 }
 
