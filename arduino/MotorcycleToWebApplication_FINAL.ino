@@ -181,14 +181,30 @@ const unsigned long VIBRATION_DEBOUNCE = 30;    // 30ms debounce — catches fas
 int consecutiveVibrations = 0;
 
 // ── Non-blocking buzzer state machine ─────────────────────────────────────
-// Runs the buzzer for BUZZER_ALERT_DURATION ms every time vibration is detected
-// without blocking the sensor polling loop with delay()
-bool buzzerAlerting = false;
-unsigned long buzzerAlertStart = 0;
-unsigned long buzzerLastToggle = 0;
-bool buzzerState = false;
-const unsigned long BUZZER_ALERT_DURATION = 6000;  // Buzz for 6 seconds per detection
-const unsigned long BUZZER_BEEP_INTERVAL  = 150;   // Toggle every 150ms (fast beeping)
+// Produces a police/ambulance siren sweep using tone() on the buzzer pin.
+// Two modes:
+//   SIREN  — rising/falling sweep (theft alert, security shutdown)
+//   BEEP   — short double-beep (arming confirmation)
+// No delay() used — all timing via millis()
+
+enum BuzzerMode { BUZZER_OFF, BUZZER_SIREN, BUZZER_BEEP };
+BuzzerMode buzzerMode = BUZZER_OFF;
+
+unsigned long buzzerAlertStart  = 0;
+unsigned long buzzerLastTick    = 0;
+bool          buzzerLightState  = false;
+
+// Siren parameters
+const unsigned long BUZZER_ALERT_DURATION = 8000;  // Total siren duration per trigger (ms)
+const unsigned long SIREN_TICK            = 15;    // Update frequency (ms) — smooth sweep
+const int           SIREN_FREQ_LOW        = 800;   // Hz — bottom of sweep
+const int           SIREN_FREQ_HIGH       = 1800;  // Hz — top of sweep
+const unsigned long SIREN_HALF_PERIOD     = 600;   // ms for one sweep direction (low→high or high→low)
+
+// Siren sweep state
+int           sirenCurrentFreq  = SIREN_FREQ_LOW;
+bool          sirenGoingUp      = true;
+unsigned long sirenPhaseStart   = 0;
 
 // GSM status
 bool gsmReady = false;
@@ -198,6 +214,26 @@ const String crashPath = "/helmet_public/" + userUID + "/crashes.json?auth=" + f
 const String buttonPath = "/" + userUID + "/engineControl/startButton.json?auth=" + firebaseAuth;
 const String livePath = "/helmet_public/" + userUID + "/live.json?auth=" + firebaseAuth;
 const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?auth=" + firebaseAuth;
+
+// ── Siren helpers ─────────────────────────────────────────────────────────
+void startSiren() {
+  buzzerMode       = BUZZER_SIREN;
+  buzzerAlertStart = millis();
+  buzzerLastTick   = millis();
+  sirenPhaseStart  = millis();
+  sirenGoingUp     = true;
+  sirenCurrentFreq = SIREN_FREQ_LOW;
+  digitalWrite(lightIndicatorPin, HIGH);
+  Serial.println("[SIREN] 🚨 Siren started");
+}
+
+void stopSiren() {
+  buzzerMode = BUZZER_OFF;
+  noTone(buzzerPin);
+  digitalWrite(buzzerPin, LOW);
+  digitalWrite(lightIndicatorPin, LOW);
+  Serial.println("[SIREN] Siren stopped");
+}
 
 // ✅ NEW: Function declarations for security system
 void checkComprehensiveSecurity();
@@ -465,23 +501,48 @@ void loop() {
   }
   float leanAngle = abs(currentRoll);
 
-  // ── Non-blocking buzzer tick ──────────────────────────────────────────────
-  // Must run every loop iteration so the buzzer keeps going while we still
-  // poll the sensor at full speed
-  if (buzzerAlerting) {
+  // ── Non-blocking siren / buzzer tick ─────────────────────────────────────
+  {
     unsigned long now = millis();
-    if (now - buzzerAlertStart >= BUZZER_ALERT_DURATION) {
-      // Alert duration expired — silence buzzer
-      buzzerAlerting = false;
-      buzzerState = false;
-      digitalWrite(buzzerPin, LOW);
-      digitalWrite(lightIndicatorPin, LOW);
-    } else if (now - buzzerLastToggle >= BUZZER_BEEP_INTERVAL) {
-      // Toggle buzzer on/off for rapid beeping effect
-      buzzerState = !buzzerState;
-      digitalWrite(buzzerPin, buzzerState ? HIGH : LOW);
-      digitalWrite(lightIndicatorPin, buzzerState ? HIGH : LOW);
-      buzzerLastToggle = now;
+
+    if (buzzerMode == BUZZER_SIREN) {
+      // Check if total alert duration has expired
+      if (now - buzzerAlertStart >= BUZZER_ALERT_DURATION) {
+        noTone(buzzerPin);
+        digitalWrite(lightIndicatorPin, LOW);
+        buzzerMode = BUZZER_OFF;
+      } else if (now - buzzerLastTick >= SIREN_TICK) {
+        buzzerLastTick = now;
+
+        // Calculate how far through the current half-period we are (0.0 – 1.0)
+        unsigned long phaseElapsed = now - sirenPhaseStart;
+        float t = (float)phaseElapsed / (float)SIREN_HALF_PERIOD;
+        if (t > 1.0f) t = 1.0f;
+
+        // Linear interpolation between low and high frequency
+        int freq = sirenGoingUp
+          ? (int)(SIREN_FREQ_LOW  + t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW))
+          : (int)(SIREN_FREQ_HIGH - t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW));
+
+        tone(buzzerPin, freq);
+
+        // Flash LED in sync with siren direction
+        buzzerLightState = sirenGoingUp;
+        digitalWrite(lightIndicatorPin, buzzerLightState ? HIGH : LOW);
+
+        // Flip direction when half-period completes
+        if (phaseElapsed >= SIREN_HALF_PERIOD) {
+          sirenGoingUp = !sirenGoingUp;
+          sirenPhaseStart = now;
+        }
+      }
+    } else if (buzzerMode == BUZZER_BEEP) {
+      // Simple double-beep for arming confirmation — runs once then stops
+      // (handled inline at arm time with tiny delays — acceptable as it's once-only)
+      buzzerMode = BUZZER_OFF;
+    } else {
+      // BUZZER_OFF — ensure silence
+      // (noTone already called when mode was set to OFF)
     }
   }
 
@@ -540,14 +601,9 @@ void loop() {
                         lastVibrationReading ? "HIGH" : "LOW",
                         currentReading ? "HIGH" : "LOW");
 
-          // ── Start / extend non-blocking buzzer alert ──────────────────
-          // Every new detection restarts the 6-second buzzer window
-          buzzerAlerting = true;
-          buzzerAlertStart = currentTime;
-          buzzerLastToggle = currentTime;
-          buzzerState = true;
-          digitalWrite(buzzerPin, HIGH);
-          digitalWrite(lightIndicatorPin, HIGH);
+          // ── Start / extend non-blocking siren alert ──────────────────
+          // Every new detection restarts the 8-second siren window
+          startSiren();
 
           // ── Firebase + SMS alert (with cooldown to avoid spam) ────────
           unsigned long timeSinceLastAlert = currentTime - lastTheftAlert;
@@ -588,9 +644,7 @@ void loop() {
       theftDetectionCount = 0;
       theftAlertSent = false;
       consecutiveVibrations = 0;
-      buzzerAlerting = false;
-      digitalWrite(buzzerPin, LOW);
-      digitalWrite(lightIndicatorPin, LOW);
+      stopSiren();
     }
   }
 
@@ -1229,9 +1283,7 @@ void startEngine() {
     antiTheftArmed = false;
     antiTheftEnabled = false;
     theftDetectionCount = 0;
-    buzzerAlerting = false;
-    digitalWrite(buzzerPin, LOW);
-    digitalWrite(lightIndicatorPin, LOW);
+    stopSiren();
     Serial.println("[ANTI-THEFT] 🔓 Disarmed");
   }
 }
@@ -1693,54 +1745,45 @@ void clearDashboardButton() {
 // ✅ ENHANCED: Comprehensive security system with 5-second timeouts
 void checkComprehensiveSecurity() {
   if (!securitySystemActive) return;
-  
+
   unsigned long currentTime = millis();
-  
-  // ✅ 1. WiFi Connection Monitoring (5-second timeout)
+
+  // 1. WiFi timeout — track last successful connection
   if (WiFi.status() == WL_CONNECTED) {
     lastWiFiConnected = currentTime;
   }
   unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
-  bool wifiTimeout = (timeSinceWiFi > WIFI_TIMEOUT);
-  
-  // ✅ 2. Helmet Connection Monitoring (5-second timeout)  
-  unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
-  bool helmetTimeout = (timeSinceHelmet > HELMET_TIMEOUT && lastHelmetUpdateTime > 0 && !helmetConnected);
-  
-  // ✅ 3. Security Violations Detection
+  // Only flag WiFi timeout if we've been running long enough to have connected once
+  bool wifiTimeout = (lastWiFiConnected > 0) && (timeSinceWiFi > WIFI_TIMEOUT);
+
+  // 2. Helmet timeout — flag if engine is running and helmet hasn't been seen
+  //    for HELMET_TIMEOUT ms (covers both "never connected" and "disconnected" cases)
+  unsigned long timeSinceHelmet = (lastHelmetUpdateTime > 0)
+                                    ? (currentTime - lastHelmetUpdateTime)
+                                    : 0;
+  bool helmetTimeout = engineRunning &&
+                       (lastHelmetUpdateTime > 0) &&
+                       (timeSinceHelmet > HELMET_TIMEOUT) &&
+                       !helmetConnected;
+
+  // 3. Trigger shutdown if engine is running and any security condition violated
   bool securityViolation = wifiTimeout || helmetTimeout;
-  
-  // ✅ 4. Auto-Shutdown Logic
+
   if (securityViolation && engineRunning) {
-    Serial.println("\n🚨🚨🚨 SECURITY VIOLATION - AUTO SHUTDOWN! 🚨🚨🚨");
-    
-    if (wifiTimeout) {
-      Serial.printf("📡 WiFi TIMEOUT: %lu ms (>%lu ms limit)\n", timeSinceWiFi, WIFI_TIMEOUT);
-      Serial.println("🔒 Thieves may have disconnected WiFi!");
-    }
-    
-    if (helmetTimeout) {
-      Serial.printf("🪖 HELMET TIMEOUT: %lu ms (>%lu ms limit)\n", timeSinceHelmet, HELMET_TIMEOUT);
-      Serial.println("🔒 Helmet turned off or disconnected!");
-    }
-    
-    // Force engine shutdown
+    Serial.println("\n🚨🚨🚨 SECURITY VIOLATION — AUTO SHUTDOWN! 🚨🚨🚨");
+    if (wifiTimeout)  Serial.printf("📡 WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
+    if (helmetTimeout) Serial.printf("🪖 HELMET TIMEOUT: %lu ms (>%lu ms)\n", timeSinceHelmet, HELMET_TIMEOUT);
     triggerSecurityShutdown("Security Violation");
   }
-  
-  // ✅ 5. Physical Key Security Override
-  if (securityViolation) {
-    systemInSecureMode = true;
-  } else {
-    systemInSecureMode = false;
-  }
-  
-  // ✅ 6. Debug Output (every 3 seconds)
+
+  systemInSecureMode = securityViolation;
+
+  // Debug every 3 seconds
   static unsigned long lastSecurityDebug = 0;
   if (currentTime - lastSecurityDebug > 3000) {
-    Serial.printf("[SECURITY] WiFi: %s (%lu ms) | Helmet: %s (%lu ms) | Engine: %s\n",
-                  wifiTimeout ? "TIMEOUT ❌" : "OK ✅", timeSinceWiFi,
-                  helmetTimeout ? "TIMEOUT ❌" : "OK ✅", timeSinceHelmet,
+    Serial.printf("[SECURITY] WiFi:%s(%lums) Helmet:%s(%lums) Engine:%s\n",
+                  wifiTimeout ? "TIMEOUT❌" : "OK✅", timeSinceWiFi,
+                  helmetTimeout ? "TIMEOUT❌" : "OK✅", timeSinceHelmet,
                   engineRunning ? "RUNNING" : "STOPPED");
     lastSecurityDebug = currentTime;
   }
@@ -1751,175 +1794,105 @@ void triggerSecurityShutdown(String reason) {
   Serial.println("\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
   Serial.println("Reason: " + reason);
   Serial.println("Time: " + String(millis()) + " ms");
-  
-  // Force relay OFF
-  digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
+
+  // Cut BOTH relays — ignition relay stops the running engine
+  digitalWrite(ignitionRelayPin, HIGH);  // HIGH = OFF for active-low relay
+  digitalWrite(relayPin, HIGH);          // HIGH = OFF for active-low relay
   engineRunning = false;
-  
+
   // End current trip
   endTrip();
-  
-  Serial.printf("🛑 Engine STOPPED | Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
-  
-  // Security alert sequence (10 loud beeps)
-  for (int i = 0; i < 10; i++) {
-    digitalWrite(buzzerPin, HIGH);
-    digitalWrite(lightIndicatorPin, HIGH);
-    delay(150);
-    digitalWrite(buzzerPin, LOW);
-    digitalWrite(lightIndicatorPin, LOW);
-    delay(150);
-  }
-  
+
+  Serial.printf("🛑 Engine STOPPED | Ignition GPIO%d=%d | Starter GPIO%d=%d\n",
+                ignitionRelayPin, digitalRead(ignitionRelayPin),
+                relayPin, digitalRead(relayPin));
+
+  // Start siren (non-blocking — keeps going while Firebase write runs)
+  startSiren();
+
   // Log security event to Firebase
   logSecurityEventToFirebase(reason);
 }
 
-// ✅ SECURITY: WiFi Watchdog - Emergency engine cutoff if WiFi disconnects while relay is OFF
+// ✅ SECURITY: WiFi Watchdog — cuts engine if WiFi drops while engine is running
 void checkWiFiWatchdog() {
   unsigned long currentTime = millis();
   bool wifiConnected = (WiFi.status() == WL_CONNECTED);
-  bool relayIsOff = (digitalRead(relayPin) == LOW);
-  
-  // ✅ STARTUP WiFi CHECK: If WiFi not connected within 6 seconds of boot, cut engine
+
+  // ── Startup WiFi check ────────────────────────────────────────────────────
   if (!startupWiFiCheckComplete) {
     unsigned long timeSinceBoot = currentTime - deviceBootTime;
-    
+
     if (wifiConnected) {
-      // WiFi connected successfully on startup
       startupWiFiCheckComplete = true;
-      Serial.println("\n[STARTUP CHECK] ✅ WiFi connected successfully!");
-      Serial.printf("[STARTUP CHECK] Connected in %lu ms\n", timeSinceBoot);
+      lastWiFiConnected = currentTime;
+      Serial.printf("\n[STARTUP] ✅ WiFi connected in %lu ms\n", timeSinceBoot);
     } else if (timeSinceBoot >= STARTUP_WIFI_TIMEOUT && !startupShutdownTriggered) {
-      // WiFi failed to connect within 6 seconds - EMERGENCY SHUTDOWN!
       startupShutdownTriggered = true;
-      startupWiFiCheckComplete = true;  // Don't check again
-      
-      Serial.println("\n🚨🚨🚨 [STARTUP CHECK] WiFi CONNECTION FAILED! 🚨🚨🚨");
-      Serial.printf("[STARTUP CHECK] No WiFi after %lu ms (>%lu ms limit)\n", 
-                    timeSinceBoot, STARTUP_WIFI_TIMEOUT);
-      Serial.println("[STARTUP CHECK] 🔒 THEFT PREVENTION: Engine may have been started before device boot!");
-      Serial.println("[STARTUP CHECK] 🔒 Cutting engine power NOW!");
-      
-      // ✅ DUAL RELAY SHUTDOWN: Cut ignition (this stops the engine)
-      Serial.println("[STARTUP CHECK] 🔒 Cutting ignition relay...");
-      digitalWrite(ignitionRelayPin, HIGH);  // HIGH = OFF for active-low relay
-      digitalWrite(relayPin, HIGH);          // HIGH = OFF for active-low relay
+      startupWiFiCheckComplete = true;
+
+      Serial.println("\n🚨 [STARTUP] WiFi FAILED — cutting engine power!");
+      digitalWrite(ignitionRelayPin, HIGH);
+      digitalWrite(relayPin, HIGH);
       engineRunning = false;
-      
-      Serial.printf("[STARTUP CHECK] ✅ Ignition Relay GPIO %d = %d (OFF)\n", ignitionRelayPin, digitalRead(ignitionRelayPin));
-      Serial.printf("[STARTUP CHECK] ✅ Starter Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
-      Serial.println("[STARTUP CHECK] ✅ Engine power CUT - Motorcycle secured!");
-      
-      Serial.println("[STARTUP CHECK] ✅ Engine power CUT - Motorcycle secured!");
-      Serial.println("[STARTUP CHECK] 💡 Connect to WiFi and restart device");
-      
-      // Loud alarm sequence
-      for (int i = 0; i < 20; i++) {
-        digitalWrite(buzzerPin, HIGH);
-        digitalWrite(lightIndicatorPin, HIGH);
-        delay(100);
-        digitalWrite(buzzerPin, LOW);
-        digitalWrite(lightIndicatorPin, LOW);
-        delay(100);
-      }
+      startSiren();
+      Serial.println("[STARTUP] � Connect to WiFi and restart device");
     } else {
-      // Still waiting for WiFi connection
       static unsigned long lastStartupWarning = 0;
       if (currentTime - lastStartupWarning >= 1000) {
-        unsigned long timeRemaining = STARTUP_WIFI_TIMEOUT - timeSinceBoot;
-        Serial.printf("[STARTUP CHECK] ⏳ Waiting for WiFi... (%lu ms remaining)\n", timeRemaining);
+        Serial.printf("[STARTUP] ⏳ Waiting for WiFi... (%lu ms remaining)\n",
+                      STARTUP_WIFI_TIMEOUT - timeSinceBoot);
         lastStartupWarning = currentTime;
       }
     }
+    return; // Don't run watchdog until startup check is done
   }
-  
-  // ✅ ACTIVATE WATCHDOG: When relay is OFF (security mode)
-  if (relayIsOff && !wifiWatchdogActive) {
-    wifiWatchdogActive = true;
-    Serial.println("\n[WIFI WATCHDOG] 🛡️ ACTIVATED - Monitoring WiFi connection");
-    Serial.println("[WIFI WATCHDOG] 🔒 Relay is OFF - Any WiFi disconnection will trigger emergency shutdown");
-  }
-  
-  // ✅ DEACTIVATE WATCHDOG: When relay is ON (normal operation)
-  if (!relayIsOff && wifiWatchdogActive) {
-    wifiWatchdogActive = false;
+
+  // ── Runtime WiFi watchdog ─────────────────────────────────────────────────
+  // Triggers whenever WiFi drops — whether engine is running or parked
+  if (wifiConnected) {
+    lastWiFiConnected = currentTime;
+    wifiDisconnectedTime = 0;
     emergencyShutdownTriggered = false;
-    Serial.println("\n[WIFI WATCHDOG] ✅ DEACTIVATED - Relay is ON (normal operation)");
+  } else {
+    if (wifiDisconnectedTime == 0) {
+      wifiDisconnectedTime = currentTime;
+      Serial.printf("\n⚠️ [WIFI WATCHDOG] WiFi LOST — shutdown in %lu s if not restored\n",
+                    WIFI_WATCHDOG_TIMEOUT / 1000);
+    }
+
+    unsigned long disconnectedDuration = currentTime - wifiDisconnectedTime;
+
+    if (disconnectedDuration >= WIFI_WATCHDOG_TIMEOUT && !emergencyShutdownTriggered) {
+      emergencyShutdownTriggered = true;
+      Serial.println("\n🚨 [WIFI WATCHDOG] TIMEOUT — cutting engine power!");
+
+      digitalWrite(ignitionRelayPin, HIGH);
+      digitalWrite(relayPin, HIGH);
+      engineRunning = false;
+      startSiren();
+
+      Serial.println("[WIFI WATCHDOG] 💡 Reconnect WiFi to restore operation");
+    }
+
+    // Warning beep every second while disconnected (before shutdown)
+    static unsigned long lastWarningBeep = 0;
+    if (!emergencyShutdownTriggered && currentTime - lastWarningBeep >= 1000) {
+      tone(buzzerPin, 1000, 80);  // Short 80ms pip — non-blocking
+      lastWarningBeep = currentTime;
+      Serial.printf("[WIFI WATCHDOG] ⚠️ Shutdown in %lu ms...\n",
+                    WIFI_WATCHDOG_TIMEOUT - disconnectedDuration);
+    }
   }
-  
-  // ✅ MONITOR: Check WiFi status when watchdog is active
-  if (wifiWatchdogActive) {
-    if (wifiConnected) {
-      // WiFi is connected - reset disconnect timer
-      wifiDisconnectedTime = 0;
-      emergencyShutdownTriggered = false;
-    } else {
-      // WiFi is disconnected!
-      if (wifiDisconnectedTime == 0) {
-        wifiDisconnectedTime = currentTime;
-        Serial.println("\n⚠️⚠️⚠️ [WIFI WATCHDOG] WiFi DISCONNECTED! ⚠️⚠️⚠️");
-        Serial.printf("[WIFI WATCHDOG] 🔒 Emergency shutdown in %lu seconds...\n", WIFI_WATCHDOG_TIMEOUT / 1000);
-        Serial.println("[WIFI WATCHDOG] 🚨 This prevents theft by WiFi disconnection!");
-      }
-      
-      unsigned long disconnectedDuration = currentTime - wifiDisconnectedTime;
-      
-      // ✅ EMERGENCY SHUTDOWN: WiFi disconnected for too long
-      if (disconnectedDuration >= WIFI_WATCHDOG_TIMEOUT && !emergencyShutdownTriggered) {
-        emergencyShutdownTriggered = true;
-        
-        Serial.println("\n🚨🚨🚨 [WIFI WATCHDOG] EMERGENCY SHUTDOWN! 🚨🚨🚨");
-        Serial.printf("[WIFI WATCHDOG] WiFi disconnected for %lu ms (>%lu ms limit)\n", 
-                      disconnectedDuration, WIFI_WATCHDOG_TIMEOUT);
-        Serial.println("[WIFI WATCHDOG] 🔒 THEFT PREVENTION: Cutting engine power!");
-        
-        // ✅ DUAL RELAY SHUTDOWN: Cut ignition (this stops the engine)
-        Serial.println("[WIFI WATCHDOG] 🔒 Cutting ignition relay...");
-        digitalWrite(ignitionRelayPin, HIGH);  // HIGH = OFF for active-low relay
-        digitalWrite(relayPin, HIGH);          // HIGH = OFF for active-low relay
-        engineRunning = false;
-        
-        Serial.printf("[WIFI WATCHDOG] ✅ Ignition Relay GPIO %d = %d (OFF)\n", ignitionRelayPin, digitalRead(ignitionRelayPin));
-        Serial.printf("[WIFI WATCHDOG] ✅ Starter Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
-        Serial.println("[WIFI WATCHDOG] ✅ Engine power CUT - Motorcycle secured!");
-        
-        Serial.println("[WIFI WATCHDOG] ✅ Engine power CUT - Motorcycle secured!");
-        Serial.println("[WIFI WATCHDOG] 💡 Reconnect WiFi to restore normal operation");
-        
-        // Loud alarm sequence
-        for (int i = 0; i < 20; i++) {
-          digitalWrite(buzzerPin, HIGH);
-          digitalWrite(lightIndicatorPin, HIGH);
-          delay(100);
-          digitalWrite(buzzerPin, LOW);
-          digitalWrite(lightIndicatorPin, LOW);
-          delay(100);
-        }
-      }
-      
-      // ✅ WARNING BEEPS: Every second while disconnected
-      static unsigned long lastWarningBeep = 0;
-      if (currentTime - lastWarningBeep >= 1000 && !emergencyShutdownTriggered) {
-        digitalWrite(buzzerPin, HIGH);
-        delay(50);
-        digitalWrite(buzzerPin, LOW);
-        lastWarningBeep = currentTime;
-        
-        unsigned long timeRemaining = WIFI_WATCHDOG_TIMEOUT - disconnectedDuration;
-        Serial.printf("[WIFI WATCHDOG] ⚠️ WiFi still disconnected! Shutdown in %lu ms...\n", timeRemaining);
-      }
-    }
-    
-    // ✅ STATUS: Show watchdog status every 5 seconds
-    static unsigned long lastWatchdogStatus = 0;
-    if (currentTime - lastWatchdogStatus >= 5000) {
-      Serial.printf("[WIFI WATCHDOG] Status: %s | Relay: %s | Engine: %s\n",
-                    wifiConnected ? "WiFi OK ✅" : "WiFi LOST ❌",
-                    relayIsOff ? "OFF (Secured)" : "ON",
-                    engineRunning ? "RUNNING" : "STOPPED");
-      lastWatchdogStatus = currentTime;
-    }
+
+  // Status log every 5 seconds
+  static unsigned long lastWatchdogStatus = 0;
+  if (currentTime - lastWatchdogStatus >= 5000) {
+    Serial.printf("[WIFI WATCHDOG] %s | Engine:%s | Siren:%s\n",
+                  wifiConnected ? "WiFi OK ✅" : "WiFi LOST ❌",
+                  engineRunning ? "RUNNING" : "STOPPED",
+                  buzzerMode == BUZZER_SIREN ? "ON" : "OFF");
+    lastWatchdogStatus = currentTime;
   }
 }
 
