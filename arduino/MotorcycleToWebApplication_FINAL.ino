@@ -359,8 +359,6 @@ void setup() {
 
 void loop() {
   // ── WiFi auto-reconnect (non-blocking) ────────────────────────────────────
-  // ESP32 setAutoReconnect handles most cases, but we add a manual retry
-  // every 5 seconds as a safety net for stubborn disconnections
   {
     static unsigned long lastReconnectAttempt = 0;
     if (WiFi.status() != WL_CONNECTED && millis() - lastReconnectAttempt >= 5000) {
@@ -368,42 +366,57 @@ void loop() {
       Serial.println("[WIFI] Disconnected — attempting reconnect...");
       WiFi.reconnect();
     }
+    // Always keep lastWiFiConnected fresh when connected
+    if (WiFi.status() == WL_CONNECTED) {
+      lastWiFiConnected = millis();
+    }
   }
 
-  // ✅ PRIORITY #0: WiFi Watchdog - Check FIRST for theft prevention!
+  // ✅ PRIORITY #0: WiFi Watchdog
   checkWiFiWatchdog();
 
-  // ✅ ENHANCED: Comprehensive security monitoring
+  // ✅ Security monitoring (every 1s)
   if (millis() - lastSecurityCheck >= SECURITY_CHECK_INTERVAL) {
     checkComprehensiveSecurity();
     lastSecurityCheck = millis();
   }
 
-  // ── GPS: read continuously, update speed every 500ms ─────────────────────
+  // ── GPS: read continuously ────────────────────────────────────────────────
   while (gpsSerial.available() > 0) {
-    gps.encode(gpsSerial.read());
+    char c = gpsSerial.read();
+    gps.encode(c);
   }
   if (millis() - lastGPSUpdate >= GPS_UPDATE_INTERVAL) {
-    if (gps.speed.isValid()) currentSpeed = gps.speed.kmph();
+    if (gps.speed.isValid()) {
+      currentSpeed = gps.speed.kmph();
+    }
+    // Debug GPS status every 10 seconds
+    static unsigned long lastGPSDebug = 0;
+    if (millis() - lastGPSDebug >= 10000) {
+      Serial.printf("[GPS] Fix:%s | Sats:%d | Lat:%.6f | Lng:%.6f | Speed:%.1f kph | Chars:%lu\n",
+                    gps.location.isValid() ? "YES" : "NO",
+                    gps.satellites.isValid() ? (int)gps.satellites.value() : 0,
+                    gps.location.isValid() ? gps.location.lat() : 0.0,
+                    gps.location.isValid() ? gps.location.lng() : 0.0,
+                    currentSpeed,
+                    gps.charsProcessed());
+      if (gps.charsProcessed() < 10) {
+        Serial.println("[GPS] ⚠️ No data from GPS — check wiring on RX:16 TX:17");
+      }
+      lastGPSDebug = millis();
+    }
     lastGPSUpdate = millis();
   }
 
-  // ✅ NEW: Update trip data continuously
+  // Trip tracking
   updateTripData();
-  
-  // ✅ OPTIONAL: Monitor physical key switch (only if GPIO 14 is connected)
-  // if (securitySystemActive) {
-  //   checkPhysicalKeyWithSecurity();
-  // } else {
-  //   checkPhysicalKey();  // Fallback to basic key monitoring
-  // }
-  
-  // Send heartbeat every 1 second
+
+  // Heartbeat every HEARTBEAT_INTERVAL
   if (millis() - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     bool heartbeatSent = sendMotorcycleHeartbeat(true);
     if (heartbeatSent) {
       lastFirebaseSuccess = millis();
-      lastWiFiConnected = millis();  // ✅ Track successful WiFi communication
+      lastWiFiConnected   = millis();
     }
     lastHeartbeat = millis();
   }
@@ -722,7 +735,7 @@ void loop() {
     lastAlcoholCheck = millis();
   }
 
-  // Automatic engine control
+  // Automatic engine control (auto-mode only)
   if (autoEngineControl) {
     if (alcoholDetected && engineRunning) {
       Serial.println("\n🚨 AUTO-SHUTDOWN: Alcohol detected!");
@@ -733,11 +746,6 @@ void loop() {
       Serial.println("\n✅ AUTO-START: Alcohol cleared!");
       startEngine();
     }
-  }
-
-  // ✅ FIX: Safety override - turn relay OFF if alcohol detected
-  if (alcoholDetected) {
-    digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
   }
 
   // ✅ REAL-TIME: Fast sensor monitoring every 500ms
@@ -1423,8 +1431,13 @@ void sendLiveToFirebase() {
     doc["locationLng"] = gps.location.lng();
     doc["gpsValid"]    = true;
   } else {
-    doc["gpsValid"] = false;
+    doc["locationLat"] = 0.0;
+    doc["locationLng"] = 0.0;
+    doc["gpsValid"]    = false;
   }
+  // Always send satellite count and chars processed for diagnostics
+  doc["gpsSatellites"]   = gps.satellites.isValid() ? (int)gps.satellites.value() : 0;
+  doc["gpsCharsProcessed"] = (int)gps.charsProcessed();
   doc["timestamp"] = millis();
 
   String payload;
@@ -1750,16 +1763,14 @@ void checkComprehensiveSecurity() {
 
   unsigned long currentTime = millis();
 
-  // 1. WiFi timeout — track last successful connection
-  if (WiFi.status() == WL_CONNECTED) {
-    lastWiFiConnected = currentTime;
-  }
-  unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
-  // Only flag WiFi timeout if we've been running long enough to have connected once
+  // 1. WiFi timeout � lastWiFiConnected is updated every loop when connected
+  //    AND on every successful heartbeat. Only flag after first connection.
+  unsigned long timeSinceWiFi = (lastWiFiConnected > 0)
+                                  ? (currentTime - lastWiFiConnected)
+                                  : 0;
   bool wifiTimeout = (lastWiFiConnected > 0) && (timeSinceWiFi > WIFI_TIMEOUT);
 
-  // 2. Helmet timeout — flag if engine is running and helmet hasn't been seen
-  //    for HELMET_TIMEOUT ms (covers both "never connected" and "disconnected" cases)
+  // 2. Helmet timeout � only flag if engine running AND helmet was seen before
   unsigned long timeSinceHelmet = (lastHelmetUpdateTime > 0)
                                     ? (currentTime - lastHelmetUpdateTime)
                                     : 0;
@@ -1768,29 +1779,27 @@ void checkComprehensiveSecurity() {
                        (timeSinceHelmet > HELMET_TIMEOUT) &&
                        !helmetConnected;
 
-  // 3. Trigger shutdown if engine is running and any security condition violated
   bool securityViolation = wifiTimeout || helmetTimeout;
 
   if (securityViolation && engineRunning) {
-    Serial.println("\n🚨🚨🚨 SECURITY VIOLATION — AUTO SHUTDOWN! 🚨🚨🚨");
-    if (wifiTimeout)  Serial.printf("📡 WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
-    if (helmetTimeout) Serial.printf("🪖 HELMET TIMEOUT: %lu ms (>%lu ms)\n", timeSinceHelmet, HELMET_TIMEOUT);
+    Serial.println("\n?????? SECURITY VIOLATION � AUTO SHUTDOWN! ??????");
+    if (wifiTimeout)   Serial.printf("?? WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
+    if (helmetTimeout) Serial.printf("?? HELMET TIMEOUT: %lu ms (>%lu ms)\n", timeSinceHelmet, HELMET_TIMEOUT);
     triggerSecurityShutdown("Security Violation");
   }
 
   systemInSecureMode = securityViolation;
 
-  // Debug every 3 seconds
+  // Debug every 5 seconds
   static unsigned long lastSecurityDebug = 0;
-  if (currentTime - lastSecurityDebug > 3000) {
+  if (currentTime - lastSecurityDebug > 5000) {
     Serial.printf("[SECURITY] WiFi:%s(%lums) Helmet:%s(%lums) Engine:%s\n",
-                  wifiTimeout ? "TIMEOUT❌" : "OK✅", timeSinceWiFi,
-                  helmetTimeout ? "TIMEOUT❌" : "OK✅", timeSinceHelmet,
+                  wifiTimeout ? "TIMEOUT?" : "OK?", timeSinceWiFi,
+                  helmetTimeout ? "TIMEOUT?" : "OK?", timeSinceHelmet,
                   engineRunning ? "RUNNING" : "STOPPED");
     lastSecurityDebug = currentTime;
   }
 }
-
 // ✅ NEW: Security shutdown with detailed logging
 void triggerSecurityShutdown(String reason) {
   Serial.println("\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
