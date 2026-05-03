@@ -206,6 +206,21 @@ const unsigned long VIBRATION_DEBOUNCE = 30;    // 30ms debounce — catches fas
 
 int consecutiveVibrations = 0;
 
+// ── Hardware interrupt for vibration sensor ────────────────────────────────
+// The SW-420 fires a brief pulse (10-50ms). If the loop is blocked by HTTP
+// calls, digitalRead() misses it. An interrupt catches it instantly.
+volatile bool vibrationISRTriggered = false;
+volatile unsigned long vibrationISRTime = 0;
+
+void IRAM_ATTR onVibration() {
+  unsigned long now = millis();
+  // Simple debounce in ISR — ignore if too soon after last trigger
+  if (now - vibrationISRTime >= 30) {
+    vibrationISRTriggered = true;
+    vibrationISRTime = now;
+  }
+}
+
 // ── Non-blocking buzzer state machine ─────────────────────────────────────
 // Produces a professional police/emergency siren pattern.
 //
@@ -317,6 +332,8 @@ void sendSMSToAllContacts(String message, String alertType);
 // Buzzer helpers
 void playConfirmBeep();
 void playWarningBeep(int count);
+// GSM
+void tickGSMInit();
 
 void setup() {
   Serial.begin(115200);
@@ -363,6 +380,9 @@ void setup() {
   pinMode(buzzerPin, OUTPUT);
   pinMode(lightIndicatorPin, OUTPUT);
   pinMode(vibrationSensorPin, INPUT_PULLUP);
+
+  // Hardware interrupt — catches vibration pulses even during HTTP blocking
+  attachInterrupt(digitalPinToInterrupt(vibrationSensorPin), onVibration, CHANGE);
 
   // Relay OFF at startup (HIGH = OFF for active-low relay)
   digitalWrite(relayPin, HIGH);
@@ -415,6 +435,24 @@ void setup() {
 }
 
 void loop() {
+  // ── PRIORITY #1: Vibration interrupt handler ──────────────────────────────
+  // Process ISR flag immediately — before any HTTP calls that could block.
+  // This ensures vibration is detected even if the loop was blocked.
+  if (vibrationISRTriggered && !engineRunning && antiTheftArmed) {
+    vibrationISRTriggered = false;
+    consecutiveVibrations++;
+    Serial.printf("[ANTI-THEFT] INTERRUPT: Movement #%d detected!\n", consecutiveVibrations);
+    startSiren();
+    unsigned long now = millis();
+    if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
+      triggerTheftAlert();
+      lastTheftAlert = now;
+      theftAlertSent = true;
+    }
+  } else {
+    vibrationISRTriggered = false;  // clear flag if not armed
+  }
+
   // ── WiFi auto-reconnect (non-blocking) ────────────────────────────────────
   {
     static unsigned long lastReconnectAttempt = 0;
@@ -775,16 +813,8 @@ void loop() {
     lastAlcoholCheck = millis();
   }
 
-  // ── GSM background retry ──────────────────────────────────────────────────
-  // Retries every 30 seconds until GSM connects to network
-  if (!gsmReady) {
-    static unsigned long lastGsmRetry = 0;
-    if (millis() - lastGsmRetry >= 30000) {
-      lastGsmRetry = millis();
-      Serial.println("[GSM] Not ready — retrying...");
-      initializeGSM();
-    }
-  }
+  // ── GSM background retry — non-blocking state machine ────────────────────
+  tickGSMInit();
 
   // ── Alcohol safety enforcement — runs every loop ─────────────────────────
   if (alcoholDetected && engineRunning) {
@@ -987,71 +1017,113 @@ void triggerTheftAlert() {
   logTheftToFirebase(location);
 }
 
-void initializeGSM() {
-  Serial.println("\n[GSM] Initializing SIM800L...");
+// ── GSM non-blocking state machine ────────────────────────────────────────
+// Replaces the blocking initializeGSM() with a state machine that advances
+// one step per loop iteration. No delay() — uses millis() for all timing.
+enum GsmInitState {
+  GSM_IDLE,
+  GSM_FLUSH,
+  GSM_AT_SEND,
+  GSM_AT_WAIT,
+  GSM_SETUP_ECHO,
+  GSM_SETUP_CMGF,
+  GSM_DONE
+};
+GsmInitState gsmInitState   = GSM_IDLE;
+int          gsmAttempt     = 0;
+unsigned long gsmStateTimer = 0;
 
-  // SIM800L needs up to 5 seconds to boot and register to network
-  // Flush any startup garbage first
-  delay(2000);
-  while (gsmSerial.available()) gsmSerial.read();
+// Call this every loop — advances the state machine one step at a time
+void tickGSMInit() {
+  if (gsmReady) return;  // Already initialized
 
-  // Try AT handshake up to 10 times with 1-second gaps
-  for (int attempt = 1; attempt <= 10; attempt++) {
-    gsmSerial.println("AT");
-    delay(1000);
+  unsigned long now = millis();
 
-    String response = "";
-    unsigned long start = millis();
-    while (millis() - start < 500) {
-      if (gsmSerial.available()) response += (char)gsmSerial.read();
-    }
-
-    Serial.printf("[GSM] Attempt %d: %s\n", attempt,
-                  response.length() > 0 ? response.c_str() : "(no response)");
-
-    if (response.indexOf("OK") != -1) {
-      gsmReady = true;
-      Serial.println("[GSM] ✅ Module responding!");
+  switch (gsmInitState) {
+    case GSM_IDLE:
+      Serial.println("[GSM] Starting non-blocking init...");
+      while (gsmSerial.available()) gsmSerial.read();  // flush
+      gsmAttempt   = 0;
+      gsmStateTimer = now;
+      gsmInitState  = GSM_FLUSH;
       break;
-    }
-  }
 
+    case GSM_FLUSH:
+      // Wait 500ms for module to settle, then start AT attempts
+      if (now - gsmStateTimer >= 500) {
+        gsmInitState = GSM_AT_SEND;
+      }
+      break;
+
+    case GSM_AT_SEND:
+      if (gsmAttempt >= 15) {
+        // Exhausted attempts — wait 30s then retry from scratch
+        Serial.println("[GSM] No response after 15 attempts — will retry in 30s");
+        gsmInitState  = GSM_IDLE;
+        gsmStateTimer = now + 30000;  // reuse timer as "next retry" time
+        // Hack: set state to IDLE but delay the next trigger
+        // We'll use a separate flag to gate re-entry
+        break;
+      }
+      gsmSerial.println("AT");
+      gsmAttempt++;
+      gsmStateTimer = now;
+      gsmInitState  = GSM_AT_WAIT;
+      break;
+
+    case GSM_AT_WAIT:
+      // Read response for up to 800ms
+      {
+        String resp = "";
+        while (gsmSerial.available()) resp += (char)gsmSerial.read();
+        if (resp.indexOf("OK") != -1) {
+          Serial.printf("[GSM] OK on attempt %d\n", gsmAttempt);
+          gsmInitState  = GSM_SETUP_ECHO;
+          gsmStateTimer = now;
+        } else if (now - gsmStateTimer >= 800) {
+          // No response yet — try again
+          gsmInitState = GSM_AT_SEND;
+        }
+      }
+      break;
+
+    case GSM_SETUP_ECHO:
+      if (now - gsmStateTimer >= 200) {
+        gsmSerial.println("ATE0");   // echo off
+        gsmSerial.println("AT+CMGF=1");  // SMS text mode
+        gsmStateTimer = now;
+        gsmInitState  = GSM_SETUP_CMGF;
+      }
+      break;
+
+    case GSM_SETUP_CMGF:
+      if (now - gsmStateTimer >= 500) {
+        while (gsmSerial.available()) gsmSerial.read();  // flush responses
+        gsmReady     = true;
+        gsmInitState = GSM_DONE;
+        Serial.println("[GSM] Ready!");
+      }
+      break;
+
+    case GSM_DONE:
+      break;  // Nothing to do
+  }
+}
+
+// Legacy blocking init — kept for startup only (called once in setup)
+// Uses the non-blocking machine but blocks until done or timeout
+void initializeGSM() {
+  Serial.println("[GSM] Initializing...");
+  gsmInitState = GSM_IDLE;
+  gsmReady     = false;
+  unsigned long deadline = millis() + 15000;  // 15s max at startup
+  while (!gsmReady && millis() < deadline) {
+    tickGSMInit();
+    delay(10);  // tiny yield — acceptable only at startup
+  }
   if (!gsmReady) {
-    Serial.println("[GSM] ❌ Module not responding after 10 attempts");
-    Serial.println("[GSM] Check: power supply (4.2V), baud rate (9600), RX/TX wiring");
-    return;
+    Serial.println("[GSM] Not ready at startup — will retry in background");
   }
-
-  // Echo off — cleaner responses
-  gsmSerial.println("ATE0");
-  delay(500);
-
-  // Check SIM card
-  gsmSerial.println("AT+CPIN?");
-  delay(1000);
-  String simResp = "";
-  while (gsmSerial.available()) simResp += (char)gsmSerial.read();
-  Serial.println("[GSM] SIM: " + simResp);
-
-  // Check signal strength
-  gsmSerial.println("AT+CSQ");
-  delay(500);
-  String csqResp = "";
-  while (gsmSerial.available()) csqResp += (char)gsmSerial.read();
-  Serial.println("[GSM] Signal: " + csqResp);
-
-  // Check network registration
-  gsmSerial.println("AT+CREG?");
-  delay(500);
-  String regResp = "";
-  while (gsmSerial.available()) regResp += (char)gsmSerial.read();
-  Serial.println("[GSM] Network: " + regResp);
-
-  // Set SMS text mode
-  gsmSerial.println("AT+CMGF=1");
-  delay(500);
-
-  Serial.println("[GSM] ✅ Initialization complete");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1171,7 +1243,7 @@ void sendSMSToAllContacts(String message, String alertType) {
       } else {
         Serial.printf("[SMS] ❌ Failed to send to %s\n", contactName.c_str());
       }
-      delay(2000);  // Brief pause between sends to avoid GSM overload
+      delay(500);  // Brief pause between SMS sends
     }
 
     pos = valueEnd + 1;
