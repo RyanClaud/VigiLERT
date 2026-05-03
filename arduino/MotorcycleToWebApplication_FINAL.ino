@@ -43,17 +43,22 @@ const String firebaseAuth = "";
 // No hardcoded phone number needed — contacts are managed via the web dashboard
 
 // ── Pin Assignments ────────────────────────────────────────────────────────
-// SINGLE RELAY wired to the motorcycle starter switch
-// Relay ON (LOW)  = starter button pressed = engine cranks
-// Relay OFF (HIGH) = starter released = engine runs on its own
-const int relayPin          = 13;   // Single relay — starter switch (active-low)
+// SINGLE RELAY wired in series with the ignition key switch circuit
+//
+// Wiring:  Battery → Key Switch → Relay → Ignition coil
+//
+// Relay ENERGIZED (LOW)   = contact CLOSED = ignition circuit complete = engine runs
+// Relay DE-ENERGIZED (HIGH) = contact OPEN  = ignition cut = engine stops (even if key is ON)
+//
+// The relay STAYS LOW the entire time the engine is running.
+// Writing HIGH immediately cuts the ignition — this is how remote stop works.
+const int relayPin          = 13;   // Ignition relay (active-low, stays ON while engine runs)
 const int buzzerPin         = 14;   // Buzzer (GPIO14, not a strapping pin)
 const int lightIndicatorPin = 2;    // Status LED
 const int vibrationSensorPin = 15;  // SW-420 vibration sensor
 
-// ignitionRelayPin is NOT used (single relay setup)
-// All references to ignitionRelayPin are mapped to relayPin below
-#define ignitionRelayPin relayPin   // Alias so existing code compiles unchanged
+// ignitionRelayPin alias — both names refer to the same single relay
+#define ignitionRelayPin relayPin
 
 // GSM module pins (UART2)
 #define GSM_RX 4
@@ -143,12 +148,12 @@ const unsigned long STARTUP_WIFI_TIMEOUT = 10000;  // 10s — more time to conne
 bool startupWiFiCheckComplete = false;
 bool startupShutdownTriggered = false;
 
-// Starter safety
+// Starter safety — not used for ignition relay, kept for compatibility
 unsigned long starterStartTime = 0;
 unsigned long lastStarterAttempt = 0;
 bool starterActive = false;
 const unsigned long STARTER_TIMEOUT = 3000;
-const unsigned long STARTER_COOLDOWN = 5000;   // Reduced from 10s for faster retry
+const unsigned long STARTER_COOLDOWN = 5000;
 
 // Security check
 bool securitySystemActive = true;
@@ -1260,14 +1265,12 @@ void startEngine() {
 
   Serial.println("\n✅ Starting engine...");
 
-  // Single relay on starter switch — pulse LOW to crank, then release
-  // The engine runs on its own after the starter is released
-  digitalWrite(relayPin, LOW);   // LOW = ON (active-low) = starter pressed
-  starterActive = true;
-  starterStartTime = millis();
-  lastStarterAttempt = millis();
-  Serial.printf("✅ Starter relay ON (GPIO %d = LOW) — will release after %lu ms\n",
-                relayPin, STARTER_TIMEOUT);
+  // Ignition relay wired in series with key switch.
+  // Set LOW (energize) → contact closes → ignition circuit complete → engine runs.
+  // Relay stays LOW until stopEngine() or a security shutdown sets it HIGH.
+  digitalWrite(relayPin, LOW);
+  starterActive = false;  // No starter timeout needed — relay stays ON
+  Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — stays ON while engine runs\n", relayPin);
 
   engineRunning = true;
   engineStartRequested = false;
@@ -1287,20 +1290,17 @@ void startEngine() {
 }
 
 void stopEngine() {
-  Serial.println("\n🛑 Stopping engine (software state only)...");
-  Serial.println("🛑 NOTE: Single relay on starter — cannot cut running engine electrically.");
-  Serial.println("🛑 Engine state set to STOPPED in software/Firebase.");
+  Serial.println("\n🛑 Stopping engine...");
 
-  // Ensure relay is released (starter not engaged)
-  digitalWrite(relayPin, HIGH);  // HIGH = OFF (active-low) = starter released
-  starterActive = false;
+  // Set relay HIGH (de-energize) → contact opens → ignition circuit cut.
+  // Engine stops immediately even if physical key is still ON.
+  digitalWrite(relayPin, HIGH);
   engineRunning = false;
+  starterActive = false;
 
-  // End trip tracking
+  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\n", relayPin);
+
   endTrip();
-
-  Serial.printf("🛑 Relay GPIO %d = %d (HIGH/OFF)\n", relayPin, digitalRead(relayPin));
-
   sendLiveToFirebase();
 
   engineOffTime = millis();
@@ -1309,18 +1309,12 @@ void stopEngine() {
   Serial.println("[ANTI-THEFT] 🛡️ Will arm in 10 seconds...");
 }
 
-// ✅ STARTER SAFETY: Check starter timeout in main loop (from reference code)
+// checkStarterTimeout() — not used for ignition relay.
+// The relay stays ON (LOW) the entire time the engine is running.
+// Only stopEngine() or triggerSecurityShutdown() sets it HIGH.
 void checkStarterTimeout() {
-  if (starterActive && (millis() - starterStartTime >= STARTER_TIMEOUT)) {
-    // Disengage starter after timeout
-    digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
-    starterActive = false;
-    Serial.println("✅ Starter disengaged (3-second timeout)");
-    Serial.printf("✅ Starter Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
-    
-    // Ignition relay stays ON to keep engine running
-    // Only stopEngine() will turn off ignition
-  }
+  // No-op for ignition relay wiring.
+  // (Kept so loop() call compiles without changes.)
 }
 
 void sendCrashToFirebase(float impact, float roll) {
@@ -1804,21 +1798,16 @@ void triggerSecurityShutdown(String reason) {
   Serial.println("\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
   Serial.println("Reason: " + reason);
 
-  // Single relay on starter — release it (ensure starter is not engaged)
-  digitalWrite(relayPin, HIGH);  // HIGH = OFF (active-low)
-  starterActive = false;
+  // Cut ignition immediately — relay HIGH opens the circuit
+  digitalWrite(relayPin, HIGH);
   engineRunning = false;
+  starterActive = false;
 
-  // End current trip
   endTrip();
 
-  Serial.printf("🛑 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
-  Serial.println("🛑 NOTE: Cannot cut running engine — single relay on starter only.");
+  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — engine cut\n", relayPin);
 
-  // Start siren to alert
   startSiren();
-
-  // Log security event to Firebase
   logSecurityEventToFirebase(reason);
 }
 
