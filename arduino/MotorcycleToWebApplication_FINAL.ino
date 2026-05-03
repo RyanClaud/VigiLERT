@@ -239,46 +239,43 @@ unsigned long buzzerAlertStart  = 0;
 bool          buzzerLightState  = false;
 
 // ── Police wail siren — hardware timer driven ─────────────────────────────
-// A hardware timer ISR updates the buzzer frequency every 10ms,
-// completely independent of the main loop. This guarantees smooth sweep
-// even when the loop is blocked by HTTP calls (200-800ms).
-//
-// Sweep: 700Hz → 1700Hz → 700Hz, 700ms per direction = 1.4s full cycle
-// Sounds like a real police/ambulance wail.
+// The timer ISR only sets a target frequency (volatile int).
+// The main loop reads that value and calls ledcWriteTone() safely.
+// This avoids calling non-ISR-safe functions from interrupt context.
 
-const int  SIREN_FREQ_LOW    = 700;   // Hz
-const int  SIREN_FREQ_HIGH   = 1700;  // Hz
+const int  SIREN_FREQ_LOW    = 700;
+const int  SIREN_FREQ_HIGH   = 1700;
 const int  SIREN_HALF_PERIOD = 700;   // ms per sweep direction
 const int  SIREN_TICK_MS     = 10;    // ISR fires every 10ms
 const int  SIREN_STEPS       = SIREN_HALF_PERIOD / SIREN_TICK_MS; // 70 steps
 
-// Volatile — shared between ISR and main code
-volatile bool          sirenRunning   = false;
-volatile unsigned long sirenStopAt    = 0;   // millis() when siren should stop
-volatile int           sirenStep      = 0;   // current step (0..SIREN_STEPS-1)
-volatile bool          sirenGoingUp   = true;
+volatile bool sirenRunning      = false;
+volatile unsigned long sirenStopAt = 0;
+volatile int  sirenStep         = 0;
+volatile bool sirenGoingUp      = true;
+volatile int  sirenTargetFreq   = 0;   // ISR writes this; loop reads and applies it
+volatile bool sirenFreqUpdated  = false; // flag: new freq ready to apply
 
 hw_timer_t* sirenTimer = nullptr;
 
 void IRAM_ATTR sirenTimerISR() {
-  if (!sirenRunning) return;
-
-  // Stop when duration expires
-  if (millis() >= sirenStopAt) {
-    sirenRunning = false;
-    ledcWrite(buzzerPin, 0);  // silence
+  if (!sirenRunning) {
+    sirenTargetFreq  = 0;
+    sirenFreqUpdated = true;
     return;
   }
-
-  // Calculate current frequency by linear interpolation
-  float t    = (float)sirenStep / (float)SIREN_STEPS;
+  if (millis() >= sirenStopAt) {
+    sirenRunning     = false;
+    sirenTargetFreq  = 0;
+    sirenFreqUpdated = true;
+    return;
+  }
+  float t   = (float)sirenStep / (float)SIREN_STEPS;
   int   freq = sirenGoingUp
     ? (int)(SIREN_FREQ_LOW  + t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW))
     : (int)(SIREN_FREQ_HIGH - t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW));
-
-  ledcWriteTone(buzzerPin, freq);
-
-  // Advance step
+  sirenTargetFreq  = freq;
+  sirenFreqUpdated = true;
   sirenStep++;
   if (sirenStep >= SIREN_STEPS) {
     sirenStep    = 0;
@@ -297,14 +294,13 @@ const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?a
 
 // ── Siren helpers ─────────────────────────────────────────────────────────
 void startSiren() {
-  buzzerMode     = BUZZER_SIREN;
-  sirenStep      = 0;
-  sirenGoingUp   = true;
-  sirenRunning   = true;
-  sirenStopAt    = millis() + 10000;  // 10 seconds
+  buzzerMode       = BUZZER_SIREN;
+  sirenStep        = 0;
+  sirenGoingUp     = true;
+  sirenFreqUpdated = false;
+  sirenStopAt      = millis() + 10000;
   buzzerAlertStart = millis();
-  ledcWriteTone(buzzerPin, SIREN_FREQ_LOW);
-  digitalWrite(lightIndicatorPin, HIGH);
+  sirenRunning     = true;  // ISR starts ticking immediately
   Serial.println("[SIREN] Started");
 }
 
@@ -479,6 +475,23 @@ void setup() {
 }
 
 void loop() {
+  // ── PRIORITY #0: Apply siren frequency (set by timer ISR) ─────────────────
+  // ISR only sets sirenTargetFreq — we apply it here (ledcWriteTone is not ISR-safe)
+  if (sirenFreqUpdated) {
+    sirenFreqUpdated = false;
+    int f = sirenTargetFreq;
+    if (f > 0) {
+      ledcWriteTone(buzzerPin, f);
+      digitalWrite(lightIndicatorPin, sirenGoingUp ? HIGH : LOW);
+    } else {
+      ledcWrite(buzzerPin, 0);
+      if (!sirenRunning) {
+        digitalWrite(lightIndicatorPin, LOW);
+        buzzerMode = BUZZER_OFF;
+      }
+    }
+  }
+
   // ── PRIORITY #1: Vibration interrupt handler ──────────────────────────────
   // Process ISR flag immediately — before any HTTP calls that could block.
   // This ensures vibration is detected even if the loop was blocked.
@@ -690,7 +703,7 @@ void loop() {
   }
   float leanAngle = abs(currentRoll);
 
-  // Siren driven by hardware timer ISR (sirenTimerISR) � no loop tick needed
+  // Siren driven by hardware timer ISR (sirenTimerISR) � no loop tick needed
   // -- Vibration sensor / anti-theft -----------------------------------------
   // SW-420 with INPUT_PULLUP: normal=HIGH, vibration=LOW (brief pulse)
   // Detect BOTH edges to catch every pulse.
