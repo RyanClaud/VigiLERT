@@ -232,54 +232,43 @@ void IRAM_ATTR onVibration() {
 //
 // All timing via millis() — zero delay() in the siren tick.
 
-enum BuzzerMode { BUZZER_OFF, BUZZER_SIREN, BUZZER_BEEP };
+// ── Simple two-tone police wail — loop-based, zero ISR complexity ─────────
+// Alternates between HIGH tone and LOW tone every SIREN_PHASE_MS.
+// tone() is called from loop() — completely safe, no ISR, no crash.
+// Sounds like a real police/ambulance wail.
+
+enum BuzzerMode { BUZZER_OFF, BUZZER_SIREN };
 BuzzerMode buzzerMode = BUZZER_OFF;
 
-unsigned long buzzerAlertStart  = 0;
-bool          buzzerLightState  = false;
+const int           SIREN_TONE_HIGH  = 1700;  // Hz — high note
+const int           SIREN_TONE_LOW   = 700;   // Hz — low note
+const unsigned long SIREN_PHASE_MS   = 700;   // ms per note (700ms high, 700ms low)
+const unsigned long SIREN_DURATION   = 10000; // total siren time per trigger
 
-// ── Police wail siren — hardware timer driven ─────────────────────────────
-// The timer ISR only sets a target frequency (volatile int).
-// The main loop reads that value and calls ledcWriteTone() safely.
-// This avoids calling non-ISR-safe functions from interrupt context.
+unsigned long sirenStartTime  = 0;
+unsigned long sirenPhaseStart = 0;
+bool          sirenHighPhase  = true;  // true = playing high note
 
-const int  SIREN_FREQ_LOW    = 700;
-const int  SIREN_FREQ_HIGH   = 1700;
-const int  SIREN_HALF_PERIOD = 700;   // ms per sweep direction
-const int  SIREN_TICK_MS     = 10;    // ISR fires every 10ms
-const int  SIREN_STEPS       = SIREN_HALF_PERIOD / SIREN_TICK_MS; // 70 steps
+// Called every loop iteration — updates tone if phase has changed
+void tickSiren() {
+  if (buzzerMode != BUZZER_SIREN) return;
 
-volatile bool sirenRunning      = false;
-volatile unsigned long sirenStopAt = 0;
-volatile int  sirenStep         = 0;
-volatile bool sirenGoingUp      = true;
-volatile int  sirenTargetFreq   = 0;   // ISR writes this; loop reads and applies it
-volatile bool sirenFreqUpdated  = false; // flag: new freq ready to apply
+  unsigned long now = millis();
 
-hw_timer_t* sirenTimer = nullptr;
-
-void IRAM_ATTR sirenTimerISR() {
-  if (!sirenRunning) {
-    sirenTargetFreq  = 0;
-    sirenFreqUpdated = true;
+  // Stop after SIREN_DURATION
+  if (now - sirenStartTime >= SIREN_DURATION) {
+    noTone(buzzerPin);
+    digitalWrite(lightIndicatorPin, LOW);
+    buzzerMode = BUZZER_OFF;
     return;
   }
-  if (millis() >= sirenStopAt) {
-    sirenRunning     = false;
-    sirenTargetFreq  = 0;
-    sirenFreqUpdated = true;
-    return;
-  }
-  float t   = (float)sirenStep / (float)SIREN_STEPS;
-  int   freq = sirenGoingUp
-    ? (int)(SIREN_FREQ_LOW  + t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW))
-    : (int)(SIREN_FREQ_HIGH - t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW));
-  sirenTargetFreq  = freq;
-  sirenFreqUpdated = true;
-  sirenStep++;
-  if (sirenStep >= SIREN_STEPS) {
-    sirenStep    = 0;
-    sirenGoingUp = !sirenGoingUp;
+
+  // Switch note every SIREN_PHASE_MS
+  if (now - sirenPhaseStart >= SIREN_PHASE_MS) {
+    sirenPhaseStart = now;
+    sirenHighPhase  = !sirenHighPhase;
+    tone(buzzerPin, sirenHighPhase ? SIREN_TONE_HIGH : SIREN_TONE_LOW);
+    digitalWrite(lightIndicatorPin, sirenHighPhase ? HIGH : LOW);
   }
 }
 
@@ -294,20 +283,21 @@ const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?a
 
 // ── Siren helpers ─────────────────────────────────────────────────────────
 void startSiren() {
-  buzzerMode       = BUZZER_SIREN;
-  sirenStep        = 0;
-  sirenGoingUp     = true;
-  sirenFreqUpdated = false;
-  sirenStopAt      = millis() + 10000;
-  buzzerAlertStart = millis();
-  sirenRunning     = true;  // ISR starts ticking immediately
+  buzzerMode      = BUZZER_SIREN;
+  sirenStartTime  = millis();
+  sirenPhaseStart = millis();
+  sirenHighPhase  = true;
+  tone(buzzerPin, SIREN_TONE_HIGH);
+  digitalWrite(lightIndicatorPin, HIGH);
   Serial.println("[SIREN] Started");
 }
 
 void stopSiren() {
-  sirenRunning = false;
-  buzzerMode   = BUZZER_OFF;
-  ledcWrite(buzzerPin, 0);
+  buzzerMode = BUZZER_OFF;
+  noTone(buzzerPin);
+  digitalWrite(lightIndicatorPin, LOW);
+  Serial.println("[SIREN] Stopped");
+}
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Stopped");
 }
@@ -315,16 +305,16 @@ void stopSiren() {
 // Short pleasant double-chirp — used for confirmations (arming, blocked start)
 // Two quick rising tones: 1000Hz → 1400Hz, 80ms each. Non-blocking via tone duration.
 void playConfirmBeep() {
-  ledcWriteTone(buzzerPin, 1000); delay(80);
-  ledcWriteTone(buzzerPin, 1400); delay(80);
-  ledcWrite(buzzerPin, 0);
+  tone(buzzerPin, 1000); delay(80);
+  tone(buzzerPin, 1400); delay(80);
+  noTone(buzzerPin);
 }
 
 void playWarningBeep(int count) {
   int freqs[] = {1400, 1200, 1000, 800};
   for (int i = 0; i < count && i < 4; i++) {
     ledcWriteTone(buzzerPin, freqs[i]); delay(120);
-    ledcWrite(buzzerPin, 0);            delay(60);
+    noTone(buzzerPin);            delay(60);
   }
 }
 
@@ -411,22 +401,15 @@ void setup() {
   pinMode(relayPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
   // Attach LEDC to buzzer pin — claims channel before other libs can take it
-  ledcAttach(buzzerPin, 1000, 10);
-  ledcWrite(buzzerPin, 0);  // start silent
-  pinMode(lightIndicatorPin, OUTPUT);
+  noTone(buzzerPin);\n  pinMode(lightIndicatorPin, OUTPUT);
   pinMode(vibrationSensorPin, INPUT_PULLUP);
-
-  // Hardware timer for siren — fires every 10ms, independent of loop()
-  sirenTimer = timerBegin(1000000);           // 1MHz tick (1us resolution)
-  timerAttachInterrupt(sirenTimer, &sirenTimerISR);
-  timerAlarm(sirenTimer, 10000, true, 0);     // 10000us = 10ms, auto-reload
 
   // Hardware interrupt for vibration sensor
   attachInterrupt(digitalPinToInterrupt(vibrationSensorPin), onVibration, CHANGE);
 
   // Relay OFF at startup (HIGH = OFF for active-low relay)
   digitalWrite(relayPin, HIGH);
-  ledcWrite(buzzerPin, 0);
+  noTone(buzzerPin);
   digitalWrite(lightIndicatorPin, LOW);
 
   delay(100);
@@ -475,22 +458,8 @@ void setup() {
 }
 
 void loop() {
-  // ── PRIORITY #0: Apply siren frequency (set by timer ISR) ─────────────────
-  // ISR only sets sirenTargetFreq — we apply it here (ledcWriteTone is not ISR-safe)
-  if (sirenFreqUpdated) {
-    sirenFreqUpdated = false;
-    int f = sirenTargetFreq;
-    if (f > 0) {
-      ledcWriteTone(buzzerPin, f);
-      digitalWrite(lightIndicatorPin, sirenGoingUp ? HIGH : LOW);
-    } else {
-      ledcWrite(buzzerPin, 0);
-      if (!sirenRunning) {
-        digitalWrite(lightIndicatorPin, LOW);
-        buzzerMode = BUZZER_OFF;
-      }
-    }
-  }
+  // ── PRIORITY #0: Tick the siren (two-tone wail, loop-safe) ───────────────
+  tickSiren();
 
   // ── PRIORITY #1: Vibration interrupt handler ──────────────────────────────
   // Process ISR flag immediately — before any HTTP calls that could block.
@@ -703,7 +672,6 @@ void loop() {
   }
   float leanAngle = abs(currentRoll);
 
-  // Siren driven by hardware timer ISR (sirenTimerISR) � no loop tick needed
   // -- Vibration sensor / anti-theft -----------------------------------------
   // SW-420 with INPUT_PULLUP: normal=HIGH, vibration=LOW (brief pulse)
   // Detect BOTH edges to catch every pulse.
@@ -2034,7 +2002,7 @@ void checkWiFiWatchdog() {
     // Warning beep every 2 seconds while disconnected (before shutdown)
     static unsigned long lastWarningBeep = 0;
     if (!emergencyShutdownTriggered && currentTime - lastWarningBeep >= 2000) {
-      ledcWriteTone(buzzerPin, 1000);  // Short 80ms pip — non-blocking
+      tone(buzzerPin, 1000);  // Short 80ms pip — non-blocking
       lastWarningBeep = currentTime;
       Serial.printf("[WIFI WATCHDOG] ⚠️ Shutdown in %lu ms...\n",
                     WIFI_WATCHDOG_TIMEOUT - disconnectedDuration);
@@ -2410,6 +2378,8 @@ void printSecurityStatus() {
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
+
+
 
 
 
