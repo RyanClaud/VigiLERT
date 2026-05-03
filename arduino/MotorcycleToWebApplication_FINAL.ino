@@ -207,11 +207,15 @@ const unsigned long VIBRATION_DEBOUNCE = 30;    // 30ms debounce — catches fas
 int consecutiveVibrations = 0;
 
 // ── Non-blocking buzzer state machine ─────────────────────────────────────
-// Produces a police/ambulance siren sweep using tone() on the buzzer pin.
-// Two modes:
-//   SIREN  — rising/falling sweep (theft alert, security shutdown)
-//   BEEP   — short double-beep (arming confirmation)
-// No delay() used — all timing via millis()
+// Produces a professional police/emergency siren pattern.
+//
+// SIREN mode — "Wail" pattern (classic police siren):
+//   Sweeps smoothly from LOW to HIGH and back, like a real siren.
+//   LOW=700Hz, HIGH=1700Hz, sweep takes 800ms each direction.
+//
+// BEEP mode — short confirmation beeps (arming, engine start feedback)
+//
+// All timing via millis() — zero delay() in the siren tick.
 
 enum BuzzerMode { BUZZER_OFF, BUZZER_SIREN, BUZZER_BEEP };
 BuzzerMode buzzerMode = BUZZER_OFF;
@@ -220,12 +224,12 @@ unsigned long buzzerAlertStart  = 0;
 unsigned long buzzerLastTick    = 0;
 bool          buzzerLightState  = false;
 
-// Siren parameters
-const unsigned long BUZZER_ALERT_DURATION = 8000;  // Total siren duration per trigger (ms)
-const unsigned long SIREN_TICK            = 15;    // Update frequency (ms) — smooth sweep
-const int           SIREN_FREQ_LOW        = 800;   // Hz — bottom of sweep
-const int           SIREN_FREQ_HIGH       = 1800;  // Hz — top of sweep
-const unsigned long SIREN_HALF_PERIOD     = 600;   // ms for one sweep direction (low→high or high→low)
+// ── Wail siren parameters ──────────────────────────────────────────────────
+const unsigned long BUZZER_ALERT_DURATION = 10000; // 10 seconds per trigger
+const unsigned long SIREN_TICK            = 10;    // 10ms tick = 100 steps/second (smooth)
+const int           SIREN_FREQ_LOW        = 700;   // Hz — bottom of wail
+const int           SIREN_FREQ_HIGH       = 1700;  // Hz — top of wail
+const unsigned long SIREN_HALF_PERIOD     = 800;   // ms per sweep direction (slow wail)
 
 // Siren sweep state
 int           sirenCurrentFreq  = SIREN_FREQ_LOW;
@@ -249,7 +253,7 @@ void startSiren() {
   sirenPhaseStart  = millis();
   sirenGoingUp     = true;
   sirenCurrentFreq = SIREN_FREQ_LOW;
-  tone(buzzerPin, SIREN_FREQ_LOW);   // kick off immediately
+  tone(buzzerPin, SIREN_FREQ_LOW);
   digitalWrite(lightIndicatorPin, HIGH);
   Serial.println("[SIREN] 🚨 Siren started");
 }
@@ -259,6 +263,27 @@ void stopSiren() {
   noTone(buzzerPin);
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Siren stopped");
+}
+
+// Short pleasant double-chirp — used for confirmations (arming, blocked start)
+// Two quick rising tones: 1000Hz → 1400Hz, 80ms each. Non-blocking via tone duration.
+void playConfirmBeep() {
+  tone(buzzerPin, 1000, 80);
+  delay(100);
+  tone(buzzerPin, 1400, 80);
+  delay(100);
+  noTone(buzzerPin);
+}
+
+// Short warning triple-beep — used for security blocks (WiFi timeout, helmet timeout)
+// Three descending tones: 1400→1200→1000Hz. Signals "blocked" without being harsh.
+void playWarningBeep(int count = 3) {
+  int freqs[] = {1400, 1200, 1000, 800};
+  for (int i = 0; i < count && i < 4; i++) {
+    tone(buzzerPin, freqs[i], 120);
+    delay(180);
+  }
+  noTone(buzzerPin);
 }
 
 // Forward declarations — security system
@@ -279,6 +304,9 @@ bool sendSMS(String phoneNumber, String message);
 void sendSMSToAllContacts(String message, String alertType);
 // Dashboard
 void checkAutoMode();
+// Buzzer helpers
+void playConfirmBeep();
+void playWarningBeep(int count = 3);
 
 void setup() {
   Serial.begin(115200);
@@ -507,15 +535,8 @@ void loop() {
         consecutiveVibrations++;
         Serial.printf("🚨 [TEST] VIBRATION DETECTED #%d!\n", consecutiveVibrations);
         
-        // Test buzzer
-        for (int i = 0; i < 3; i++) {
-          tone(buzzerPin, 1200);
-          digitalWrite(lightIndicatorPin, HIGH);
-          delay(200);
-          noTone(buzzerPin);
-          digitalWrite(lightIndicatorPin, LOW);
-          delay(200);
-        }
+        // Test siren
+        startSiren();
       } else {
         Serial.println("⚠️ Anti-theft not armed - cannot test alert");
         Serial.println("💡 TIP: Send 'STOP ENGINE' then wait 10 seconds to arm");
@@ -642,10 +663,7 @@ void loop() {
                     vibrationSensorPin, lastVibrationReading ? "HIGH" : "LOW");
 
       // Two short confirmation beeps using tone() — safe on any pin
-      tone(buzzerPin, 1200, 80); delay(160);
-      tone(buzzerPin, 1200, 80); delay(160);
-      noTone(buzzerPin);
-      // 320ms total — acceptable once-only at arm time
+      playConfirmBeep();
     }
 
     // Step 3: poll sensor every loop — NO delay() here
@@ -864,13 +882,8 @@ void handleAntiTheftWithVibrationSensor_OLD() {
     Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Ultra-sensitive vibration detection active...");
     Serial.printf("[ANTI-THEFT] 📍 Monitoring GPIO %d (any movement triggers alarm)\n", vibrationSensorPin);
     
-    // Short beep to confirm arming
-    for (int i = 0; i < 2; i++) {
-      tone(buzzerPin, 1200);
-      delay(100);
-      noTone(buzzerPin);
-      delay(100);
-    }
+    // Confirmation chirp � arming confirmed
+      playConfirmBeep();
   }
 
   if (antiTheftArmed) {
@@ -898,15 +911,8 @@ void handleAntiTheftWithVibrationSensor_OLD() {
                       lastVibrationState ? "HIGH" : "LOW",
                       vibrationDetected ? "HIGH" : "LOW");
 
-        // ✅ FAST BUZZER: 8 quick beeps as requested
-        for (int i = 0; i < 8; i++) {
-          tone(buzzerPin, 1200);
-          digitalWrite(lightIndicatorPin, HIGH);
-          delay(80);
-          noTone(buzzerPin);
-          digitalWrite(lightIndicatorPin, LOW);
-          delay(80);
-        }
+        // Siren alert — non-blocking
+          startSiren();
 
         // ✅ SMS alert with cooldown (prevent spam)
         unsigned long timeSinceLastAlert = currentTime - lastTheftAlert;
@@ -1202,16 +1208,9 @@ void triggerCrashShutdown(float impact, float roll) {
                     "Engine has been automatically shut off.";
   Serial.println("[CRASH] 📱 Sending SMS to emergency contacts...");
   sendSMSToAllContacts(crashMsg, "crash");
-  
-  for (int i = 0; i < 5; i++) {
-    tone(buzzerPin, 1200);
-    digitalWrite(lightIndicatorPin, HIGH);
-    delay(200);
-    noTone(buzzerPin);
-    digitalWrite(lightIndicatorPin, LOW);
-    delay(200);
-  }
-}
+
+  // Start siren — non-blocking, continues while loop runs
+  startSiren();
 
 void startEngine() {
   Serial.println("\n[ENGINE] startEngine() called");
@@ -1237,7 +1236,7 @@ void startEngine() {
     Serial.println("\n❌ ENGINE START BLOCKED - WiFi TIMEOUT!");
     Serial.printf("💡 WiFi disconnected for %lu ms (>%lu ms limit)\n", timeSinceWiFi, WIFI_TIMEOUT);
     digitalWrite(relayPin, HIGH);
-    tone(buzzerPin, 1200, 150); delay(200); tone(buzzerPin, 1200, 150); delay(200); tone(buzzerPin, 1200, 150);
+    playWarningBeep(3);
     logSecurityEventToFirebase("Engine Start Blocked - WiFi Timeout");
     return;
   }
@@ -1247,7 +1246,7 @@ void startEngine() {
     Serial.println("\n❌ ENGINE START BLOCKED - HELMET TIMEOUT!");
     Serial.printf("💡 Helmet disconnected for %lu ms (>%lu ms limit)\n", timeSinceHelmet, HELMET_TIMEOUT);
     digitalWrite(relayPin, HIGH);
-    tone(buzzerPin, 1200, 150); delay(200); tone(buzzerPin, 1200, 150);
+    playWarningBeep(2);
     logSecurityEventToFirebase("Engine Start Blocked - Helmet Timeout");
     return;
   }
@@ -1257,7 +1256,7 @@ void startEngine() {
     Serial.println("\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
     if (autoEngineControl) engineStartRequested = true;
     digitalWrite(relayPin, HIGH);
-    tone(buzzerPin, 800, 300); delay(400); tone(buzzerPin, 800, 300); delay(400); tone(buzzerPin, 800, 300);
+    playWarningBeep(3);
     logSecurityEventToFirebase("Engine Start Blocked - Alcohol Detected");
     return;
   }
@@ -1266,8 +1265,7 @@ void startEngine() {
   if (!crashOK) {
     Serial.println("\n❌ ENGINE START BLOCKED - CRASH DETECTED!");
     digitalWrite(relayPin, HIGH);
-    tone(buzzerPin, 600, 400); delay(500); tone(buzzerPin, 600, 400); delay(500);
-    tone(buzzerPin, 600, 400); delay(500); tone(buzzerPin, 600, 400);
+    playWarningBeep(4);
     logSecurityEventToFirebase("Engine Start Blocked - Crash Detected");
     return;
   }
@@ -1641,14 +1639,8 @@ void triggerAlcoholShutdown() {
     http.end();
   }
 
-  for (int i = 0; i < 10; i++) {
-    tone(buzzerPin, 1200);
-    digitalWrite(lightIndicatorPin, HIGH);
-    delay(500);
-    noTone(buzzerPin);
-    digitalWrite(lightIndicatorPin, LOW);
-    delay(300);
-  }
+  // Siren alert � non-blocking
+  startSiren();
 }
 
 void printSystemStatus() {
@@ -1883,11 +1875,8 @@ void checkWiFiWatchdog() {
       // Log to Firebase if possible (may fail if WiFi is down)
       logSecurityEventToFirebase("WiFi Disconnection Alert - 5 seconds");
       
-      // Visual/audio alert
-      for (int i = 0; i < 3; i++) {
-        tone(buzzerPin, 2000, 100);
-        delay(150);
-      }
+      // Warning beep pattern
+      playWarningBeep(3);
     }
 
     // ✅ FIXED: Shutdown at 10 seconds (was 3 seconds)
@@ -2286,3 +2275,6 @@ void printSecurityStatus() {
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
+
+
+
