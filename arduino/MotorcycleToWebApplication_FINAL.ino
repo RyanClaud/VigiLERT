@@ -658,18 +658,22 @@ void loop() {
     }
   }
 
-  // ── Vibration sensor / anti-theft ─────────────────────────────────────────
-  // Uses a static last-reading variable so state persists across loop iterations
-  static int lastVibrationReading = LOW;
+  // -- Vibration sensor / anti-theft -----------------------------------------
+  // SW-420 with INPUT_PULLUP: normal=HIGH, vibration=LOW (brief pulse)
+  // Detect BOTH edges to catch every pulse.
+  static int lastVibrationReading = HIGH;  // Correct baseline for INPUT_PULLUP
   static unsigned long lastVibrationTrigger = 0;
 
   if (!engineRunning) {
-    // Step 1: enable the system as soon as engine turns off
+    // Step 1: enable system as soon as engine turns off
     if (!antiTheftEnabled) {
       antiTheftEnabled = true;
       engineOffTime = millis();
       consecutiveVibrations = 0;
-      Serial.println("\n[ANTI-THEFT] 🛡️ System enabled — arming in 10 seconds...");
+      lastVibrationReading = digitalRead(vibrationSensorPin); // real baseline NOW
+      Serial.println("\n[ANTI-THEFT] System enabled � arming in 10 seconds...");
+      Serial.printf("[ANTI-THEFT] Baseline: GPIO%d = %s\n",
+                    vibrationSensorPin, lastVibrationReading ? "HIGH" : "LOW");
     }
 
     // Step 2: arm after ARM_DELAY
@@ -678,22 +682,18 @@ void loop() {
       theftDetectionCount = 0;
       theftAlertSent = false;
       consecutiveVibrations = 0;
-      lastVibrationReading = digitalRead(vibrationSensorPin); // snapshot baseline
-      Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Monitoring for movement...");
-      Serial.printf("[ANTI-THEFT] 📍 GPIO %d baseline: %s\n",
+      lastVibrationReading = digitalRead(vibrationSensorPin); // re-snapshot at arm
+      Serial.println("\n[ANTI-THEFT] ARMED! Monitoring for movement...");
+      Serial.printf("[ANTI-THEFT] GPIO %d baseline at arm: %s\n",
                     vibrationSensorPin, lastVibrationReading ? "HIGH" : "LOW");
-
-      // Two short confirmation beeps using tone() — safe on any pin
       playConfirmBeep();
     }
 
-    // Step 3: poll sensor every loop — NO delay() here
+    // Step 3: poll sensor every loop � NO delay() here
     if (antiTheftArmed) {
       int currentReading = digitalRead(vibrationSensorPin);
       unsigned long currentTime = millis();
 
-      // SW-420 fires a brief HIGH pulse on movement.
-      // Detect BOTH edges (LOW→HIGH and HIGH→LOW) so we catch every pulse.
       if (currentReading != lastVibrationReading) {
         unsigned long timeSinceLastTrigger = currentTime - lastVibrationTrigger;
 
@@ -701,26 +701,21 @@ void loop() {
           consecutiveVibrations++;
           lastVibrationTrigger = currentTime;
 
-          Serial.printf("\n🚨 [ANTI-THEFT] MOVEMENT #%d detected! GPIO%d: %s→%s\n",
+          Serial.printf("\n[ANTI-THEFT] MOVEMENT #%d! GPIO%d: %s->%s\n",
                         consecutiveVibrations, vibrationSensorPin,
                         lastVibrationReading ? "HIGH" : "LOW",
                         currentReading ? "HIGH" : "LOW");
 
-          // ── Start / extend non-blocking siren alert ──────────────────
-          // Every new detection restarts the 8-second siren window
           startSiren();
 
-          // ── Firebase + SMS alert (with cooldown to avoid spam) ────────
           unsigned long timeSinceLastAlert = currentTime - lastTheftAlert;
           if (timeSinceLastAlert >= THEFT_ALERT_COOLDOWN) {
-            Serial.println("[ANTI-THEFT] � Sending Firebase + SMS alert...");
-            // triggerTheftAlert() does Firebase write + SMS — runs once per cooldown
-            // The buzzer continues independently while this runs
+            Serial.println("[ANTI-THEFT] Sending Firebase + SMS alert...");
             triggerTheftAlert();
             lastTheftAlert = currentTime;
             theftAlertSent = true;
           } else {
-            Serial.printf("[ANTI-THEFT] ⏳ Alert cooldown: %lu s remaining\n",
+            Serial.printf("[ANTI-THEFT] Cooldown: %lu s remaining\n",
                           (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
           }
         }
@@ -728,22 +723,22 @@ void loop() {
 
       lastVibrationReading = currentReading;
 
-      // Debug: print sensor state every 5 seconds so you can verify it's polling
+      // Debug every 3 seconds
       static unsigned long lastVibDebug = 0;
-      if (currentTime - lastVibDebug >= 5000) {
-        Serial.printf("[VIBRATION] Armed | GPIO%d=%s | Detections=%d | Buzzer=%s\n",
+      if (currentTime - lastVibDebug >= 3000) {
+        Serial.printf("[VIBRATION] GPIO%d=%s | Detections=%d | Siren=%s\n",
                       vibrationSensorPin,
                       currentReading ? "HIGH" : "LOW",
                       consecutiveVibrations,
-                      buzzerMode == BUZZER_SIREN ? "ON" : "OFF");
+                      buzzerMode == BUZZER_SIREN ? "ON" : "off");
         lastVibDebug = currentTime;
       }
     }
 
   } else {
-    // Engine running — disarm anti-theft and silence buzzer
+    // Engine running � disarm anti-theft and silence buzzer
     if (antiTheftArmed) {
-      Serial.println("[ANTI-THEFT] 🔓 Disarmed — engine running");
+      Serial.println("[ANTI-THEFT] Disarmed � engine running");
       antiTheftArmed = false;
       antiTheftEnabled = false;
       theftDetectionCount = 0;
