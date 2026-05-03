@@ -291,22 +291,37 @@ void checkComprehensiveSecurity();
 void triggerSecurityShutdown(String reason);
 void logSecurityEventToFirebase(String eventType);
 void printSecurityStatus();
+void printSystemStatus();
 void checkWiFiWatchdog();
 void checkHelmetConnection();
-// Engine / trip
+void forceHelmetStatusOff();
+// Engine / relay
+void startEngine();
+void stopEngine();
+void checkStarterTimeout();
+void sendCrashToFirebase(float impact, float roll);
+void sendLiveToFirebase();
+void connectToWiFi();
+// Trip
 void startTrip();
 void endTrip();
 void updateTripData();
 void saveTripToFirebase();
 float calculateDistance(double lat1, double lng1, double lat2, double lng2);
+// Alcohol / security
+void checkAlcoholStatus();
+void triggerAlcoholShutdown();
+// Dashboard button
+void handleDashboardButton();
+void checkDashboardButton();
+void checkAutoMode();
+void clearDashboardButton();
 // SMS
 bool sendSMS(String phoneNumber, String message);
 void sendSMSToAllContacts(String message, String alertType);
-// Dashboard
-void checkAutoMode();
 // Buzzer helpers
 void playConfirmBeep();
-void playWarningBeep(int count = 3);
+void playWarningBeep(int count);
 
 void setup() {
   Serial.begin(115200);
@@ -1211,6 +1226,7 @@ void triggerCrashShutdown(float impact, float roll) {
 
   // Start siren — non-blocking, continues while loop runs
   startSiren();
+}
 
 void startEngine() {
   Serial.println("\n[ENGINE] startEngine() called");
