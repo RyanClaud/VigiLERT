@@ -450,7 +450,13 @@ void loop() {
   }
   if (millis() - lastGPSUpdate >= GPS_UPDATE_INTERVAL) {
     if (gps.speed.isValid()) {
-      currentSpeed = gps.speed.kmph();
+      float rawSpeed = gps.speed.kmph();
+      // Apply deadband: GPS noise can show 1-5 km/h when stationary.
+      // Only trust speed if it's above 3 km/h AND we have satellite data.
+      const float GPS_SPEED_DEADBAND = 3.0;  // km/h — below this = treat as 0
+      currentSpeed = (rawSpeed > GPS_SPEED_DEADBAND) ? rawSpeed : 0.0;
+    } else {
+      currentSpeed = 0.0;
     }
     // Debug GPS status every 10 seconds
     static unsigned long lastGPSDebug = 0;
@@ -787,14 +793,18 @@ void loop() {
     lastAlcoholCheck = millis();
   }
 
+  // ── Alcohol safety enforcement — runs every loop, not just on state change ──
+  // If alcohol is detected AND engine is running, cut ignition immediately.
+  // This catches cases where engine was started before alcohol was detected,
+  // or where the state-change check in checkAlcoholStatus() was missed.
+  if (alcoholDetected && engineRunning && helmetConnected) {
+    Serial.println("\n🚨 ALCOHOL DETECTED — cutting ignition immediately!");
+    stopEngine();
+  }
+
   // Automatic engine control (auto-mode only)
   if (autoEngineControl) {
-    if (alcoholDetected && engineRunning) {
-      Serial.println("\n🚨 AUTO-SHUTDOWN: Alcohol detected!");
-      stopEngine();
-      engineStartRequested = true;
-    }
-    else if (!alcoholDetected && engineStartRequested && !engineRunning) {
+    if (!alcoholDetected && engineStartRequested && !engineRunning) {
       Serial.println("\n✅ AUTO-START: Alcohol cleared!");
       startEngine();
     }
@@ -1581,18 +1591,15 @@ void checkAlcoholStatus() {
     if (currentAlcoholState != alcoholDetected) {
       alcoholDetected = currentAlcoholState;
       lastAlcoholState = currentAlcoholState;
+    }
 
-      if (currentAlcoholState && helmetConnected) {
-        // Only cut starter relay here — stopEngine() handles ignition
-        digitalWrite(relayPin, HIGH);
-
-        if (engineRunning) {
-          triggerAlcoholShutdown();
-        }
-      } else if (currentAlcoholState && !helmetConnected) {
-        Serial.println("[ALCOHOL] ⚠️ Danger reading but helmet not connected — ignoring stale data");
-        alcoholDetected = false;  // Don't act on stale data
-      }
+    // Always enforce: if alcohol detected and helmet is connected, cut engine
+    if (alcoholDetected && helmetConnected && engineRunning) {
+      Serial.println("[ALCOHOL] 🚨 Alcohol confirmed — cutting ignition!");
+      triggerAlcoholShutdown();
+    } else if (currentAlcoholState && !helmetConnected) {
+      Serial.println("[ALCOHOL] ⚠️ Danger reading but helmet not connected — ignoring stale data");
+      alcoholDetected = false;
     }
     
     // ✅ FAST DEBUG: Alcohol status every 1 second
