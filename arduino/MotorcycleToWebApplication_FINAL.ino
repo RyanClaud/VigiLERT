@@ -23,6 +23,13 @@
 // Set to false if the sensor is not physically connected, to bypass it
 #define MPU6050_ENABLED true   // Set false to bypass crash detection (no MPU6050 wired)
 
+// ── Security feature flags ─────────────────────────────────────────────────
+// Set SECURITY_SHUTDOWNS_ENABLED to false to disable ALL automatic engine
+// shutdowns (WiFi watchdog, helmet timeout, security violations).
+// Use this when testing the relay/engine without helmet or stable WiFi.
+// Set back to true for production deployment.
+#define SECURITY_SHUTDOWNS_ENABLED true
+
 // WiFi Configuration
 const char* ssid = "DPWH";
 const char* password = "12345678900";
@@ -1564,18 +1571,22 @@ void checkAlcoholStatus() {
       }
     }
 
-    // Update state
+    // Update state — only act on alcohol if helmet is connected
+    // (prevents stale Firebase data from triggering shutdown)
     if (currentAlcoholState != alcoholDetected) {
       alcoholDetected = currentAlcoholState;
       lastAlcoholState = currentAlcoholState;
-      
-      if (currentAlcoholState) {
-        // ✅ FIX: HIGH = OFF for ACTIVE-LOW relay
+
+      if (currentAlcoholState && helmetConnected) {
+        // Only cut starter relay here — stopEngine() handles ignition
         digitalWrite(relayPin, HIGH);
-        
+
         if (engineRunning) {
           triggerAlcoholShutdown();
         }
+      } else if (currentAlcoholState && !helmetConnected) {
+        Serial.println("[ALCOHOL] ⚠️ Danger reading but helmet not connected — ignoring stale data");
+        alcoholDetected = false;  // Don't act on stale data
       }
     }
     
@@ -1781,7 +1792,7 @@ void checkComprehensiveSecurity() {
 
   bool securityViolation = wifiTimeout || helmetTimeout;
 
-  if (securityViolation && engineRunning) {
+  if (SECURITY_SHUTDOWNS_ENABLED && securityViolation && engineRunning) {
     Serial.println("\n?????? SECURITY VIOLATION � AUTO SHUTDOWN! ??????");
     if (wifiTimeout)   Serial.printf("?? WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
     if (helmetTimeout) Serial.printf("?? HELMET TIMEOUT: %lu ms (>%lu ms)\n", timeSinceHelmet, HELMET_TIMEOUT);
@@ -1842,12 +1853,16 @@ void checkWiFiWatchdog() {
       startupShutdownTriggered = true;
       startupWiFiCheckComplete = true;
 
-      Serial.println("\n🚨 [STARTUP] WiFi FAILED — cutting engine power!");
-      digitalWrite(ignitionRelayPin, HIGH);
-      digitalWrite(relayPin, HIGH);
-      engineRunning = false;
-      startSiren();
-      Serial.println("[STARTUP] � Connect to WiFi and restart device");
+      Serial.println("\n[STARTUP] WiFi FAILED � cutting engine power!");
+      if (SECURITY_SHUTDOWNS_ENABLED) {
+        digitalWrite(ignitionRelayPin, HIGH);
+        digitalWrite(relayPin, HIGH);
+        engineRunning = false;
+        startSiren();
+      } else {
+        Serial.println("[STARTUP] SECURITY_SHUTDOWNS_ENABLED=false � engine kept running");
+      }
+      Serial.println("[STARTUP] Connect to WiFi and restart device");
     } else {
       static unsigned long lastStartupWarning = 0;
       if (currentTime - lastStartupWarning >= 1000) {
@@ -1896,10 +1911,14 @@ void checkWiFiWatchdog() {
       emergencyShutdownTriggered = true;
       Serial.println("\n🚨 [WIFI WATCHDOG] 10-SECOND TIMEOUT — cutting engine power!");
 
-      digitalWrite(ignitionRelayPin, HIGH);
-      digitalWrite(relayPin, HIGH);
-      engineRunning = false;
-      startSiren();
+      if (SECURITY_SHUTDOWNS_ENABLED) {
+        digitalWrite(ignitionRelayPin, HIGH);
+        digitalWrite(relayPin, HIGH);
+        engineRunning = false;
+        startSiren();
+      } else {
+        Serial.println("[WIFI WATCHDOG] ⚠️ SECURITY_SHUTDOWNS_ENABLED=false — engine kept running");
+      }
 
       Serial.println("[WIFI WATCHDOG] 💡 Reconnect WiFi to restore operation");
     }
