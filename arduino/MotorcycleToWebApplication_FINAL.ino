@@ -268,14 +268,14 @@ void startSiren() {
   sirenPhaseStart  = millis();
   sirenGoingUp     = true;
   sirenCurrentFreq = SIREN_FREQ_LOW;
-  ledcWriteTone(buzzerPin, SIREN_FREQ_LOW);  // kick off immediately
+  tone(buzzerPin, SIREN_FREQ_LOW);  // kick off immediately
   digitalWrite(lightIndicatorPin, HIGH);
   Serial.println("[SIREN] Siren started");
 }
 
 void stopSiren() {
   buzzerMode = BUZZER_OFF;
-  ledcWriteTone(buzzerPin, 0);  // silence
+  noTone(buzzerPin);  // silence
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Siren stopped");
 }
@@ -283,16 +283,16 @@ void stopSiren() {
 // Short pleasant double-chirp — used for confirmations (arming, blocked start)
 // Two quick rising tones: 1000Hz → 1400Hz, 80ms each. Non-blocking via tone duration.
 void playConfirmBeep() {
-  ledcWriteTone(buzzerPin, 1000); delay(80);
-  ledcWriteTone(buzzerPin, 1400); delay(80);
-  ledcWriteTone(buzzerPin, 0);
+  tone(buzzerPin, 1000); delay(80);
+  tone(buzzerPin, 1400); delay(80);
+  noTone(buzzerPin);
 }
 
 void playWarningBeep(int count) {
   int freqs[] = {1400, 1200, 1000, 800};
   for (int i = 0; i < count && i < 4; i++) {
-    ledcWriteTone(buzzerPin, freqs[i]); delay(120);
-    ledcWriteTone(buzzerPin, 0);        delay(60);
+    tone(buzzerPin, freqs[i]); delay(120);
+    noTone(buzzerPin);        delay(60);
   }
 }
 
@@ -647,13 +647,13 @@ void loop() {
   float leanAngle = abs(currentRoll);
 
 // ── Non-blocking siren / buzzer tick ─────────────────────────────────────
-  // Uses ledcWriteTone() for reliable frequency sweeping on ESP32 Arduino core 3.x
+  // Non-blocking siren tick � updates frequency every SIREN_TICK ms
   {
     unsigned long now = millis();
 
     if (buzzerMode == BUZZER_SIREN) {
       if (now - buzzerAlertStart >= BUZZER_ALERT_DURATION) {
-        ledcWriteTone(buzzerPin, 0);  // silence
+        noTone(buzzerPin);  // silence
         digitalWrite(lightIndicatorPin, LOW);
         buzzerMode = BUZZER_OFF;
       } else if (now - buzzerLastTick >= SIREN_TICK) {
@@ -667,7 +667,7 @@ void loop() {
           ? (int)(SIREN_FREQ_LOW  + t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW))
           : (int)(SIREN_FREQ_HIGH - t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW));
 
-        ledcWriteTone(buzzerPin, freq);  // ESP32-native, reliable sweep
+        tone(buzzerPin, freq);  // update frequency
 
         buzzerLightState = sirenGoingUp;
         digitalWrite(lightIndicatorPin, buzzerLightState ? HIGH : LOW);
@@ -680,7 +680,7 @@ void loop() {
     } else if (buzzerMode == BUZZER_BEEP) {
       buzzerMode = BUZZER_OFF;
     }
-    // BUZZER_OFF: ledcWriteTone(0) already called when mode was set to OFF
+    // BUZZER_OFF: noTone() already called when mode was set to OFF
   }
 
   // -- Vibration sensor / anti-theft -----------------------------------------
@@ -2389,6 +2389,9 @@ void printSecurityStatus() {
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
+
+
+
 
 
 
