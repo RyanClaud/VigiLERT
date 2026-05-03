@@ -226,10 +226,10 @@ bool          buzzerLightState  = false;
 
 // ── Wail siren parameters ──────────────────────────────────────────────────
 const unsigned long BUZZER_ALERT_DURATION = 10000; // 10 seconds per trigger
-const unsigned long SIREN_TICK            = 10;    // 10ms tick = 100 steps/second (smooth)
+const unsigned long SIREN_TICK            = 10;    // 10ms tick — smooth sweep
 const int           SIREN_FREQ_LOW        = 700;   // Hz — bottom of wail
 const int           SIREN_FREQ_HIGH       = 1700;  // Hz — top of wail
-const unsigned long SIREN_HALF_PERIOD     = 800;   // ms per sweep direction (slow wail)
+const unsigned long SIREN_HALF_PERIOD     = 700;   // ms per sweep direction (matches test sketch)
 
 // Siren sweep state
 int           sirenCurrentFreq  = SIREN_FREQ_LOW;
@@ -671,7 +671,7 @@ void loop() {
       engineOffTime = millis();
       consecutiveVibrations = 0;
       lastVibrationReading = digitalRead(vibrationSensorPin); // real baseline NOW
-      Serial.println("\n[ANTI-THEFT] System enabled � arming in 10 seconds...");
+      Serial.println("\n[ANTI-THEFT] System enabled � arming in 10 seconds...");
       Serial.printf("[ANTI-THEFT] Baseline: GPIO%d = %s\n",
                     vibrationSensorPin, lastVibrationReading ? "HIGH" : "LOW");
     }
@@ -689,7 +689,7 @@ void loop() {
       playConfirmBeep();
     }
 
-    // Step 3: poll sensor every loop � NO delay() here
+    // Step 3: poll sensor every loop � NO delay() here
     if (antiTheftArmed) {
       int currentReading = digitalRead(vibrationSensorPin);
       unsigned long currentTime = millis();
@@ -736,9 +736,9 @@ void loop() {
     }
 
   } else {
-    // Engine running � disarm anti-theft and silence buzzer
+    // Engine running � disarm anti-theft and silence buzzer
     if (antiTheftArmed) {
-      Serial.println("[ANTI-THEFT] Disarmed � engine running");
+      Serial.println("[ANTI-THEFT] Disarmed � engine running");
       antiTheftArmed = false;
       antiTheftEnabled = false;
       theftDetectionCount = 0;
