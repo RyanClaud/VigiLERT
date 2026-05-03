@@ -101,7 +101,7 @@
           <h3 class="text-xl font-bold text-white flex items-center gap-2">
             <span>??</span> CRASH DETECTED
           </h3>
-          <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} — Check on rider immediately!</p>
+          <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} ï¿½ Check on rider immediately!</p>
           <a v-if="location.lat && location.lng"
             :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" target="_blank"
             class="inline-flex items-center gap-1 mt-2 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1 rounded-lg transition-all">
@@ -126,7 +126,7 @@
             <span>??</span> ANTI-THEFT ALERT
           </h3>
           <p class="text-white/90 text-sm mt-1">{{ antiTheftAlert.message }}</p>
-          <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} • Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
+          <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} ï¿½ Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
         </div>
         <button @click="dismissAntiTheftAlert"
           class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all">
@@ -335,7 +335,7 @@
         </div>
       </div>
 
-      <!-- Row 3: Speed Limit Control (Emergency Contact only — interactive) -->
+      <!-- Row 3: Speed Limit Control (Emergency Contact only ï¿½ interactive) -->
       <div class="relative overflow-hidden rounded-2xl shadow-2xl p-6 mb-6 transition-all duration-500 border border-white/10"
         :style="{ background: speedLimitGradient }">
         <div class="relative">
@@ -592,7 +592,7 @@
 
     <!-- Footer -->
     <footer class="bg-[#0a0f1e] text-center py-5 text-white border-t border-white/5">
-      <p class="font-semibold text-sm text-white/40">© 2025 VIGILERT. All rights reserved.</p>
+      <p class="font-semibold text-sm text-white/40">ï¿½ 2025 VIGILERT. All rights reserved.</p>
       <p class="text-xs text-white/20 mt-1">Emergency Contact Monitoring System</p>
     </footer>
   </div>
@@ -608,7 +608,7 @@ import EmergencyRiderMap from '../components/EmergencyRiderMap.vue';
 const router = useRouter();
 const route  = useRoute();
 
-// userUID comes from the route param set at login — never hardcoded
+// userUID comes from the route param set at login ï¿½ never hardcoded
 const userUID = route.params.userId || 'MnzBjTBslZNijOkq732PE91hHa23';
 
 // -- State ------------------------------------------------------------------
@@ -698,7 +698,9 @@ const playAlertSound = () => {
 };
 
 const updateSpeedLimitInFirebase = () => {
-  set(dbRef(database, `${userUID}/speedLimit`), speedLimit.value)
+  // Write to the path the user dashboard reads from
+  set(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), speedLimit.value)
+    .then(() => console.log('[SPEED LIMIT] Updated to', speedLimit.value, 'km/h'))
     .catch(err => console.error('[SPEED LIMIT]', err));
 };
 
@@ -789,10 +791,10 @@ const setupFirebaseListeners = () => {
     const wasOver = isOverSpeed.value;
     isOverSpeed.value = spd > speedLimit.value;
 
-    // Speed-over-limit alert — fire once when threshold is crossed
+    // Speed-over-limit alert ï¿½ fire once when threshold is crossed
     if (isOverSpeed.value && !wasOver) {
       addAlert('speed', '? Speed Limit Exceeded!',
-        `Rider is going ${spd.toFixed(0)} km/h — limit is ${speedLimit.value} km/h`);
+        `Rider is going ${spd.toFixed(0)} km/h ï¿½ limit is ${speedLimit.value} km/h`);
     }
 
     if (spd > 0) {
@@ -820,7 +822,7 @@ const setupFirebaseListeners = () => {
     }
   });
 
-  // -- 4. Alcohol — dedicated path (same as user dashboard) -----------------
+  // -- 4. Alcohol ï¿½ dedicated path (same as user dashboard) -----------------
   onValue(dbRef(database, `helmet_public/${userUID}/alcohol/status`), snap => {
     const d = snap.val();
     if (!d) return;
@@ -831,7 +833,7 @@ const setupFirebaseListeners = () => {
     // Alert when alcohol is newly detected
     if (status === 'Danger' && prev !== 'Danger') {
       addAlert('alcohol', '?? Alcohol Detected on Rider!',
-        `Sensor value: ${d.sensorValue || 'N/A'} — Engine may be blocked`);
+        `Sensor value: ${d.sensorValue || 'N/A'} ï¿½ Engine may be blocked`);
     }
   });
 
@@ -868,7 +870,7 @@ const setupFirebaseListeners = () => {
     crashDisplayMessage.value = 'Crash Detected';
 
     addAlert('crash', '?? CRASH DETECTED!',
-      `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | ${
+      `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}ï¿½ | ${
         crashEvent.hasGPS ? `${crashEvent.lat?.toFixed(5)}, ${crashEvent.lng?.toFixed(5)}` : 'No GPS'}`);
   });
 
@@ -930,8 +932,8 @@ const setupFirebaseListeners = () => {
     addAlert(a.type || 'info', a.message || 'System Alert', a.details || '');
   });
 
-  // -- 9. Speed limit sync ---------------------------------------------------
-  onValue(dbRef(database, `${userUID}/speedLimit`), snap => {
+  // -- 9. Speed limit sync â€” same path as user dashboard reads/writes --------
+  onValue(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), snap => {
     const d = snap.val();
     if (d !== null && d !== undefined) speedLimit.value = d;
   });
