@@ -169,17 +169,26 @@ const unsigned long QUICK_STATUS_INTERVAL = 1000;  // 1 second quick status
 bool antiTheftEnabled = false;
 bool antiTheftArmed = false;
 unsigned long engineOffTime = 0;
-const unsigned long ARM_DELAY = 10000;  // ✅ Reduced to 10 seconds
+const unsigned long ARM_DELAY = 10000;          // 10 seconds after engine off before arming
 unsigned long lastTheftAlert = 0;
-const unsigned long THEFT_ALERT_COOLDOWN = 60000;  // ✅ Reduced to 1 minute
+const unsigned long THEFT_ALERT_COOLDOWN = 60000; // 60 seconds between SMS/Firebase alerts
 bool theftAlertSent = false;
 int theftDetectionCount = 0;
-const int THEFT_DETECTION_REQUIRED = 1;  // ✅ Immediate alert on first detection
+const int THEFT_DETECTION_REQUIRED = 1;
 unsigned long lastVibrationTime = 0;
-const unsigned long VIBRATION_DEBOUNCE = 50;  // ✅ ULTRA-SENSITIVE: 50ms debounce (catches slightest movement)
+const unsigned long VIBRATION_DEBOUNCE = 30;    // 30ms debounce — catches fast pulses
 
-// ✅ ULTRA-SENSITIVE: Immediate vibration detection (no confirmation needed)
-int consecutiveVibrations = 0;  // Track number of vibrations detected
+int consecutiveVibrations = 0;
+
+// ── Non-blocking buzzer state machine ─────────────────────────────────────
+// Runs the buzzer for BUZZER_ALERT_DURATION ms every time vibration is detected
+// without blocking the sensor polling loop with delay()
+bool buzzerAlerting = false;
+unsigned long buzzerAlertStart = 0;
+unsigned long buzzerLastToggle = 0;
+bool buzzerState = false;
+const unsigned long BUZZER_ALERT_DURATION = 6000;  // Buzz for 6 seconds per detection
+const unsigned long BUZZER_BEEP_INTERVAL  = 150;   // Toggle every 150ms (fast beeping)
 
 // GSM status
 bool gsmReady = false;
@@ -456,94 +465,132 @@ void loop() {
   }
   float leanAngle = abs(currentRoll);
 
-  // ✅ ULTRA-FAST: Check vibration sensor DIRECTLY in loop (like diagnostic code)
-  // This ensures instant detection without waiting for function calls
+  // ── Non-blocking buzzer tick ──────────────────────────────────────────────
+  // Must run every loop iteration so the buzzer keeps going while we still
+  // poll the sensor at full speed
+  if (buzzerAlerting) {
+    unsigned long now = millis();
+    if (now - buzzerAlertStart >= BUZZER_ALERT_DURATION) {
+      // Alert duration expired — silence buzzer
+      buzzerAlerting = false;
+      buzzerState = false;
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+    } else if (now - buzzerLastToggle >= BUZZER_BEEP_INTERVAL) {
+      // Toggle buzzer on/off for rapid beeping effect
+      buzzerState = !buzzerState;
+      digitalWrite(buzzerPin, buzzerState ? HIGH : LOW);
+      digitalWrite(lightIndicatorPin, buzzerState ? HIGH : LOW);
+      buzzerLastToggle = now;
+    }
+  }
+
+  // ── Vibration sensor / anti-theft ─────────────────────────────────────────
+  // Uses a static last-reading variable so state persists across loop iterations
   static int lastVibrationReading = LOW;
   static unsigned long lastVibrationTrigger = 0;
-  
+
   if (!engineRunning) {
-    // Enable and arm anti-theft system
+    // Step 1: enable the system as soon as engine turns off
     if (!antiTheftEnabled) {
       antiTheftEnabled = true;
       engineOffTime = millis();
       consecutiveVibrations = 0;
-      Serial.println("\n[ANTI-THEFT] 🛡️ System enabled - arming in 10 seconds...");
+      Serial.println("\n[ANTI-THEFT] 🛡️ System enabled — arming in 10 seconds...");
     }
-    
+
+    // Step 2: arm after ARM_DELAY
     if (!antiTheftArmed && (millis() - engineOffTime >= ARM_DELAY)) {
       antiTheftArmed = true;
       theftDetectionCount = 0;
       theftAlertSent = false;
       consecutiveVibrations = 0;
-      lastVibrationReading = digitalRead(vibrationSensorPin);  // Initialize
-      Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Ultra-sensitive vibration detection active...");
-      Serial.printf("[ANTI-THEFT] 📍 Monitoring GPIO %d (any movement triggers alarm)\n", vibrationSensorPin);
-      
-      // Short beep to confirm arming
-      for (int i = 0; i < 2; i++) {
-        digitalWrite(buzzerPin, HIGH);
-        delay(100);
-        digitalWrite(buzzerPin, LOW);
-        delay(100);
-      }
+      lastVibrationReading = digitalRead(vibrationSensorPin); // snapshot baseline
+      Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Monitoring for movement...");
+      Serial.printf("[ANTI-THEFT] 📍 GPIO %d baseline: %s\n",
+                    vibrationSensorPin, lastVibrationReading ? "HIGH" : "LOW");
+
+      // Two short confirmation beeps (non-blocking: just start the buzzer briefly)
+      digitalWrite(buzzerPin, HIGH);
+      delay(80);
+      digitalWrite(buzzerPin, LOW);
+      delay(80);
+      digitalWrite(buzzerPin, HIGH);
+      delay(80);
+      digitalWrite(buzzerPin, LOW);
+      // These 4 × 80ms = 320ms delays are acceptable only at arm time (once)
     }
-    
-    // ✅ INSTANT DETECTION: Check sensor every loop (like diagnostic code)
+
+    // Step 3: poll sensor every loop — NO delay() here
     if (antiTheftArmed) {
       int currentReading = digitalRead(vibrationSensorPin);
       unsigned long currentTime = millis();
-      
-      // Detect ANY state change (just like diagnostic code!)
+
+      // SW-420 fires a brief HIGH pulse on movement.
+      // Detect BOTH edges (LOW→HIGH and HIGH→LOW) so we catch every pulse.
       if (currentReading != lastVibrationReading) {
         unsigned long timeSinceLastTrigger = currentTime - lastVibrationTrigger;
-        
-        // Simple debounce (50ms)
+
         if (timeSinceLastTrigger >= VIBRATION_DEBOUNCE) {
           consecutiveVibrations++;
           lastVibrationTrigger = currentTime;
-          
-          Serial.printf("\n🚨🚨 [ANTI-THEFT] VIBRATION DETECTED #%d! 🚨🚨\n", consecutiveVibrations);
-          Serial.printf("[ANTI-THEFT] 📍 GPIO %d: %s → %s (movement detected)!\n", 
-                        vibrationSensorPin,
+
+          Serial.printf("\n🚨 [ANTI-THEFT] MOVEMENT #%d detected! GPIO%d: %s→%s\n",
+                        consecutiveVibrations, vibrationSensorPin,
                         lastVibrationReading ? "HIGH" : "LOW",
                         currentReading ? "HIGH" : "LOW");
 
-          // ✅ FAST BUZZER: 8 quick beeps
-          for (int i = 0; i < 8; i++) {
-            digitalWrite(buzzerPin, HIGH);
-            digitalWrite(lightIndicatorPin, HIGH);
-            delay(80);
-            digitalWrite(buzzerPin, LOW);
-            digitalWrite(lightIndicatorPin, LOW);
-            delay(80);
-          }
+          // ── Start / extend non-blocking buzzer alert ──────────────────
+          // Every new detection restarts the 6-second buzzer window
+          buzzerAlerting = true;
+          buzzerAlertStart = currentTime;
+          buzzerLastToggle = currentTime;
+          buzzerState = true;
+          digitalWrite(buzzerPin, HIGH);
+          digitalWrite(lightIndicatorPin, HIGH);
 
-          // ✅ SMS alert with cooldown
+          // ── Firebase + SMS alert (with cooldown to avoid spam) ────────
           unsigned long timeSinceLastAlert = currentTime - lastTheftAlert;
-          
           if (timeSinceLastAlert >= THEFT_ALERT_COOLDOWN) {
-            Serial.println("[ANTI-THEFT] 📱 Sending SMS + Firebase alert...");
+            Serial.println("[ANTI-THEFT] � Sending Firebase + SMS alert...");
+            // triggerTheftAlert() does Firebase write + SMS — runs once per cooldown
+            // The buzzer continues independently while this runs
             triggerTheftAlert();
             lastTheftAlert = currentTime;
             theftAlertSent = true;
           } else {
-            Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\n", 
+            Serial.printf("[ANTI-THEFT] ⏳ Alert cooldown: %lu s remaining\n",
                           (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
           }
         }
       }
-      
+
       lastVibrationReading = currentReading;
+
+      // Debug: print sensor state every 5 seconds so you can verify it's polling
+      static unsigned long lastVibDebug = 0;
+      if (currentTime - lastVibDebug >= 5000) {
+        Serial.printf("[VIBRATION] Armed | GPIO%d=%s | Detections=%d | Buzzer=%s\n",
+                      vibrationSensorPin,
+                      currentReading ? "HIGH" : "LOW",
+                      consecutiveVibrations,
+                      buzzerAlerting ? "ON" : "OFF");
+        lastVibDebug = currentTime;
+      }
     }
+
   } else {
-    // Engine running - disarm anti-theft
+    // Engine running — disarm anti-theft and silence buzzer
     if (antiTheftArmed) {
-      Serial.println("[ANTI-THEFT] 🔓 Disarmed - Engine running");
+      Serial.println("[ANTI-THEFT] 🔓 Disarmed — engine running");
       antiTheftArmed = false;
       antiTheftEnabled = false;
       theftDetectionCount = 0;
       theftAlertSent = false;
       consecutiveVibrations = 0;
+      buzzerAlerting = false;
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
     }
   }
 
@@ -782,15 +829,9 @@ void handleAntiTheftWithVibrationSensor_OLD() {
 
 void triggerTheftAlert() {
   Serial.println("\n🚨🚨🚨 THEFT ALERT! 🚨🚨🚨");
-  
-  for (int i = 0; i < 10; i++) {
-    digitalWrite(buzzerPin, HIGH);
-    digitalWrite(lightIndicatorPin, HIGH);
-    delay(50);
-    digitalWrite(buzzerPin, LOW);
-    digitalWrite(lightIndicatorPin, LOW);
-    delay(50);
-  }
+
+  // Buzzer is already running via the non-blocking state machine in loop().
+  // No blocking delay() here — just do the Firebase + SMS work.
 
   String location = "Location unavailable";
   if (gps.location.isValid()) {
@@ -1188,6 +1229,9 @@ void startEngine() {
     antiTheftArmed = false;
     antiTheftEnabled = false;
     theftDetectionCount = 0;
+    buzzerAlerting = false;
+    digitalWrite(buzzerPin, LOW);
+    digitalWrite(lightIndicatorPin, LOW);
     Serial.println("[ANTI-THEFT] 🔓 Disarmed");
   }
 }
