@@ -244,7 +244,21 @@ const unsigned long BUZZER_ALERT_DURATION = 10000; // 10 seconds per trigger
 const unsigned long SIREN_TICK            = 10;    // 10ms tick — smooth sweep
 const int           SIREN_FREQ_LOW        = 700;   // Hz — bottom of wail
 const int           SIREN_FREQ_HIGH       = 1700;  // Hz — top of wail
-const unsigned long SIREN_HALF_PERIOD     = 700;   // ms per sweep direction (matches test sketch)
+const unsigned long SIREN_HALF_PERIOD     = 700;   // ms per sweep direction
+
+// LEDC buzzer — explicit channel to avoid conflicts with other peripherals
+// ledcAttach(buzzerPin, ...) called in setup() before anything else
+#define BUZZER_LEDC_FREQ_HZ   1000   // initial frequency (overwritten by siren)
+#define BUZZER_LEDC_RESOLUTION 10    // 10-bit resolution
+
+// Helper: set buzzer frequency via LEDC (0 = silence)
+inline void buzzerFreq(int hz) {
+  if (hz <= 0) {
+    ledcWrite(buzzerPin, 0);   // duty = 0 → silence
+  } else {
+    ledcWriteTone(buzzerPin, hz);
+  }
+}
 
 // Siren sweep state
 int           sirenCurrentFreq  = SIREN_FREQ_LOW;
@@ -268,14 +282,14 @@ void startSiren() {
   sirenPhaseStart  = millis();
   sirenGoingUp     = true;
   sirenCurrentFreq = SIREN_FREQ_LOW;
-  tone(buzzerPin, SIREN_FREQ_LOW);  // kick off immediately
+  buzzerFreq(SIREN_FREQ_LOW);
   digitalWrite(lightIndicatorPin, HIGH);
   Serial.println("[SIREN] Siren started");
 }
 
 void stopSiren() {
   buzzerMode = BUZZER_OFF;
-  noTone(buzzerPin);  // silence
+  buzzerFreq(0);
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Siren stopped");
 }
@@ -283,16 +297,16 @@ void stopSiren() {
 // Short pleasant double-chirp — used for confirmations (arming, blocked start)
 // Two quick rising tones: 1000Hz → 1400Hz, 80ms each. Non-blocking via tone duration.
 void playConfirmBeep() {
-  tone(buzzerPin, 1000); delay(80);
-  tone(buzzerPin, 1400); delay(80);
-  noTone(buzzerPin);
+  buzzerFreq(1000); delay(80);
+  buzzerFreq(1400); delay(80);
+  buzzerFreq(0);
 }
 
 void playWarningBeep(int count) {
   int freqs[] = {1400, 1200, 1000, 800};
   for (int i = 0; i < count && i < 4; i++) {
-    tone(buzzerPin, freqs[i]); delay(120);
-    noTone(buzzerPin);        delay(60);
+    buzzerFreq(freqs[i]); delay(120);
+    buzzerFreq(0);        delay(60);
   }
 }
 
@@ -378,6 +392,10 @@ void setup() {
   // Initialize pins — SINGLE RELAY on starter switch
   pinMode(relayPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
+  // Attach LEDC to buzzer pin BEFORE anything else uses it
+  // This claims the LEDC channel so tone() and ledcWriteTone() work correctly
+  ledcAttach(buzzerPin, BUZZER_LEDC_FREQ_HZ, BUZZER_LEDC_RESOLUTION);
+  buzzerFreq(0);  // start silent
   pinMode(lightIndicatorPin, OUTPUT);
   pinMode(vibrationSensorPin, INPUT_PULLUP);
 
@@ -386,7 +404,7 @@ void setup() {
 
   // Relay OFF at startup (HIGH = OFF for active-low relay)
   digitalWrite(relayPin, HIGH);
-  noTone(buzzerPin);
+  buzzerFreq(0);
   digitalWrite(lightIndicatorPin, LOW);
 
   delay(100);
@@ -647,13 +665,13 @@ void loop() {
   float leanAngle = abs(currentRoll);
 
 // ── Non-blocking siren / buzzer tick ─────────────────────────────────────
-  // Non-blocking siren tick � updates frequency every SIREN_TICK ms
+  // Non-blocking siren tick � updates frequency every SIREN_TICK ms
   {
     unsigned long now = millis();
 
     if (buzzerMode == BUZZER_SIREN) {
       if (now - buzzerAlertStart >= BUZZER_ALERT_DURATION) {
-        noTone(buzzerPin);  // silence
+        buzzerFreq(0);
         digitalWrite(lightIndicatorPin, LOW);
         buzzerMode = BUZZER_OFF;
       } else if (now - buzzerLastTick >= SIREN_TICK) {
@@ -667,7 +685,7 @@ void loop() {
           ? (int)(SIREN_FREQ_LOW  + t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW))
           : (int)(SIREN_FREQ_HIGH - t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW));
 
-        tone(buzzerPin, freq);  // update frequency
+        buzzerFreq(freq);
 
         buzzerLightState = sirenGoingUp;
         digitalWrite(lightIndicatorPin, buzzerLightState ? HIGH : LOW);
@@ -680,7 +698,7 @@ void loop() {
     } else if (buzzerMode == BUZZER_BEEP) {
       buzzerMode = BUZZER_OFF;
     }
-    // BUZZER_OFF: noTone() already called when mode was set to OFF
+    // BUZZER_OFF: buzzerFreq(0) already called when mode was set to OFF
   }
 
   // -- Vibration sensor / anti-theft -----------------------------------------
@@ -2013,7 +2031,7 @@ void checkWiFiWatchdog() {
     // Warning beep every 2 seconds while disconnected (before shutdown)
     static unsigned long lastWarningBeep = 0;
     if (!emergencyShutdownTriggered && currentTime - lastWarningBeep >= 2000) {
-      tone(buzzerPin, 1000, 80);  // Short 80ms pip — non-blocking
+      buzzerFreq(1000);  // Short 80ms pip — non-blocking
       lastWarningBeep = currentTime;
       Serial.printf("[WIFI WATCHDOG] ⚠️ Shutdown in %lu ms...\n",
                     WIFI_WATCHDOG_TIMEOUT - disconnectedDuration);
@@ -2389,6 +2407,7 @@ void printSecurityStatus() {
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
+
 
 
 
