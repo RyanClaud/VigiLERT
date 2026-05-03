@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0f1e] via-[#0f1729] to-[#0a0f1e] pb-20">
 
     <!-- ===== HEADER ===== -->
@@ -99,9 +99,9 @@
         </div>
         <div class="flex-1">
           <h3 class="text-xl font-bold text-white flex items-center gap-2">
-            <span>🚨</span> CRASH DETECTED
+            <span>??</span> CRASH DETECTED
           </h3>
-          <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} — Check on rider immediately!</p>
+          <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} � Check on rider immediately!</p>
           <a v-if="location.lat && location.lng"
             :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" target="_blank"
             class="inline-flex items-center gap-1 mt-2 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1 rounded-lg transition-all">
@@ -123,10 +123,10 @@
         </div>
         <div class="flex-1">
           <h3 class="text-xl font-bold text-white flex items-center gap-2">
-            <span>🔒</span> ANTI-THEFT ALERT
+            <span>??</span> ANTI-THEFT ALERT
           </h3>
           <p class="text-white/90 text-sm mt-1">{{ antiTheftAlert.message }}</p>
-          <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} • Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
+          <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} � Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
         </div>
         <button @click="dismissAntiTheftAlert"
           class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all">
@@ -335,7 +335,7 @@
         </div>
       </div>
 
-      <!-- Row 3: Speed Limit Control (Emergency Contact only — interactive) -->
+      <!-- Row 3: Speed Limit Control (Emergency Contact only � interactive) -->
       <div class="relative overflow-hidden rounded-2xl shadow-2xl p-6 mb-6 transition-all duration-500 border border-white/10"
         :style="{ background: speedLimitGradient }">
         <div class="relative">
@@ -592,7 +592,7 @@
 
     <!-- Footer -->
     <footer class="bg-[#0a0f1e] text-center py-5 text-white border-t border-white/5">
-      <p class="font-semibold text-sm text-white/40">© 2025 VIGILERT. All rights reserved.</p>
+      <p class="font-semibold text-sm text-white/40">� 2025 VIGILERT. All rights reserved.</p>
       <p class="text-xs text-white/20 mt-1">Emergency Contact Monitoring System</p>
     </footer>
   </div>
@@ -608,10 +608,10 @@ import EmergencyRiderMap from '../components/EmergencyRiderMap.vue';
 const router = useRouter();
 const route  = useRoute();
 
-// userUID comes from the route param set at login — never hardcoded
+// userUID comes from the route param set at login � never hardcoded
 const userUID = route.params.userId || 'MnzBjTBslZNijOkq732PE91hHa23';
 
-// ── State ──────────────────────────────────────────────────────────────────
+// -- State ------------------------------------------------------------------
 const helmetPaired        = ref(false);
 const motorcyclePaired    = ref(false);
 const engineRunning       = ref(false);
@@ -640,7 +640,7 @@ const antiTheftAlert = ref({
   timestamp: 0
 });
 
-// ── Heartbeat tracking ─────────────────────────────────────────────────────
+// -- Heartbeat tracking -----------------------------------------------------
 const DISCONNECT_TIMEOUT      = 10000;
 const lastHelmetUpdate        = ref(0);
 const lastMotorcycleUpdate    = ref(0);
@@ -649,7 +649,7 @@ let motorcycleDisconnectTimer = null;
 let heartbeatCheckInterval    = null;
 let clockInterval             = null;
 
-// ── Computed ───────────────────────────────────────────────────────────────
+// -- Computed ---------------------------------------------------------------
 const currentSpeedText = computed(() => `${currentSpeed.value.toFixed(1)} km/h`);
 
 const speedLimitGradient = computed(() => {
@@ -683,10 +683,10 @@ const speedZoneLabel = computed(() => {
   return 'Expressway Zone';
 });
 
-// ── Methods ────────────────────────────────────────────────────────────────
+// -- Methods ----------------------------------------------------------------
 const logout = () => router.push('/emergency-login');
 
-// ── Alert sound ────────────────────────────────────────────────────────────
+// -- Alert sound ------------------------------------------------------------
 let currentAudio = null;
 const playAlertSound = () => {
   try {
@@ -702,9 +702,9 @@ const updateSpeedLimitInFirebase = () => {
     .catch(err => console.error('[SPEED LIMIT]', err));
 };
 
-// ── SOS ────────────────────────────────────────────────────────────────────
+// -- SOS --------------------------------------------------------------------
 const triggerSOS = async () => {
-  if (!confirm('🚨 EMERGENCY SOS\n\nThis will send an emergency alert to the rider.\n\nAre you sure?')) return;
+  if (!confirm('?? EMERGENCY SOS\n\nThis will send an emergency alert to the rider.\n\nAre you sure?')) return;
   try {
     await push(dbRef(database, `helmet_public/${userUID}/sos`), {
       timestamp: Date.now(),
@@ -714,32 +714,32 @@ const triggerSOS = async () => {
     });
     alerts.value.unshift({
       type: 'danger',
-      message: '🆘 SOS Alert Sent to Rider!',
+      message: '?? SOS Alert Sent to Rider!',
       details: 'Emergency contact triggered SOS',
       time: new Date().toLocaleTimeString(),
       timestamp: Date.now()
     });
     playAlertSound();
-    alert('✅ SOS Alert sent! The rider has been notified.');
+    alert('? SOS Alert sent! The rider has been notified.');
   } catch (err) {
     console.error('[SOS]', err);
-    alert('❌ Failed to send SOS. Please try again.');
+    alert('? Failed to send SOS. Please try again.');
   }
 };
 
 const dismissAntiTheftAlert = () => { antiTheftAlert.value.active = false; };
 
-// ── Helper: push alert to list ─────────────────────────────────────────────
+// -- Helper: push alert to list ---------------------------------------------
 const addAlert = (type, message, details = '') => {
   alerts.value.unshift({ type, message, details, time: new Date().toLocaleTimeString(), timestamp: Date.now() });
   if (alerts.value.length > 30) alerts.value = alerts.value.slice(0, 30);
   if (['danger', 'crash', 'alcohol', 'warning', 'theft', 'speed'].includes(type)) playAlertSound();
 };
 
-// ── Firebase Listeners ─────────────────────────────────────────────────────
+// -- Firebase Listeners -----------------------------------------------------
 const setupFirebaseListeners = () => {
 
-  // ── 1. Helmet heartbeat ──────────────────────────────────────────────────
+  // -- 1. Helmet heartbeat --------------------------------------------------
   onValue(dbRef(database, `helmet_public/${userUID}/devices/helmet`), snap => {
     const d = snap.val();
     if (d && d.status === 'On') {
@@ -752,7 +752,7 @@ const setupFirebaseListeners = () => {
     }
   });
 
-  // ── 2. Motorcycle heartbeat ──────────────────────────────────────────────
+  // -- 2. Motorcycle heartbeat ----------------------------------------------
   onValue(dbRef(database, `helmet_public/${userUID}/devices/motorcycle`), snap => {
     const d = snap.val();
     if (d && d.status === 'On') {
@@ -777,7 +777,7 @@ const setupFirebaseListeners = () => {
     }
   }, 5000);
 
-  // ── 3. Live data (engine, speed, location, crash flag) ───────────────────
+  // -- 3. Live data (engine, speed, location, crash flag) -------------------
   onValue(dbRef(database, `helmet_public/${userUID}/live`), snap => {
     const d = snap.val();
     if (!d) return;
@@ -789,10 +789,10 @@ const setupFirebaseListeners = () => {
     const wasOver = isOverSpeed.value;
     isOverSpeed.value = spd > speedLimit.value;
 
-    // Speed-over-limit alert — fire once when threshold is crossed
+    // Speed-over-limit alert � fire once when threshold is crossed
     if (isOverSpeed.value && !wasOver) {
-      addAlert('speed', '⚡ Speed Limit Exceeded!',
-        `Rider is going ${spd.toFixed(0)} km/h — limit is ${speedLimit.value} km/h`);
+      addAlert('speed', '? Speed Limit Exceeded!',
+        `Rider is going ${spd.toFixed(0)} km/h � limit is ${speedLimit.value} km/h`);
     }
 
     if (spd > 0) {
@@ -820,7 +820,7 @@ const setupFirebaseListeners = () => {
     }
   });
 
-  // ── 4. Alcohol — dedicated path (same as user dashboard) ─────────────────
+  // -- 4. Alcohol � dedicated path (same as user dashboard) -----------------
   onValue(dbRef(database, `helmet_public/${userUID}/alcohol/status`), snap => {
     const d = snap.val();
     if (!d) return;
@@ -830,12 +830,12 @@ const setupFirebaseListeners = () => {
 
     // Alert when alcohol is newly detected
     if (status === 'Danger' && prev !== 'Danger') {
-      addAlert('alcohol', '🍺 Alcohol Detected on Rider!',
-        `Sensor value: ${d.sensorValue || 'N/A'} — Engine may be blocked`);
+      addAlert('alcohol', '?? Alcohol Detected on Rider!',
+        `Sensor value: ${d.sensorValue || 'N/A'} � Engine may be blocked`);
     }
   });
 
-  // ── 5. Crash history ─────────────────────────────────────────────────────
+  // -- 5. Crash history -----------------------------------------------------
   const seenCrashKeys = new Set();
   let initialCrashLoadDone = false;
   setTimeout(() => { initialCrashLoadDone = true; }, 3000);
@@ -867,12 +867,12 @@ const setupFirebaseListeners = () => {
     crashDisplayStatus.value  = 'Alert';
     crashDisplayMessage.value = 'Crash Detected';
 
-    addAlert('crash', '🚨 CRASH DETECTED!',
-      `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | ${
+    addAlert('crash', '?? CRASH DETECTED!',
+      `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}� | ${
         crashEvent.hasGPS ? `${crashEvent.lat?.toFixed(5)}, ${crashEvent.lng?.toFixed(5)}` : 'No GPS'}`);
   });
 
-  // ── 6. Anti-theft status ─────────────────────────────────────────────────
+  // -- 6. Anti-theft status -------------------------------------------------
   onValue(dbRef(database, `${userUID}/antiTheft/status`), snap => {
     const d = snap.val();
     if (!d || !d.alertActive) return;
@@ -887,10 +887,10 @@ const setupFirebaseListeners = () => {
       severity: d.alertLevel >= 3 ? 'high' : d.alertLevel >= 2 ? 'medium' : 'low',
       timestamp: ts
     };
-    addAlert('theft', '🚨 Anti-Theft Alert!', antiTheftAlert.value.message);
+    addAlert('theft', '?? Anti-Theft Alert!', antiTheftAlert.value.message);
   });
 
-  // ── 7. Theft alert events ─────────────────────────────────────────────────
+  // -- 7. Theft alert events -------------------------------------------------
   const seenTheftKeys = new Set();
   let initialTheftLoadDone = false;
   setTimeout(() => { initialTheftLoadDone = true; }, 3000);
@@ -911,10 +911,10 @@ const setupFirebaseListeners = () => {
       severity: a.severity || 'high',
       timestamp: Date.now()
     };
-    addAlert('theft', '🚨 Anti-Theft Alert!', antiTheftAlert.value.message);
+    addAlert('theft', '?? Anti-Theft Alert!', antiTheftAlert.value.message);
   });
 
-  // ── 8. Arduino /alerts path (crash, alcohol, theft written by Arduino) ────
+  // -- 8. Arduino /alerts path (crash, alcohol, theft written by Arduino) ----
   const seenAlertKeys = new Set();
   let initialAlertLoadDone = false;
   setTimeout(() => { initialAlertLoadDone = true; }, 3000);
@@ -930,14 +930,14 @@ const setupFirebaseListeners = () => {
     addAlert(a.type || 'info', a.message || 'System Alert', a.details || '');
   });
 
-  // ── 9. Speed limit sync ───────────────────────────────────────────────────
+  // -- 9. Speed limit sync ---------------------------------------------------
   onValue(dbRef(database, `${userUID}/speedLimit`), snap => {
     const d = snap.val();
     if (d !== null && d !== undefined) speedLimit.value = d;
   });
 };
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────
+// -- Lifecycle --------------------------------------------------------------
 onMounted(() => {
   setupFirebaseListeners();
   clockInterval = setInterval(() => { currentTime.value = new Date().toLocaleTimeString(); }, 1000);
@@ -945,386 +945,6 @@ onMounted(() => {
     navigator.geolocation.getCurrentPosition(
       pos => { emergencyContactLocation.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }; },
       err => console.warn('[GEO]', err)
-    );
-  }
-});
-
-onUnmounted(() => {
-  if (clockInterval) clearInterval(clockInterval);
-  if (heartbeatCheckInterval) clearInterval(heartbeatCheckInterval);
-  if (helmetDisconnectTimer) clearTimeout(helmetDisconnectTimer);
-  if (motorcycleDisconnectTimer) clearTimeout(motorcycleDisconnectTimer);
-});
-</script>
-
-// ── State ──────────────────────────────────────────────────────────────────
-const helmetPaired      = ref(false);
-const motorcyclePaired  = ref(false);
-const engineRunning     = ref(false);
-const currentSpeed      = ref(0);
-const speedLimit        = ref(60);
-const isOverSpeed       = ref(false);
-const alcoholStatus     = ref('Safe');
-const crashDisplayStatus  = ref('Stable');
-const crashDisplayMessage = ref('Normal');
-const crashEvents         = ref([]);  // crash history with GPS locations
-const isTrackingRider   = ref(false);
-const emergencyContactLocation = ref({ lat: null, lng: null });
-const activeTab         = ref('Rider Location');
-const alerts            = ref([]);
-const speedHistory      = ref([]);
-const location          = ref({ lat: null, lng: null });
-const currentTime       = ref(new Date().toLocaleTimeString());
-const satelliteCount    = ref(0);
-
-// ── Heartbeat tracking (mirrors user dashboard logic) ──────────────────────
-const DISCONNECT_TIMEOUT = 10000; // 10 seconds — same as user dashboard
-const lastHelmetUpdate     = ref(0);
-const lastMotorcycleUpdate = ref(0);
-let helmetDisconnectTimer     = null;
-let motorcycleDisconnectTimer = null;
-let heartbeatCheckInterval    = null;
-let clockInterval             = null;
-
-// ── Computed ───────────────────────────────────────────────────────────────
-const currentSpeedText = computed(() =>
-  `${currentSpeed.value.toFixed(1)} km/h`
-);
-
-// Speed limit gradient background (green → yellow → orange → red)
-const speedLimitGradient = computed(() => {
-  const pct = speedLimit.value / 120;
-  if (pct <= 0.25)      return 'linear-gradient(135deg, #16a34a, #22c55e)';
-  if (pct <= 0.5)       return 'linear-gradient(135deg, #ca8a04, #eab308)';
-  if (pct <= 0.75)      return 'linear-gradient(135deg, #ea580c, #f97316)';
-  return                       'linear-gradient(135deg, #dc2626, #ef4444)';
-});
-
-// Progress bar fill color
-const speedBarColor = computed(() => {
-  const pct = speedLimit.value / 120;
-  if (pct <= 0.25) return '#22c55e';
-  if (pct <= 0.5)  return '#eab308';
-  if (pct <= 0.75) return '#f97316';
-  return '#ef4444';
-});
-
-const speedZoneColor = computed(() => {
-  const pct = speedLimit.value / 120;
-  if (pct <= 0.25) return 'bg-green-400';
-  if (pct <= 0.5)  return 'bg-yellow-400';
-  if (pct <= 0.75) return 'bg-orange-400';
-  return 'bg-red-500';
-});
-
-const speedZoneLabel = computed(() => {
-  if (speedLimit.value <= 30)  return 'School / Residential Zone';
-  if (speedLimit.value <= 60)  return 'City / Urban Zone';
-  if (speedLimit.value <= 90)  return 'Highway Zone';
-  return 'Expressway Zone';
-});
-
-// ── Methods ────────────────────────────────────────────────────────────────
-const logout = () => router.push('/emergency-login');
-
-const toggleRiderTracking = () => {
-  isTrackingRider.value = !isTrackingRider.value;
-};
-
-// ── Alert sound ────────────────────────────────────────────────────────────
-let currentAudio = null;
-
-const playAlertSound = () => {
-  try {
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
-    }
-    currentAudio = new Audio('/sounds/alert.mp3');
-    currentAudio.play().catch(err => console.warn('[SOUND] Playback failed:', err));
-    currentAudio.addEventListener('ended', () => { currentAudio = null; });
-  } catch (err) {
-    console.error('[SOUND] Error:', err);
-  }
-};
-
-const updateSpeedLimitInFirebase = () => {
-  const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
-  set(dbRef(database, `${userUID}/speedLimit`), speedLimit.value)
-    .then(() => console.log('[SPEED LIMIT] Updated to', speedLimit.value))
-    .catch(err => console.error('[SPEED LIMIT] Error:', err));
-};
-
-// ── SOS: writes to Firebase path that Dashboard.vue listens on ─────────────
-const triggerSOS = async () => {
-  const confirmed = confirm(
-    '🚨 EMERGENCY SOS\n\nThis will send an emergency alert to the rider.\n\nAre you sure?'
-  );
-  if (!confirmed) return;
-
-  const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
-  try {
-    const sosRef = dbRef(database, `helmet_public/${userUID}/sos`);
-    await push(sosRef, {
-      timestamp: Date.now(),
-      triggeredBy: 'emergency_contact',
-      emergencyContactLocation: {
-        lat: emergencyContactLocation.value.lat,
-        lng: emergencyContactLocation.value.lng
-      },
-      status: 'active'
-    });
-
-    // Add local alert
-    alerts.value.unshift({
-      type: 'danger',
-      message: '🆘 SOS Alert Sent to Rider!',
-      details: 'Emergency contact triggered SOS',
-      time: new Date().toLocaleTimeString()
-    });
-
-    playAlertSound();
-    alert('✅ SOS Alert sent! The rider has been notified.');
-  } catch (err) {
-    console.error('[SOS] Error:', err);
-    alert('❌ Failed to send SOS. Please try again.');
-  }
-};
-
-// ── Firebase Listeners ─────────────────────────────────────────────────────
-const setupFirebaseListeners = () => {
-  const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
-
-  // ── Helmet: heartbeat-aware connection detection ──────────────────────────
-  onValue(dbRef(database, `helmet_public/${userUID}/devices/helmet`), snap => {
-    const d = snap.val();
-
-    if (d && d.status === 'On') {
-      // Fresh heartbeat received — device is online
-      lastHelmetUpdate.value = Date.now();
-
-      if (!helmetPaired.value) {
-        helmetPaired.value = true;
-        console.log('[HELMET] ✓ Connected');
-      }
-
-      // Cancel any pending disconnect timer
-      if (helmetDisconnectTimer) {
-        clearTimeout(helmetDisconnectTimer);
-        helmetDisconnectTimer = null;
-      }
-    } else {
-      // Firebase fired but status is not 'On' — start disconnect countdown
-      if (helmetPaired.value) {
-        console.log('[HELMET] No heartbeat — waiting 10s to confirm disconnect...');
-        if (helmetDisconnectTimer) clearTimeout(helmetDisconnectTimer);
-        helmetDisconnectTimer = setTimeout(() => {
-          helmetPaired.value = false;
-          console.log('[HELMET] ✗ Disconnected (confirmed after 10s)');
-        }, DISCONNECT_TIMEOUT);
-      }
-    }
-  });
-
-  // ── Motorcycle: heartbeat-aware connection detection ──────────────────────
-  onValue(dbRef(database, `helmet_public/${userUID}/devices/motorcycle`), snap => {
-    const d = snap.val();
-
-    if (d && d.status === 'On') {
-      lastMotorcycleUpdate.value = Date.now();
-
-      if (!motorcyclePaired.value) {
-        motorcyclePaired.value = true;
-        console.log('[MOTORCYCLE] ✓ Connected');
-      }
-
-      if (motorcycleDisconnectTimer) {
-        clearTimeout(motorcycleDisconnectTimer);
-        motorcycleDisconnectTimer = null;
-      }
-
-      // GPS satellite count from motorcycle heartbeat
-      if (d.gps && d.gps.satellites !== undefined) {
-        satelliteCount.value = d.gps.satellites;
-      }
-    } else {
-      if (motorcyclePaired.value) {
-        console.log('[MOTORCYCLE] No heartbeat — waiting 10s to confirm disconnect...');
-        if (motorcycleDisconnectTimer) clearTimeout(motorcycleDisconnectTimer);
-        motorcycleDisconnectTimer = setTimeout(() => {
-          motorcyclePaired.value = false;
-          console.log('[MOTORCYCLE] ✗ Disconnected (confirmed after 10s)');
-        }, DISCONNECT_TIMEOUT);
-      }
-    }
-  });
-
-  // ── Heartbeat staleness check (runs every 5s, same logic as user dashboard) ─
-  heartbeatCheckInterval = setInterval(() => {
-    const now = Date.now();
-
-    // Helmet stale check
-    if (lastHelmetUpdate.value > 0 && now - lastHelmetUpdate.value > DISCONNECT_TIMEOUT && helmetPaired.value) {
-      helmetPaired.value = false;
-      console.log('[HELMET] ✗ Stale heartbeat — marked disconnected');
-    }
-
-    // Motorcycle stale check
-    if (lastMotorcycleUpdate.value > 0 && now - lastMotorcycleUpdate.value > DISCONNECT_TIMEOUT && motorcyclePaired.value) {
-      motorcyclePaired.value = false;
-      console.log('[MOTORCYCLE] ✗ Stale heartbeat — marked disconnected');
-    }
-  }, 5000);
-
-  // Live data
-  onValue(dbRef(database, `helmet_public/${userUID}/live`), snap => {
-    const d = snap.val();
-    if (!d) return;
-
-    // Engine — this is the source of truth for rider status
-    engineRunning.value = !!d.engineRunning;
-
-    // Speed
-    const spd = d.speed || 0;
-    currentSpeed.value = spd;
-    isOverSpeed.value = spd > speedLimit.value;
-    if (spd > 0) {
-      speedHistory.value.push(spd);
-      if (speedHistory.value.length > 50) speedHistory.value.shift();
-    }
-
-    // Location
-    if (d.locationLat && d.locationLng) {
-      location.value = { lat: d.locationLat, lng: d.locationLng };
-    }
-
-    // Satellite count from GPS module
-    if (d.gps && d.gps.satellites !== undefined) {
-      satelliteCount.value = d.gps.satellites;
-    } else if (d.satellites !== undefined) {
-      satelliteCount.value = d.satellites;
-    }
-
-    // Alcohol
-    alcoholStatus.value = d.alcoholDetected ? 'Danger' : 'Safe';
-
-    // Crash
-    crashDisplayStatus.value  = d.crashDetected ? 'Alert'         : 'Stable';
-    crashDisplayMessage.value = d.crashDetected ? 'Crash Detected' : 'Normal';
-  });
-
-  // ── Crash history listener ────────────────────────────────────────────
-  // Use key-based dedup — never filter by Arduino timestamp (clock is fake)
-  const seenCrashKeys = new Set();
-  let initialCrashLoadDone = false;
-  setTimeout(() => { initialCrashLoadDone = true; }, 3000);
-
-  onChildAdded(dbRef(database, `helmet_public/${userUID}/crashes`), (snap) => {
-    const key = snap.key;
-    const event = snap.val();
-    if (!event || !event.timestamp) return;
-
-    // Skip pre-existing crashes during initial load
-    if (!initialCrashLoadDone) {
-      seenCrashKeys.add(key);
-      return;
-    }
-    if (seenCrashKeys.has(key)) return;
-    seenCrashKeys.add(key);
-
-    const crashEvent = {
-      timestamp: event.timestamp,
-      impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
-      roll: event.roll || event.leanAngle || 0,
-      lat: event.lat || (event.location && event.location.lat) || null,
-      lng: event.lng || (event.location && event.location.lng) || null,
-      hasGPS: event.hasGPS || event.gpsValid || (event.lat && event.lat !== 0),
-      severity: event.severity || 'Medium',
-      time: new Date().toLocaleTimeString(),
-      speed: event.speed || 0
-    };
-
-    // Keep only the latest 5 crashes
-    crashEvents.value.unshift(crashEvent);
-    if (crashEvents.value.length > 5) crashEvents.value = crashEvents.value.slice(0, 5);
-
-    // Update status cards
-    crashDisplayStatus.value  = 'Alert';
-    crashDisplayMessage.value = 'Crash Detected';
-
-    // Add to alerts list
-    alerts.value.unshift({
-      type: 'crash',
-      message: '🚨 CRASH DETECTED!',
-      details: `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | ${crashEvent.hasGPS ? `${crashEvent.lat?.toFixed(5)}, ${crashEvent.lng?.toFixed(5)}` : 'No GPS'}`,
-      time: crashEvent.time,
-      timestamp: Date.now()
-    });
-    if (alerts.value.length > 20) alerts.value = alerts.value.slice(0, 20);
-
-    // Play alert sound
-    playAlertSound();
-
-    console.log('[CRASH] 🚨 New crash event displayed:', crashEvent);
-  });
-
-  // Speed limit (sync from rider dashboard changes)
-  onValue(dbRef(database, `${userUID}/speedLimit`), snap => {
-    const d = snap.val();
-    if (d !== null && d !== undefined) speedLimit.value = d;
-  });
-
-  // Alerts — use onChildAdded with key dedup so new alerts always show
-  // regardless of Arduino clock vs real time
-  const seenAlertKeys = new Set();
-  let initialAlertLoadDone = false;
-  setTimeout(() => { initialAlertLoadDone = true; }, 3000);
-
-  onChildAdded(dbRef(database, `helmet_public/${userUID}/alerts`), (snap) => {
-    const key = snap.key;
-    const a = snap.val();
-    if (!a) return;
-
-    if (!initialAlertLoadDone) {
-      seenAlertKeys.add(key);
-      return;
-    }
-    if (seenAlertKeys.has(key)) return;
-    seenAlertKeys.add(key);
-
-    const type = a.type || 'info';
-    alerts.value.unshift({
-      type,
-      message: a.message || 'System Alert',
-      details: a.details || '',
-      time: new Date().toLocaleTimeString(),
-      timestamp: Date.now()
-    });
-    if (alerts.value.length > 20) alerts.value = alerts.value.slice(0, 20);
-
-    if (['danger', 'crash', 'alcohol', 'warning', 'theft', 'speed'].includes(type)) {
-      playAlertSound();
-    }
-  });
-};
-
-// ── Lifecycle ──────────────────────────────────────────────────────────────
-onMounted(() => {
-  setupFirebaseListeners();
-
-  clockInterval = setInterval(() => {
-    currentTime.value = new Date().toLocaleTimeString();
-  }, 1000);
-
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        emergencyContactLocation.value = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        };
-      },
-      err => console.warn('[GEO] Error:', err)
     );
   }
 });
