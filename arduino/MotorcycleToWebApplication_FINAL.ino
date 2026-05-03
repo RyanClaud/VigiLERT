@@ -253,14 +253,14 @@ void startSiren() {
   sirenPhaseStart  = millis();
   sirenGoingUp     = true;
   sirenCurrentFreq = SIREN_FREQ_LOW;
-  tone(buzzerPin, SIREN_FREQ_LOW);
+  ledcWriteTone(buzzerPin, SIREN_FREQ_LOW);  // kick off immediately
   digitalWrite(lightIndicatorPin, HIGH);
-  Serial.println("[SIREN] 🚨 Siren started");
+  Serial.println("[SIREN] Siren started");
 }
 
 void stopSiren() {
   buzzerMode = BUZZER_OFF;
-  noTone(buzzerPin);
+  ledcWriteTone(buzzerPin, 0);  // silence
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Siren stopped");
 }
@@ -268,22 +268,17 @@ void stopSiren() {
 // Short pleasant double-chirp — used for confirmations (arming, blocked start)
 // Two quick rising tones: 1000Hz → 1400Hz, 80ms each. Non-blocking via tone duration.
 void playConfirmBeep() {
-  tone(buzzerPin, 1000, 80);
-  delay(100);
-  tone(buzzerPin, 1400, 80);
-  delay(100);
-  noTone(buzzerPin);
+  ledcWriteTone(buzzerPin, 1000); delay(80);
+  ledcWriteTone(buzzerPin, 1400); delay(80);
+  ledcWriteTone(buzzerPin, 0);
 }
 
-// Short warning triple-beep — used for security blocks (WiFi timeout, helmet timeout)
-// Three descending tones: 1400→1200→1000Hz. Signals "blocked" without being harsh.
-void playWarningBeep(int count = 3) {
+void playWarningBeep(int count) {
   int freqs[] = {1400, 1200, 1000, 800};
   for (int i = 0; i < count && i < 4; i++) {
-    tone(buzzerPin, freqs[i], 120);
-    delay(180);
+    ledcWriteTone(buzzerPin, freqs[i]); delay(120);
+    ledcWriteTone(buzzerPin, 0);        delay(60);
   }
-  noTone(buzzerPin);
 }
 
 // Forward declarations — security system
@@ -613,49 +608,41 @@ void loop() {
   }
   float leanAngle = abs(currentRoll);
 
-  // ── Non-blocking siren / buzzer tick ─────────────────────────────────────
+// ── Non-blocking siren / buzzer tick ─────────────────────────────────────
+  // Uses ledcWriteTone() for reliable frequency sweeping on ESP32 Arduino core 3.x
   {
     unsigned long now = millis();
 
     if (buzzerMode == BUZZER_SIREN) {
-      // Check if total alert duration has expired
       if (now - buzzerAlertStart >= BUZZER_ALERT_DURATION) {
-        noTone(buzzerPin);
+        ledcWriteTone(buzzerPin, 0);  // silence
         digitalWrite(lightIndicatorPin, LOW);
         buzzerMode = BUZZER_OFF;
       } else if (now - buzzerLastTick >= SIREN_TICK) {
         buzzerLastTick = now;
 
-        // Calculate how far through the current half-period we are (0.0 – 1.0)
         unsigned long phaseElapsed = now - sirenPhaseStart;
         float t = (float)phaseElapsed / (float)SIREN_HALF_PERIOD;
         if (t > 1.0f) t = 1.0f;
 
-        // Linear interpolation between low and high frequency
         int freq = sirenGoingUp
           ? (int)(SIREN_FREQ_LOW  + t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW))
           : (int)(SIREN_FREQ_HIGH - t * (SIREN_FREQ_HIGH - SIREN_FREQ_LOW));
 
-        tone(buzzerPin, freq);
+        ledcWriteTone(buzzerPin, freq);  // ESP32-native, reliable sweep
 
-        // Flash LED in sync with siren direction
         buzzerLightState = sirenGoingUp;
         digitalWrite(lightIndicatorPin, buzzerLightState ? HIGH : LOW);
 
-        // Flip direction when half-period completes
         if (phaseElapsed >= SIREN_HALF_PERIOD) {
-          sirenGoingUp = !sirenGoingUp;
+          sirenGoingUp    = !sirenGoingUp;
           sirenPhaseStart = now;
         }
       }
     } else if (buzzerMode == BUZZER_BEEP) {
-      // Simple double-beep for arming confirmation — runs once then stops
-      // (handled inline at arm time with tiny delays — acceptable as it's once-only)
       buzzerMode = BUZZER_OFF;
-    } else {
-      // BUZZER_OFF — ensure silence
-      // (noTone already called when mode was set to OFF)
     }
+    // BUZZER_OFF: ledcWriteTone(0) already called when mode was set to OFF
   }
 
   // -- Vibration sensor / anti-theft -----------------------------------------
@@ -788,12 +775,9 @@ void loop() {
     lastAlcoholCheck = millis();
   }
 
-  // ── Alcohol safety enforcement — runs every loop, not just on state change ──
-  // If alcohol is detected AND engine is running, cut ignition immediately.
-  // This catches cases where engine was started before alcohol was detected,
-  // or where the state-change check in checkAlcoholStatus() was missed.
-  if (alcoholDetected && engineRunning && helmetConnected) {
-    Serial.println("\n🚨 ALCOHOL DETECTED — cutting ignition immediately!");
+  // ── Alcohol safety enforcement — runs every loop ─────────────────────────
+  if (alcoholDetected && engineRunning) {
+    Serial.println("[ALCOHOL] DANGER — cutting ignition!");
     stopEngine();
   }
 
@@ -993,27 +977,70 @@ void triggerTheftAlert() {
 }
 
 void initializeGSM() {
-  Serial.println("\n[GSM] Initializing...");
-  delay(3000);
-  
-  gsmSerial.println("AT");
-  delay(1000);
-  
-  if (gsmSerial.available()) {
-    String response = gsmSerial.readString();
+  Serial.println("\n[GSM] Initializing SIM800L...");
+
+  // SIM800L needs up to 5 seconds to boot and register to network
+  // Flush any startup garbage first
+  delay(2000);
+  while (gsmSerial.available()) gsmSerial.read();
+
+  // Try AT handshake up to 10 times with 1-second gaps
+  for (int attempt = 1; attempt <= 10; attempt++) {
+    gsmSerial.println("AT");
+    delay(1000);
+
+    String response = "";
+    unsigned long start = millis();
+    while (millis() - start < 500) {
+      if (gsmSerial.available()) response += (char)gsmSerial.read();
+    }
+
+    Serial.printf("[GSM] Attempt %d: %s\n", attempt,
+                  response.length() > 0 ? response.c_str() : "(no response)");
+
     if (response.indexOf("OK") != -1) {
       gsmReady = true;
-      Serial.println("[GSM] ✅ Ready!");
+      Serial.println("[GSM] ✅ Module responding!");
+      break;
     }
   }
 
   if (!gsmReady) {
-    Serial.println("[GSM] ⚠️ Not responding");
+    Serial.println("[GSM] ❌ Module not responding after 10 attempts");
+    Serial.println("[GSM] Check: power supply (4.2V), baud rate (9600), RX/TX wiring");
     return;
   }
 
-  gsmSerial.println("AT+CMGF=1");
+  // Echo off — cleaner responses
+  gsmSerial.println("ATE0");
+  delay(500);
+
+  // Check SIM card
+  gsmSerial.println("AT+CPIN?");
   delay(1000);
+  String simResp = "";
+  while (gsmSerial.available()) simResp += (char)gsmSerial.read();
+  Serial.println("[GSM] SIM: " + simResp);
+
+  // Check signal strength
+  gsmSerial.println("AT+CSQ");
+  delay(500);
+  String csqResp = "";
+  while (gsmSerial.available()) csqResp += (char)gsmSerial.read();
+  Serial.println("[GSM] Signal: " + csqResp);
+
+  // Check network registration
+  gsmSerial.println("AT+CREG?");
+  delay(500);
+  String regResp = "";
+  while (gsmSerial.available()) regResp += (char)gsmSerial.read();
+  Serial.println("[GSM] Network: " + regResp);
+
+  // Set SMS text mode
+  gsmSerial.println("AT+CMGF=1");
+  delay(500);
+
+  Serial.println("[GSM] ✅ Initialization complete");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1581,28 +1608,27 @@ void checkAlcoholStatus() {
       }
     }
 
-    // Update state — only act on alcohol if helmet is connected
-    // (prevents stale Firebase data from triggering shutdown)
+    // Update alcohol state
     if (currentAlcoholState != alcoholDetected) {
       alcoholDetected = currentAlcoholState;
       lastAlcoholState = currentAlcoholState;
+      Serial.printf("[ALCOHOL] State changed to: %s\n", alcoholDetected ? "DANGER" : "SAFE");
     }
 
-    // Always enforce: if alcohol detected and helmet is connected, cut engine
-    if (alcoholDetected && helmetConnected && engineRunning) {
-      Serial.println("[ALCOHOL] 🚨 Alcohol confirmed — cutting ignition!");
+    // Enforce engine shutdown when alcohol is detected
+    // Note: removed helmetConnected guard — if Firebase says Danger, act on it
+    if (alcoholDetected && engineRunning) {
+      Serial.println("[ALCOHOL] DANGER + engine running — cutting ignition!");
       triggerAlcoholShutdown();
-    } else if (currentAlcoholState && !helmetConnected) {
-      Serial.println("[ALCOHOL] ⚠️ Danger reading but helmet not connected — ignoring stale data");
-      alcoholDetected = false;
     }
-    
-    // ✅ FAST DEBUG: Alcohol status every 1 second
+
+    // Debug every 2 seconds
     static unsigned long lastDebug = 0;
-    if (millis() - lastDebug > 1000) {
-      Serial.printf("[ALCOHOL] Status: %s | Value: %d | Threshold: 600\n", 
-                    alcoholDetected ? "DANGER" : "SAFE", 
-                    sensorValue);
+    if (millis() - lastDebug > 2000) {
+      Serial.printf("[ALCOHOL] %s | Value: %d | Helmet: %s\n",
+                    alcoholDetected ? "DANGER" : "SAFE",
+                    sensorValue,
+                    helmetConnected ? "connected" : "disconnected");
       lastDebug = millis();
     }
   } else {
