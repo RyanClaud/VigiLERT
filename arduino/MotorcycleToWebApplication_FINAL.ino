@@ -15,6 +15,10 @@
 // ✅ Correct Firebase paths
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── Hardware feature flags ─────────────────────────────────────────────────
+// Set to false if the sensor is not physically connected, to bypass it
+#define MPU6050_ENABLED true   // Set false to bypass crash detection (no MPU6050 wired)
+
 // WiFi Configuration
 const char* ssid = "DPWH";
 const char* password = "12345678900";
