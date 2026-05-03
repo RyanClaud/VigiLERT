@@ -2246,13 +2246,13 @@ const checkDeviceTimeouts = () => {
   const timeSinceMotorcycleUpdate = now - lastMotorcycleUpdate.value;
   
   // Helmet timeout check
-  if (lastHelmetUpdate.value > 0 && timeSinceHelmetUpdate > 10000 && helmetPaired.value) {
+  if (lastHelmetUpdate.value > 0 && timeSinceHelmetUpdate > 15000 && helmetPaired.value) {
     console.log(`[HELMET] ⚠️ No update for ${(timeSinceHelmetUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     helmetPaired.value = false;
   }
   
   // Motorcycle timeout check
-  if (lastMotorcycleUpdate.value > 0 && timeSinceMotorcycleUpdate > 10000 && motorcyclePaired.value) {
+  if (lastMotorcycleUpdate.value > 0 && timeSinceMotorcycleUpdate > 15000 && motorcyclePaired.value) {
     console.log(`[MOTORCYCLE] ⚠️ No update for ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     motorcyclePaired.value = false;
   }

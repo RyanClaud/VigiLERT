@@ -98,64 +98,66 @@ const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for fast
 bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
-const unsigned long ALCOHOL_CHECK_INTERVAL = 1000;  // 1s — reduced from 250ms to ease HTTP load
+const unsigned long ALCOHOL_CHECK_INTERVAL = 2000;  // 2s — don't compete with heartbeat/button
 
 // ✅ ENHANCED: Comprehensive security system with BALANCED timeouts
 bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
-const unsigned long HELMET_CHECK_INTERVAL = 2000;  // 2s — reduced from 500ms to ease HTTP load
-uint64_t lastHelmetHeartbeat = 0;  // Track last helmet heartbeat time
-const unsigned long HELMET_TIMEOUT = 10000;  // ✅ FIXED: 10-second timeout (was 5s - too strict)
-const unsigned long HELMET_FORCE_OFF_TIMEOUT = 15000;  // Force status to Off after 15 seconds
-unsigned long lastHelmetUpdateTime = 0;  // Track when we last saw an update
-bool helmetStatusForcedOff = false;  // Track if we forced the status to Off
+const unsigned long HELMET_CHECK_INTERVAL = 3000;  // 3s — helmet updates every 1s so 3s is safe
+uint64_t lastHelmetHeartbeat = 0;
+const unsigned long HELMET_TIMEOUT = 15000;  // 15s — generous to avoid false disconnects
+const unsigned long HELMET_FORCE_OFF_TIMEOUT = 20000;
+unsigned long lastHelmetUpdateTime = 0;
+bool helmetStatusForcedOff = false;
 
-// ✅ FIXED: WiFi connection monitoring with BALANCED timeouts
+// WiFi connection monitoring
 unsigned long lastWiFiCheck = 0;
 unsigned long lastWiFiConnected = 0;
-const unsigned long WIFI_CHECK_INTERVAL = 1000;  // Check WiFi every 1 second
-const unsigned long WIFI_TIMEOUT = 15000;  // ✅ FIXED: 15-second WiFi timeout (was 5s - too strict)
+const unsigned long WIFI_CHECK_INTERVAL = 1000;
+const unsigned long WIFI_TIMEOUT = 20000;  // 20s — tolerates brief WiFi hiccups
 
-// ✅ FIXED: WiFi Watchdog with BALANCED timeout and alert
-bool wifiWatchdogActive = false;  // Tracks if watchdog is monitoring
-unsigned long wifiDisconnectedTime = 0;  // When WiFi was lost
-const unsigned long WIFI_WATCHDOG_TIMEOUT = 10000;  // ✅ FIXED: 10 seconds (was 3s - too aggressive)
-const unsigned long WIFI_WATCHDOG_ALERT_TIME = 5000;  // Alert at 5 seconds
+// WiFi Watchdog
+bool wifiWatchdogActive = false;
+unsigned long wifiDisconnectedTime = 0;
+const unsigned long WIFI_WATCHDOG_TIMEOUT = 15000;  // 15s before engine cut
+const unsigned long WIFI_WATCHDOG_ALERT_TIME = 8000; // Alert at 8s
 bool emergencyShutdownTriggered = false;
-bool wifiDisconnectionAlertSent = false;  // Track if alert was sent
+bool wifiDisconnectionAlertSent = false;
 
-// ✅ SECURITY: Startup WiFi Check - Prevents theft if device boots without WiFi
-unsigned long deviceBootTime = 0;  // When device started
-const unsigned long STARTUP_WIFI_TIMEOUT = 6000;  // 6 seconds to connect WiFi on startup
-bool startupWiFiCheckComplete = false;  // Tracks if startup check is done
-bool startupShutdownTriggered = false;  // Prevents multiple startup shutdowns
+// Startup WiFi Check
+unsigned long deviceBootTime = 0;
+const unsigned long STARTUP_WIFI_TIMEOUT = 10000;  // 10s — more time to connect on boot
+bool startupWiFiCheckComplete = false;
+bool startupShutdownTriggered = false;
 
-// ✅ STARTER SAFETY: Timing for starter safety (from reference code)
+// Starter safety
 unsigned long starterStartTime = 0;
 unsigned long lastStarterAttempt = 0;
 bool starterActive = false;
-const unsigned long STARTER_TIMEOUT = 3000;      // 3 seconds max
-const unsigned long STARTER_COOLDOWN = 10000;    // 10 seconds between attempts
+const unsigned long STARTER_TIMEOUT = 3000;
+const unsigned long STARTER_COOLDOWN = 5000;   // Reduced from 10s for faster retry
 
-// ✅ NEW: Comprehensive security state
+// Security check
 bool securitySystemActive = true;
 unsigned long lastSecurityCheck = 0;
-const unsigned long SECURITY_CHECK_INTERVAL = 500;  // Check security every 500ms
+const unsigned long SECURITY_CHECK_INTERVAL = 1000;  // 1s — was 500ms, reduces CPU pressure
 
 // Automatic engine control
 bool autoEngineControl = false;
 bool engineStartRequested = false;
 
-// Dashboard button control
+// Dashboard button control — separate fast poll from slow autoMode check
 bool lastDashboardButtonState = false;
 unsigned long lastButtonCheck = 0;
-const unsigned long BUTTON_CHECK_INTERVAL = 200;  // 200ms — fast enough for responsive control
+const unsigned long BUTTON_CHECK_INTERVAL = 150;  // 150ms button poll — fast response
+unsigned long lastAutoModeCheck = 0;
+const unsigned long AUTO_MODE_CHECK_INTERVAL = 5000;  // autoMode only needs checking every 5s
 
 // Device heartbeat
 unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 1000;  // 1 second
+const unsigned long HEARTBEAT_INTERVAL = 2000;  // 2s heartbeat — dashboard timeout is 15s so this is fine
 
-// ✅ NEW: Network security timeouts
+// Network tracking
 unsigned long lastWiFiConnection = 0;
 unsigned long lastFirebaseSuccess = 0;
 const unsigned long NETWORK_TIMEOUT = 30000;  // 30 seconds without network = auto shutdown
@@ -249,6 +251,7 @@ void printSecurityStatus();
 // SMS alert functions
 bool sendSMS(String phoneNumber, String message);
 void sendSMSToAllContacts(String message, String alertType);
+void checkAutoMode();
 
 void setup() {
   Serial.begin(115200);
@@ -778,32 +781,34 @@ bool sendMotorcycleHeartbeat(bool isActive) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
   uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
-  
+
   StaticJsonDocument<128> doc;
   doc["status"] = isActive ? "On" : "Off";
   doc["lastHeartbeat"] = timestamp;
   doc["timestamp"] = timestamp;
-  
+
   String payload;
   serializeJson(doc, payload);
-  
+
   HTTPClient http;
+  http.setTimeout(1500);  // Explicit 1.5s timeout — must complete before next heartbeat
   String url = firebaseHost + "/helmet_public/" + userUID + "/devices/motorcycle.json?auth=" + firebaseAuth;
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  
+
   int code = http.PUT(payload);
-  
+  http.end();
+
   if (code == HTTP_CODE_OK) {
-    Serial.printf("[HEARTBEAT] ✓ Sent (timestamp: %llu)\n", timestamp);
+    // ✅ Update lastWiFiConnected here so security checks don't false-trigger
+    lastWiFiConnected = millis();
+    lastFirebaseSuccess = millis();
+    Serial.printf("[HEARTBEAT] ✓ Sent\n");
     return true;
   } else {
     Serial.printf("[HEARTBEAT] ✗ Failed: HTTP %d\n", code);
     return false;
   }
-  
-  http.end();
-  return false;
 }
 
 // ✅ NOTE: Vibration detection is now done DIRECTLY in loop() for instant response
@@ -1200,102 +1205,54 @@ void startEngine() {
   Serial.printf("[ENGINE] Crash: %s\n", crashOK ? "NONE ✅" : "DETECTED ❌");
   Serial.printf("[ENGINE] Current state: %s\n", engineRunning ? "RUNNING" : "STOPPED");
   
-  // ✅ 1. WiFi Security Check (5-second timeout)
+  // ✅ 1. WiFi Security Check
   if (!wifiOK) {
     Serial.println("\n❌ ENGINE START BLOCKED - WiFi TIMEOUT!");
     Serial.printf("💡 WiFi disconnected for %lu ms (>%lu ms limit)\n", timeSinceWiFi, WIFI_TIMEOUT);
-    Serial.println("💡 TIP: Check WiFi connection and wait for reconnection");
-    
-    digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
-    
-    // WiFi timeout alert (3 short beeps)
-    for (int i = 0; i < 3; i++) {
-      tone(buzzerPin, 1200);
-      delay(150);
-      noTone(buzzerPin);
-      delay(150);
-    }
-    
+    digitalWrite(relayPin, HIGH);
+    tone(buzzerPin, 1200, 150); delay(200); tone(buzzerPin, 1200, 150); delay(200); tone(buzzerPin, 1200, 150);
     logSecurityEventToFirebase("Engine Start Blocked - WiFi Timeout");
     return;
   }
-  
-  // ✅ 2. Helmet Security Check (5-second timeout)
+
+  // ✅ 2. Helmet Security Check
   if (!helmetOK && lastHelmetUpdateTime > 0) {
     Serial.println("\n❌ ENGINE START BLOCKED - HELMET TIMEOUT!");
     Serial.printf("💡 Helmet disconnected for %lu ms (>%lu ms limit)\n", timeSinceHelmet, HELMET_TIMEOUT);
-    Serial.printf("💡 DEBUG: currentTime=%lu, lastHelmetUpdateTime=%lu\n", currentTime, lastHelmetUpdateTime);
-    Serial.printf("💡 DEBUG: helmetConnected=%s, lastHelmetHeartbeat=%llu\n", 
-                  helmetConnected ? "true" : "false", lastHelmetHeartbeat);
-    Serial.println("💡 TIP: Turn on helmet and wait for connection");
-    
-    digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
-    
-    // Helmet timeout alert (2 short beeps)
-    for (int i = 0; i < 2; i++) {
-      tone(buzzerPin, 1200);
-      delay(100);
-      noTone(buzzerPin);
-      delay(100);
-    }
-    
+    digitalWrite(relayPin, HIGH);
+    tone(buzzerPin, 1200, 150); delay(200); tone(buzzerPin, 1200, 150);
     logSecurityEventToFirebase("Engine Start Blocked - Helmet Timeout");
     return;
   }
-  
+
   // ✅ 3. Alcohol Safety Check
   if (!alcoholOK) {
     Serial.println("\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
-    Serial.println("💡 TIP: Wait for alcohol levels to clear");
-    Serial.println("💡 TIP: Helmet should send 'Safe' status");
-    
-    if (autoEngineControl) {
-      engineStartRequested = true;
-    }
-    
-    digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
-    
-    // Alcohol alert (3 long beeps)
-    for (int i = 0; i < 3; i++) {
-      tone(buzzerPin, 1200);
-      delay(200);
-      noTone(buzzerPin);
-      delay(200);
-    }
-    
+    if (autoEngineControl) engineStartRequested = true;
+    digitalWrite(relayPin, HIGH);
+    tone(buzzerPin, 800, 300); delay(400); tone(buzzerPin, 800, 300); delay(400); tone(buzzerPin, 800, 300);
     logSecurityEventToFirebase("Engine Start Blocked - Alcohol Detected");
     return;
   }
-  
+
   // ✅ 4. Crash Safety Check
   if (!crashOK) {
     Serial.println("\n❌ ENGINE START BLOCKED - CRASH DETECTED!");
-    Serial.println("💡 TIP: Clear crash alert first");
-    Serial.println("💡 TIP: Ensure vehicle is upright and stable");
-    
-    digitalWrite(relayPin, HIGH);  // HIGH = OFF for ACTIVE-LOW relay
-    
-    // Crash alert (4 urgent beeps)
-    for (int i = 0; i < 4; i++) {
-      tone(buzzerPin, 1200);
-      delay(250);
-      noTone(buzzerPin);
-      delay(150);
-    }
-    
+    digitalWrite(relayPin, HIGH);
+    tone(buzzerPin, 600, 400); delay(500); tone(buzzerPin, 600, 400); delay(500);
+    tone(buzzerPin, 600, 400); delay(500); tone(buzzerPin, 600, 400);
     logSecurityEventToFirebase("Engine Start Blocked - Crash Detected");
     return;
   }
 
   Serial.println("\n✅ Starting engine...");
-  
-  // ✅ DUAL RELAY SYSTEM: Active LOW control
-  // Step 1: Enable ignition (so engine can run after starting)
+
+  // Step 1: Enable ignition relay
   digitalWrite(ignitionRelayPin, LOW);  // LOW = ON for active-low relay
   Serial.println("✅ Ignition relay ON");
-  delay(500); // Wait for ignition to stabilize
-  
-  // Step 2: Engage starter motor (temporary)
+  delay(200);  // Reduced from 500ms — just needs to stabilize
+
+  // Step 2: Engage starter motor (temporary, auto-disengages after STARTER_TIMEOUT)
   digitalWrite(relayPin, LOW);  // LOW = ON for active-low relay
   starterActive = true;
   starterStartTime = millis();
@@ -1435,66 +1392,60 @@ void sendLiveToFirebase() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   StaticJsonDocument<512> doc;
-  
   doc["engineRunning"] = engineRunning;
-  
-  // ✅ TESTING: Handle optional MPU6050
+
   if (MPU6050_ENABLED) {
-    doc["mpu6050"]["accelX"] = accel.acceleration.x;
-    doc["mpu6050"]["accelY"] = accel.acceleration.y;
-    doc["mpu6050"]["accelZ"] = accel.acceleration.z;
+    doc["mpu6050"]["accelX"]     = accel.acceleration.x;
+    doc["mpu6050"]["accelY"]     = accel.acceleration.y;
+    doc["mpu6050"]["accelZ"]     = accel.acceleration.z;
     doc["mpu6050"]["totalAccel"] = currentTotalAccel;
-    doc["mpu6050"]["roll"] = currentRoll;
-    doc["mpu6050"]["enabled"] = true;
+    doc["mpu6050"]["roll"]       = currentRoll;
+    doc["mpu6050"]["enabled"]    = true;
   } else {
-    doc["mpu6050"]["accelX"] = 0.0;
-    doc["mpu6050"]["accelY"] = 0.0;
-    doc["mpu6050"]["accelZ"] = 9.8;
+    doc["mpu6050"]["accelX"]     = 0.0;
+    doc["mpu6050"]["accelY"]     = 0.0;
+    doc["mpu6050"]["accelZ"]     = 9.8;
     doc["mpu6050"]["totalAccel"] = currentTotalAccel;
-    doc["mpu6050"]["roll"] = currentRoll;
-    doc["mpu6050"]["enabled"] = false;
+    doc["mpu6050"]["roll"]       = currentRoll;
+    doc["mpu6050"]["enabled"]    = false;
   }
-  
-  doc["crashDetected"] = crashDetected;
-  doc["alcoholDetected"] = alcoholDetected;
-  doc["autoEngineControl"] = autoEngineControl;
-  doc["antiTheftArmed"] = antiTheftArmed;
-  doc["vibrationSensor"] = digitalRead(vibrationSensorPin);
-  doc["relayState"] = digitalRead(relayPin);
-  // ✅ FIX: LOW = ON, HIGH = OFF for ACTIVE-LOW relay
-  doc["relayStatus"] = digitalRead(relayPin) ? "OFF" : "ON";
-  
-  // ✅ NEW: Add GPS speed and location
-  doc["speed"] = currentSpeed;
+
+  doc["crashDetected"]    = crashDetected;
+  doc["alcoholDetected"]  = alcoholDetected;
+  doc["autoEngineControl"]= autoEngineControl;
+  doc["antiTheftArmed"]   = antiTheftArmed;
+  doc["vibrationSensor"]  = digitalRead(vibrationSensorPin);
+  doc["relayStatus"]      = digitalRead(relayPin) ? "OFF" : "ON";
+  doc["speed"]            = currentSpeed;
+
   if (gps.location.isValid()) {
     doc["locationLat"] = gps.location.lat();
     doc["locationLng"] = gps.location.lng();
-    doc["gpsValid"] = true;
+    doc["gpsValid"]    = true;
   } else {
     doc["gpsValid"] = false;
   }
-  
   doc["timestamp"] = millis();
-  
+
   String payload;
   serializeJson(doc, payload);
-  
+
   HTTPClient http;
+  http.setTimeout(1500);  // Explicit timeout
   http.begin(firebaseHost + livePath);
   http.addHeader("Content-Type", "application/json");
   http.PUT(payload);
   http.end();
-  
-  // Also update engineControl path
-  StaticJsonDocument<128> engineDoc;
+
+  // Update engineControl path (lightweight — just engine state)
+  StaticJsonDocument<64> engineDoc;
   engineDoc["engineRunning"] = engineRunning;
-  engineDoc["autoMode"] = autoEngineControl;
-  engineDoc["timestamp"] = millis();
-  
+  engineDoc["timestamp"]     = millis();
   String enginePayload;
   serializeJson(engineDoc, enginePayload);
-  
+
   HTTPClient http2;
+  http2.setTimeout(1000);
   String enginePath = "/" + userUID + "/engineControl.json?auth=" + firebaseAuth;
   http2.begin(firebaseHost + enginePath);
   http2.addHeader("Content-Type", "application/json");
@@ -1511,6 +1462,7 @@ void connectToWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(true);
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Max TX power for better range/stability
   WiFi.begin(ssid, password);
 
   // Wait up to 15 seconds with progress dots
@@ -1701,66 +1653,71 @@ void printSystemStatus() {
 }
 
 void handleDashboardButton() {
-  if (millis() - lastButtonCheck > BUTTON_CHECK_INTERVAL) {
+  unsigned long now = millis();
+  // Fast: button poll every BUTTON_CHECK_INTERVAL (150ms)
+  if (now - lastButtonCheck >= BUTTON_CHECK_INTERVAL) {
     checkDashboardButton();
-    lastButtonCheck = millis();
+    lastButtonCheck = now;
+  }
+  // Slow: autoMode check every AUTO_MODE_CHECK_INTERVAL (5s)
+  if (now - lastAutoModeCheck >= AUTO_MODE_CHECK_INTERVAL) {
+    checkAutoMode();
+    lastAutoModeCheck = now;
   }
 }
 
 void checkDashboardButton() {
   if (WiFi.status() != WL_CONNECTED) return;
 
+  // ── Fast path: button state only (150ms poll) ─────────────────────────────
   HTTPClient http;
-  http.setTimeout(300);  // ✅ FIXED: 300ms timeout for faster response (was 1000ms)
+  http.setTimeout(500);  // 500ms max — if Firebase is slow, skip and retry next cycle
   http.begin(firebaseHost + buttonPath);
-  
+
   int httpCode = http.GET();
-  
+
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
     bool currentButtonState = (response.indexOf("true") != -1);
-    
-    if (currentButtonState != lastDashboardButtonState) {
-      lastDashboardButtonState = currentButtonState;
-      
-      if (currentButtonState) {
-        Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED!");
-        
-        if (!engineRunning) {
-          engineStartRequested = true;
-          startEngine();
-        } else {
-          stopEngine();
-          engineStartRequested = false;
-        }
-        
-        clearDashboardButton();
+
+    if (currentButtonState && !lastDashboardButtonState) {
+      lastDashboardButtonState = true;
+      Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED!");
+
+      if (!engineRunning) {
+        engineStartRequested = true;
+        startEngine();
+      } else {
+        stopEngine();
+        engineStartRequested = false;
       }
+      clearDashboardButton();
+    } else if (!currentButtonState) {
+      lastDashboardButtonState = false;
     }
   }
-  
   http.end();
-  
-  // Check autoMode setting
-  HTTPClient http2;
-  http2.setTimeout(1000);  // ✅ FIX: 1 second timeout
+}
+
+void checkAutoMode() {
+  // ── Slow path: autoMode (checked every 5s, not every 150ms) ──────────────
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.setTimeout(1000);
   String autoModePath = "/" + userUID + "/engineControl/autoMode.json?auth=" + firebaseAuth;
-  http2.begin(firebaseHost + autoModePath);
-  
-  int autoCode = http2.GET();
-  
+  http.begin(firebaseHost + autoModePath);
+
+  int autoCode = http.GET();
   if (autoCode == HTTP_CODE_OK) {
-    String autoResponse = http2.getString();
+    String autoResponse = http.getString();
     bool dashboardAutoMode = (autoResponse.indexOf("true") != -1);
-    
     if (dashboardAutoMode != autoEngineControl) {
       autoEngineControl = dashboardAutoMode;
-      Serial.printf("[ENGINE] Auto control updated: %s\n", 
-                    autoEngineControl ? "ON" : "OFF");
+      Serial.printf("[ENGINE] Auto control: %s\n", autoEngineControl ? "ON" : "OFF");
     }
   }
-  
-  http2.end();
+  http.end();
 }
 
 void clearDashboardButton() {
