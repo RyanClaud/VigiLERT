@@ -42,12 +42,18 @@ const String firebaseAuth = "";
 // ✅ Emergency contacts are fetched from Firebase (users/{uid}/emergencyContacts)
 // No hardcoded phone number needed — contacts are managed via the web dashboard
 
-// Pin Assignments
-const int relayPin = 13;              // Starter relay (temporary)
-const int ignitionRelayPin = 27;      // Ignition relay (continuous)
-const int buzzerPin = 14;             // Buzzer — GPIO14 (safe, not a strapping pin)
-const int lightIndicatorPin = 2;
-const int vibrationSensorPin = 15;
+// ── Pin Assignments ────────────────────────────────────────────────────────
+// SINGLE RELAY wired to the motorcycle starter switch
+// Relay ON (LOW)  = starter button pressed = engine cranks
+// Relay OFF (HIGH) = starter released = engine runs on its own
+const int relayPin          = 13;   // Single relay — starter switch (active-low)
+const int buzzerPin         = 14;   // Buzzer (GPIO14, not a strapping pin)
+const int lightIndicatorPin = 2;    // Status LED
+const int vibrationSensorPin = 15;  // SW-420 vibration sensor
+
+// ignitionRelayPin is NOT used (single relay setup)
+// All references to ignitionRelayPin are mapped to relayPin below
+#define ignitionRelayPin relayPin   // Alias so existing code compiles unchanged
 
 // GSM module pins (UART2)
 #define GSM_RX 4
@@ -300,29 +306,21 @@ void setup() {
   Serial.println("[SETUP] GSM Serial started on RX:4, TX:5");
   initializeGSM();
 
-  // Initialize pins
-  pinMode(relayPin, OUTPUT);           // Starter relay (GPIO 13)
-  pinMode(ignitionRelayPin, OUTPUT);   // Ignition relay (GPIO 27) - NEW!
+  // Initialize pins — SINGLE RELAY on starter switch
+  pinMode(relayPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
   pinMode(lightIndicatorPin, OUTPUT);
-  pinMode(vibrationSensorPin, INPUT_PULLUP);  // ✅ FIXED: Use INPUT_PULLUP for better detection
-  // ✅ OPTIONAL: Physical key switch (comment out if not using)
-  // pinMode(physicalKeyPin, INPUT_PULLUP);  // Physical key switch
+  pinMode(vibrationSensorPin, INPUT_PULLUP);
 
-  // ✅ FIX: Initialize relays to OFF (HIGH for ACTIVE-LOW relay)
-  digitalWrite(relayPin, HIGH);           // Starter OFF (Active LOW)
-  digitalWrite(ignitionRelayPin, HIGH);   // Ignition OFF (Active LOW)
+  // Relay OFF at startup (HIGH = OFF for active-low relay)
+  digitalWrite(relayPin, HIGH);
   noTone(buzzerPin);
   digitalWrite(lightIndicatorPin, LOW);
-  
+
   delay(100);
   Serial.println("\n[SETUP] ═══════════════════════════════════");
-  Serial.println("[SETUP] DUAL RELAY SYSTEM:");
-  Serial.println("[SETUP] GPIO 13: Starter Relay (temporary)");
-  Serial.println("[SETUP] GPIO 27: Ignition Relay (continuous)");
-  Serial.println("[SETUP] ⚠️  REQUIRES EXTERNAL 5V POWER!");
-  Serial.printf("[SETUP] Starter Relay: %d (HIGH/OFF)\n", digitalRead(relayPin));
-  Serial.printf("[SETUP] Ignition Relay: %d (HIGH/OFF)\n", digitalRead(ignitionRelayPin));
+  Serial.println("[SETUP] SINGLE RELAY on starter switch");
+  Serial.printf("[SETUP] GPIO %d: Relay = %s\n", relayPin, digitalRead(relayPin) ? "OFF" : "ON");
   Serial.println("[SETUP] ═══════════════════════════════════\n");
 
   connectToWiFi();
@@ -1262,23 +1260,17 @@ void startEngine() {
 
   Serial.println("\n✅ Starting engine...");
 
-  // Step 1: Enable ignition relay
-  digitalWrite(ignitionRelayPin, LOW);  // LOW = ON for active-low relay
-  Serial.println("✅ Ignition relay ON");
-  delay(200);  // Reduced from 500ms — just needs to stabilize
-
-  // Step 2: Engage starter motor (temporary, auto-disengages after STARTER_TIMEOUT)
-  digitalWrite(relayPin, LOW);  // LOW = ON for active-low relay
+  // Single relay on starter switch — pulse LOW to crank, then release
+  // The engine runs on its own after the starter is released
+  digitalWrite(relayPin, LOW);   // LOW = ON (active-low) = starter pressed
   starterActive = true;
   starterStartTime = millis();
   lastStarterAttempt = millis();
-  Serial.println("✅ Starter relay ON (will auto-disengage after 3 seconds)");
-  
+  Serial.printf("✅ Starter relay ON (GPIO %d = LOW) — will release after %lu ms\n",
+                relayPin, STARTER_TIMEOUT);
+
   engineRunning = true;
   engineStartRequested = false;
-  
-  Serial.printf("✅ Starter Relay GPIO %d = %d (LOW/ON)\n", relayPin, digitalRead(relayPin));
-  Serial.printf("✅ Ignition Relay GPIO %d = %d (LOW/ON)\n", ignitionRelayPin, digitalRead(ignitionRelayPin));
   
   // ✅ NEW: Start trip tracking
   startTrip();
@@ -1295,26 +1287,22 @@ void startEngine() {
 }
 
 void stopEngine() {
-  Serial.println("\n🛑 Stopping engine...");
-  
-  // ✅ NEW: End trip tracking before stopping engine
-  endTrip();
-  
-  // ✅ DUAL RELAY SYSTEM: Cut ignition (this stops the engine)
-  digitalWrite(ignitionRelayPin, HIGH);  // HIGH = OFF for active-low relay
-  Serial.println("🛑 Ignition relay OFF (engine stops)");
-  
-  // ✅ Ensure starter is also off
-  digitalWrite(relayPin, HIGH);  // HIGH = OFF for active-low relay
-  Serial.println("🛑 Starter relay OFF");
-  
+  Serial.println("\n🛑 Stopping engine (software state only)...");
+  Serial.println("🛑 NOTE: Single relay on starter — cannot cut running engine electrically.");
+  Serial.println("🛑 Engine state set to STOPPED in software/Firebase.");
+
+  // Ensure relay is released (starter not engaged)
+  digitalWrite(relayPin, HIGH);  // HIGH = OFF (active-low) = starter released
+  starterActive = false;
   engineRunning = false;
-  
-  Serial.printf("🛑 Starter Relay GPIO %d = %d (HIGH/OFF)\n", relayPin, digitalRead(relayPin));
-  Serial.printf("🛑 Ignition Relay GPIO %d = %d (HIGH/OFF)\n", ignitionRelayPin, digitalRead(ignitionRelayPin));
-  
+
+  // End trip tracking
+  endTrip();
+
+  Serial.printf("🛑 Relay GPIO %d = %d (HIGH/OFF)\n", relayPin, digitalRead(relayPin));
+
   sendLiveToFirebase();
-  
+
   engineOffTime = millis();
   antiTheftEnabled = true;
   antiTheftArmed = false;
@@ -1815,19 +1803,24 @@ void checkComprehensiveSecurity() {
 void triggerSecurityShutdown(String reason) {
   Serial.println("\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
   Serial.println("Reason: " + reason);
-  Serial.println("Time: " + String(millis()) + " ms");
 
-  // Cut BOTH relays — ignition relay stops the running engine
-  digitalWrite(ignitionRelayPin, HIGH);  // HIGH = OFF for active-low relay
-  digitalWrite(relayPin, HIGH);          // HIGH = OFF for active-low relay
+  // Single relay on starter — release it (ensure starter is not engaged)
+  digitalWrite(relayPin, HIGH);  // HIGH = OFF (active-low)
+  starterActive = false;
   engineRunning = false;
 
   // End current trip
   endTrip();
 
-  Serial.printf("🛑 Engine STOPPED | Ignition GPIO%d=%d | Starter GPIO%d=%d\n",
-                ignitionRelayPin, digitalRead(ignitionRelayPin),
-                relayPin, digitalRead(relayPin));
+  Serial.printf("🛑 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
+  Serial.println("🛑 NOTE: Cannot cut running engine — single relay on starter only.");
+
+  // Start siren to alert
+  startSiren();
+
+  // Log security event to Firebase
+  logSecurityEventToFirebase(reason);
+}
 
   // Start siren (non-blocking — keeps going while Firebase write runs)
   startSiren();
