@@ -116,7 +116,7 @@ const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for fast
 bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
-const unsigned long ALCOHOL_CHECK_INTERVAL = 2000;  // 2s — don't compete with heartbeat/button
+const unsigned long ALCOHOL_CHECK_INTERVAL = 500;  // 500ms — matches helmet write rate for fast detection
 
 // ✅ ENHANCED: Comprehensive security system with BALANCED timeouts
 bool helmetConnected = false;
@@ -769,10 +769,21 @@ void loop() {
   // ✅ ENHANCED: Auto-shutdown logic is now handled in checkComprehensiveSecurity()
   // This ensures consistent 5-second timeout enforcement
 
-  // Alcohol monitoring
+  // Alcohol monitoring — 500ms poll matches helmet write rate
   if (millis() - lastAlcoholCheck > ALCOHOL_CHECK_INTERVAL) {
     checkAlcoholStatus();
     lastAlcoholCheck = millis();
+  }
+
+  // ── GSM background retry ──────────────────────────────────────────────────
+  // Retries every 30 seconds until GSM connects to network
+  if (!gsmReady) {
+    static unsigned long lastGsmRetry = 0;
+    if (millis() - lastGsmRetry >= 30000) {
+      lastGsmRetry = millis();
+      Serial.println("[GSM] Not ready — retrying...");
+      initializeGSM();
+    }
   }
 
   // ── Alcohol safety enforcement — runs every loop ─────────────────────────
@@ -1547,95 +1558,82 @@ void checkAlcoholStatus() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  http.setTimeout(2000);
+  http.setTimeout(800);  // Short timeout — must complete within poll interval
   http.begin(firebaseHost + alcoholPath);
-  
+
   int httpCode = http.GET();
-  
-  if (httpCode == HTTP_CODE_OK) {
-    String response = http.getString();
-    
-    // ✅ FIX: If no data or null, assume Safe
-    if (response == "null" || response.length() <= 2) {
-      if (alcoholDetected) {
-        Serial.println("\n✅ Alcohol cleared (no data)");
-        alcoholDetected = false;
-        lastAlcoholState = false;
-      }
-      http.end();
-      return;
-    }
 
-    bool currentAlcoholState = false;
-    int sensorValue = 0;
-    
-    // Parse sensor value first
-    if (response.indexOf("sensorValue") != -1) {
-      int sensorStart = response.indexOf("sensorValue") + 13;
-      int sensorEnd = response.indexOf(",", sensorStart);
-      if (sensorEnd == -1) sensorEnd = response.indexOf("}", sensorStart);
-      
-      if (sensorEnd > sensorStart) {
-        String sensorStr = response.substring(sensorStart, sensorEnd);
-        sensorValue = sensorStr.toInt();
-      }
+  if (httpCode != HTTP_CODE_OK) {
+    // Don't spam Serial on every failed read — only log occasionally
+    static unsigned long lastFailLog = 0;
+    if (millis() - lastFailLog > 5000) {
+      Serial.printf("[ALCOHOL] HTTP %d\n", httpCode);
+      lastFailLog = millis();
     }
-    
-    // ✅ FIX: Trust helmet's status first, use sensor value as backup
-    // Check if helmet explicitly sent a status
-    bool hasHelmetStatus = false;
-    
-    if (response.indexOf("\"status\":\"Safe\"") != -1 || response.indexOf("\"status\":\"safe\"") != -1) {
-      currentAlcoholState = false;
-      hasHelmetStatus = true;
-      Serial.printf("\n✅ Alcohol CLEARED! (Helmet says: Safe, Value: %d)\n", sensorValue);
-    } else if (response.indexOf("\"status\":\"Danger\"") != -1 || response.indexOf("\"status\":\"danger\"") != -1) {
-      currentAlcoholState = true;
-      hasHelmetStatus = true;
-      Serial.printf("\n🚨 ALCOHOL DETECTED! (Helmet says: Danger, Value: %d)\n", sensorValue);
-    }
-    
-    // Fallback: If no status from helmet, use sensor value with helmet's threshold (600)
-    if (!hasHelmetStatus) {
-      const int HELMET_THRESHOLD = 600;  // Match helmet's threshold
-      
-      if (sensorValue > HELMET_THRESHOLD) {
-        currentAlcoholState = true;
-        Serial.printf("\n🚨 ALCOHOL DETECTED! (Value: %d > %d)\n", sensorValue, HELMET_THRESHOLD);
-      } else {
-        currentAlcoholState = false;
-        Serial.printf("[ALCOHOL] Safe (Value: %d <= %d)\n", sensorValue, HELMET_THRESHOLD);
-      }
-    }
-
-    // Update alcohol state
-    if (currentAlcoholState != alcoholDetected) {
-      alcoholDetected = currentAlcoholState;
-      lastAlcoholState = currentAlcoholState;
-      Serial.printf("[ALCOHOL] State changed to: %s\n", alcoholDetected ? "DANGER" : "SAFE");
-    }
-
-    // Enforce engine shutdown when alcohol is detected
-    // Note: removed helmetConnected guard — if Firebase says Danger, act on it
-    if (alcoholDetected && engineRunning) {
-      Serial.println("[ALCOHOL] DANGER + engine running — cutting ignition!");
-      triggerAlcoholShutdown();
-    }
-
-    // Debug every 2 seconds
-    static unsigned long lastDebug = 0;
-    if (millis() - lastDebug > 2000) {
-      Serial.printf("[ALCOHOL] %s | Value: %d | Helmet: %s\n",
-                    alcoholDetected ? "DANGER" : "SAFE",
-                    sensorValue,
-                    helmetConnected ? "connected" : "disconnected");
-      lastDebug = millis();
-    }
-  } else {
-    Serial.printf("[ALCOHOL] ✗ Firebase read failed: HTTP %d\n", httpCode);
+    http.end();
+    return;
   }
-  
+
+  String response = http.getString();
   http.end();
+
+  // Null / empty response — treat as Safe
+  if (response == "null" || response.length() <= 2) {
+    if (alcoholDetected) {
+      Serial.println("[ALCOHOL] Cleared (no data)");
+      alcoholDetected = false;
+    }
+    return;
+  }
+
+  bool currentAlcoholState = false;
+  int  sensorValue = 0;
+
+  // ── Priority 1: "detected" boolean (fastest — single field check) ─────────
+  if (response.indexOf("\"detected\":true") != -1) {
+    currentAlcoholState = true;
+  } else if (response.indexOf("\"detected\":false") != -1) {
+    currentAlcoholState = false;
+  }
+  // ── Priority 2: "status" string ───────────────────────────────────────────
+  else if (response.indexOf("\"status\":\"Danger\"") != -1 ||
+           response.indexOf("\"status\":\"danger\"") != -1) {
+    currentAlcoholState = true;
+  } else if (response.indexOf("\"status\":\"Safe\"") != -1 ||
+             response.indexOf("\"status\":\"safe\"") != -1) {
+    currentAlcoholState = false;
+  }
+  // ── Priority 3: raw sensor value fallback ─────────────────────────────────
+  else {
+    int idx = response.indexOf("sensorValue");
+    if (idx != -1) {
+      int s = response.indexOf(":", idx) + 1;
+      int e = response.indexOf(",", s);
+      if (e == -1) e = response.indexOf("}", s);
+      if (e > s) sensorValue = response.substring(s, e).toInt();
+    }
+    currentAlcoholState = (sensorValue > 600);
+  }
+
+  // ── Update state and act immediately ──────────────────────────────────────
+  if (currentAlcoholState != alcoholDetected) {
+    alcoholDetected = currentAlcoholState;
+    Serial.printf("[ALCOHOL] >>> %s <<<\n", alcoholDetected ? "DANGER DETECTED" : "CLEARED");
+  }
+
+  // Cut engine immediately — no guard, no delay
+  if (alcoholDetected && engineRunning) {
+    Serial.println("[ALCOHOL] Cutting ignition NOW!");
+    triggerAlcoholShutdown();
+  }
+
+  // Status log every 3 seconds
+  static unsigned long lastLog = 0;
+  if (millis() - lastLog > 3000) {
+    Serial.printf("[ALCOHOL] %s | Value:%d\n",
+                  alcoholDetected ? "DANGER" : "safe", sensorValue);
+    lastLog = millis();
+  }
 }
 
 void triggerAlcoholShutdown() {
