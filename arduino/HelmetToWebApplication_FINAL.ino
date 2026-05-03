@@ -123,7 +123,7 @@ void connectToWiFi() {
 void sendHelmetHeartbeat(bool isActive) {
   if (WiFi.status() != WL_CONNECTED) return;
   
-  uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
+  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
   
   StaticJsonDocument<128> doc;
   doc["status"] = isActive ? "On" : "Off";
@@ -153,7 +153,7 @@ void sendHelmetHeartbeat(bool isActive) {
 void sendAlcoholToFirebase(int alcoholVal, bool alcoholStatus) {
   if (WiFi.status() != WL_CONNECTED) return;
   
-  uint64_t timestamp = 1700000000000ULL + (uint64_t)millis();
+  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
   String statusText = alcoholStatus ? "Danger" : "Safe";
   
   // Main path - Dashboard reads from here

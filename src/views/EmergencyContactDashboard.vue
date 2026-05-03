@@ -677,8 +677,7 @@ const playAlertSound = () => {
 
 const updateSpeedLimitInFirebase = () => {
   const userUID = 'MnzBjTBslZNijOkq732PE91hHa23';
-  // Write to the same path the user dashboard reads from
-  set(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), speedLimit.value)
+  set(dbRef(database, `${userUID}/speedLimit`), speedLimit.value)
     .then(() => console.log('[SPEED LIMIT] Updated to', speedLimit.value))
     .catch(err => console.error('[SPEED LIMIT] Error:', err));
 };
@@ -842,12 +841,23 @@ const setupFirebaseListeners = () => {
   });
 
   // ── Crash history listener ────────────────────────────────────────────
+  // Use key-based dedup — never filter by Arduino timestamp (clock is fake)
+  const seenCrashKeys = new Set();
+  let initialCrashLoadDone = false;
+  setTimeout(() => { initialCrashLoadDone = true; }, 3000);
+
   onChildAdded(dbRef(database, `helmet_public/${userUID}/crashes`), (snap) => {
+    const key = snap.key;
     const event = snap.val();
     if (!event || !event.timestamp) return;
 
-    // Only show crashes after app opened
-    if (event.timestamp <= appStartTime) return;
+    // Skip pre-existing crashes during initial load
+    if (!initialCrashLoadDone) {
+      seenCrashKeys.add(key);
+      return;
+    }
+    if (seenCrashKeys.has(key)) return;
+    seenCrashKeys.add(key);
 
     const crashEvent = {
       timestamp: event.timestamp,
@@ -857,7 +867,7 @@ const setupFirebaseListeners = () => {
       lng: event.lng || (event.location && event.location.lng) || null,
       hasGPS: event.hasGPS || event.gpsValid || (event.lat && event.lat !== 0),
       severity: event.severity || 'Medium',
-      time: event.time || new Date(event.timestamp).toLocaleTimeString(),
+      time: new Date().toLocaleTimeString(),
       speed: event.speed || 0
     };
 
@@ -865,40 +875,62 @@ const setupFirebaseListeners = () => {
     crashEvents.value.unshift(crashEvent);
     if (crashEvents.value.length > 5) crashEvents.value = crashEvents.value.slice(0, 5);
 
-    // Update status
+    // Update status cards
     crashDisplayStatus.value  = 'Alert';
     crashDisplayMessage.value = 'Crash Detected';
 
-    // Play alert sound for crash
+    // Add to alerts list
+    alerts.value.unshift({
+      type: 'crash',
+      message: '🚨 CRASH DETECTED!',
+      details: `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | ${crashEvent.hasGPS ? `${crashEvent.lat?.toFixed(5)}, ${crashEvent.lng?.toFixed(5)}` : 'No GPS'}`,
+      time: crashEvent.time,
+      timestamp: Date.now()
+    });
+    if (alerts.value.length > 20) alerts.value = alerts.value.slice(0, 20);
+
+    // Play alert sound
     playAlertSound();
 
-    console.log('[CRASH] New crash event received:', crashEvent);
+    console.log('[CRASH] 🚨 New crash event displayed:', crashEvent);
   });
 
-  // Speed limit — read from the same path the user dashboard uses
-  onValue(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), snap => {
+  // Speed limit (sync from rider dashboard changes)
+  onValue(dbRef(database, `${userUID}/speedLimit`), snap => {
     const d = snap.val();
     if (d !== null && d !== undefined) speedLimit.value = d;
   });
 
-  // Alerts — only show ones created after this page opened, play sound for danger/warning
-  onValue(dbRef(database, `helmet_public/${userUID}/alerts`), snap => {
-    const d = snap.val();
-    if (!d) return;
-    const fresh = Object.values(d)
-      .filter(a => (a.timestamp || 0) > appStartTime)
-      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-      .slice(0, 20);
+  // Alerts — use onChildAdded with key dedup so new alerts always show
+  // regardless of Arduino clock vs real time
+  const seenAlertKeys = new Set();
+  let initialAlertLoadDone = false;
+  setTimeout(() => { initialAlertLoadDone = true; }, 3000);
 
-    // Play sound if there are new alerts since last check
-    const prevCount = alerts.value.length;
-    alerts.value = fresh;
-    if (fresh.length > prevCount) {
-      const newest = fresh[0];
-      const type = newest?.type || '';
-      if (['danger', 'crash', 'alcohol', 'warning', 'theft', 'speed'].includes(type)) {
-        playAlertSound();
-      }
+  onChildAdded(dbRef(database, `helmet_public/${userUID}/alerts`), (snap) => {
+    const key = snap.key;
+    const a = snap.val();
+    if (!a) return;
+
+    if (!initialAlertLoadDone) {
+      seenAlertKeys.add(key);
+      return;
+    }
+    if (seenAlertKeys.has(key)) return;
+    seenAlertKeys.add(key);
+
+    const type = a.type || 'info';
+    alerts.value.unshift({
+      type,
+      message: a.message || 'System Alert',
+      details: a.details || '',
+      time: new Date().toLocaleTimeString(),
+      timestamp: Date.now()
+    });
+    if (alerts.value.length > 20) alerts.value = alerts.value.slice(0, 20);
+
+    if (['danger', 'crash', 'alcohol', 'warning', 'theft', 'speed'].includes(type)) {
+      playAlertSound();
     }
   });
 };

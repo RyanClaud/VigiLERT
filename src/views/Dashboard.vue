@@ -2101,50 +2101,49 @@ const triggerSOS = async () => {
 // Initialize crash event listener
 const initializeCrashListener = () => {
   console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId.value}/crashes`);
-  console.log('[INIT] App start time:', new Date(appStartTime.value).toLocaleString());
-  
-  // ✅ FIX: Use .value to get the actual ref from computed property
+
   if (!crashRef.value) {
     console.error('[CRASH] crashRef is null, cannot set up listener');
     return;
   }
-  
+
+  // Track Firebase keys we've already processed so we never show the same crash twice
+  // but also never block a crash just because the Arduino clock is behind real time
+  const seenCrashKeys = new Set();
+
+  // Pre-populate with keys that already existed before app opened
+  // (onChildAdded fires for existing children first, then new ones)
+  let initialLoadDone = false;
+  setTimeout(() => { initialLoadDone = true; }, 3000); // 3s grace period for initial load
+
   onChildAdded(crashRef.value, (snapshot) => {
+    const key = snapshot.key;
     const event = snapshot.val();
-    console.log('[CRASH] New crash event received from Firebase:', event);
-    
-    // More lenient validation - just check if event exists and has timestamp
+
     if (!event || !event.timestamp) {
-      console.warn("[CRASH] Invalid crash event (missing timestamp)", event);
+      console.warn('[CRASH] Invalid crash event (missing timestamp)', event);
       return;
     }
-    
-    console.log('[CRASH] ✓ Valid crash event:', {
-      timestamp: event.timestamp,
-      impact: event.impactStrength,
-      roll: event.roll,
-      hasGPS: event.hasGPS,
-      location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS'
-    });
-    
+
+    // During the first 3 seconds, mark existing keys as seen but don't alert
+    if (!initialLoadDone) {
+      seenCrashKeys.add(key);
+      console.log('[CRASH] ⏭️ Pre-existing crash (initial load), marking as seen:', key);
+      return;
+    }
+
+    // After initial load: any new key is a real new crash — show it
+    if (seenCrashKeys.has(key)) {
+      console.log('[CRASH] ⏭️ Already processed crash key:', key);
+      return;
+    }
+    seenCrashKeys.add(key);
+
+    console.log('[CRASH] 🚨 NEW crash event from Firebase:', { key, timestamp: event.timestamp, impact: event.impactStrength });
+
     const eventTime = event.timestamp;
-    
-    // ✅ FIX: Ignore crashes that happened BEFORE the app started OR were dismissed
-    // This prevents old crashes from triggering alerts when you restart the app
-    const shouldSkipCrash = eventTime < appStartTime.value || !shouldShowAlert(eventTime);
-    
-    if (shouldSkipCrash) {
-      console.log('[CRASH] ⏭️ Skipping crash (old or dismissed)');
-      console.log('[CRASH] Crash time:', new Date(eventTime).toLocaleString());
-      console.log('[CRASH] App start:', new Date(appStartTime.value).toLocaleString());
-      console.log('[CRASH] Dismissal time:', new Date(alertDismissalTime.value).toLocaleString());
-      
-      // ✅ FIX: Do NOT add deleted/old crashes back to crashEvents for map display
-      // If the user deleted it from Firebase, it should stay gone
-      return;
-    }
-    
-    // Add to crash events array (for map display)
+
+    // Build crash event object
     const crashEvent = {
       timestamp: eventTime,
       impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
@@ -2154,44 +2153,34 @@ const initializeCrashListener = () => {
       lng: event.lng || (event.location && event.location.lng) || null,
       hasGPS: event.hasGPS || (event.gpsValid === true) || (event.lat && event.lat !== 0),
       severity: event.severity || 'Medium',
-      time: event.time || new Date(eventTime).toLocaleTimeString(),
+      time: new Date().toLocaleTimeString(), // Use real wall-clock time for display
       speed: event.speed || 0
     };
-    
-    // ✅ FIX: Keep ONLY the latest crash marker (replace old ones)
-    crashEvents.value = [crashEvent]; // Replace entire array with just the new crash
-    
-    console.log('[CRASH] ✓ Showing ONLY latest crash marker');
-    console.log('[CRASH] Previous markers removed, displaying current crash only');
-    
-    // Add alert notification (with timestamp for dismissal tracking)
-    const newAlert = {
+
+    // Keep only the latest crash marker on the map
+    crashEvents.value = [crashEvent];
+
+    // Update crash status card
+    crashDisplayStatus.value = 'Alerting';
+    crashDisplayMessage.value = 'Crash Detected!';
+
+    // Add to alerts list
+    alerts.value.unshift({
       type: 'crash',
       message: '🚨 CRASH DETECTED!',
-      details: `Impact: ${event.impactStrength || 'N/A'} g | Location: ${crashEvent.location}`,
-      time: new Date().toLocaleTimeString(),
-      timestamp: eventTime
-    };
-    alerts.value.unshift(newAlert);
-    console.log('[ALERT] ✅ Crash alert added:', newAlert);
-    console.log('[ALERT] Total alerts:', alerts.value.length);
+      details: `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | ${crashEvent.location}`,
+      time: crashEvent.time,
+      timestamp: Date.now()
+    });
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-    
-    // Flash crash message for ALL crashes (always trigger animation)
-    console.log('[CRASH] Comparing timestamps - Last:', lastCrashTimestamp, 'New:', eventTime);
-    
-    // Always trigger for new crashes (check if timestamp is different)
-    if (!lastCrashTimestamp || eventTime !== lastCrashTimestamp) {
-      console.log('[CRASH] ✓ New crash detected, triggering animation...');
-      lastCrashTimestamp = eventTime;
-      localStorage.setItem(`lastCrashTimestamp_${userId.value}`, eventTime.toString());
-      flashCrashMessage();
-      playSound();
-    } else {
-      console.log('[CRASH] ⚠️ Duplicate crash (same timestamp), skipping animation');
-    }
+
+    // Trigger animation and sound
+    flashCrashMessage();
+    playSound();
+
+    console.log('[CRASH] ✅ Crash alert displayed');
   }, (error) => {
-    console.error("[CRASH] Firebase crash listener error:", error);
+    console.error('[CRASH] Firebase crash listener error:', error);
   });
 };
 
@@ -2646,42 +2635,49 @@ const setupArduinoAlertsListener = () => {
 
   const arduinoAlertsRef = dbRef(database, `helmet_public/${userId.value}/alerts`);
 
+  // Track seen keys — onChildAdded fires for existing children on load,
+  // then fires again for each new child. We skip the initial batch.
+  const seenAlertKeys = new Set();
+  let initialAlertLoadDone = false;
+  setTimeout(() => { initialAlertLoadDone = true; }, 3000);
+
   onChildAdded(arduinoAlertsRef, (snapshot) => {
+    const key = snapshot.key;
     const data = snapshot.val();
     if (!data) return;
 
-    const alertTimestamp = data.timestamp || 0;
-
-    // Only show alerts that happened AFTER the app was opened
-    if (alertTimestamp <= appStartTime.value) {
-      console.log('[ALERTS] Skipping old Arduino alert:', data.message);
+    // Mark pre-existing alerts as seen during initial load
+    if (!initialAlertLoadDone) {
+      seenAlertKeys.add(key);
       return;
     }
 
-    // Skip if already dismissed
-    if (!shouldShowAlert(alertTimestamp)) {
-      console.log('[ALERTS] Skipping dismissed Arduino alert:', data.message);
-      return;
-    }
+    if (seenAlertKeys.has(key)) return;
+    seenAlertKeys.add(key);
 
-    console.log('[ALERTS] ✅ New Arduino alert received:', data.message, '| Type:', data.type);
-
-    // Map Arduino alert types to dashboard alert types
+    const alertTimestamp = data.timestamp || Date.now();
     const type = data.type || 'info';
+
+    console.log('[ALERTS] ✅ New Arduino alert received:', data.message, '| Type:', type);
 
     // Add to alerts list
     alerts.value.unshift({
       type,
       message: data.message || 'System Alert',
       details: data.details || '',
-      time: data.time || new Date(alertTimestamp).toLocaleTimeString(),
+      time: new Date().toLocaleTimeString(),
       timestamp: alertTimestamp
     });
-
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
 
-    // Play sound for danger/warning alerts
-    if (type === 'danger' || type === 'warning' || type === 'crash' || type === 'alcohol') {
+    // Update crash status card if it's a crash alert
+    if (type === 'crash') {
+      crashDisplayStatus.value = 'Alerting';
+      crashDisplayMessage.value = 'Crash Detected!';
+    }
+
+    // Play sound for actionable alerts
+    if (['danger', 'warning', 'crash', 'alcohol', 'theft'].includes(type)) {
       playSound();
     }
   });
@@ -2731,41 +2727,43 @@ const setupAntiTheftListener = () => {
   
   // Listen for theft alert events (from logTheftToFirebase)
   const theftAlertsRef = dbRef(database, `helmet_public/${userId.value}/theft_alerts`);
+  const seenTheftKeys = new Set();
+  let initialTheftLoadDone = false;
+  setTimeout(() => { initialTheftLoadDone = true; }, 3000);
+
   onChildAdded(theftAlertsRef, (snapshot) => {
+    const key = snapshot.key;
     const alert = snapshot.val();
-    console.log('[ANTI-THEFT] New theft alert event:', alert);
-    
     if (!alert) return;
-    
-    const alertTimestamp = alert.timestamp || 0;
-    
-    // ✅ FIX: Only show if alert happened AFTER app started and is not dismissed
-    const isNew = alertTimestamp > appStartTime.value && shouldShowAlert(alertTimestamp);
-    if (isNew && alertTimestamp !== antiTheftAlert.value.timestamp) {
-      const severity = alert.severity || 'low';
-      const alertLevel = alert.alertLevel || 1;
-      
-      antiTheftAlert.value = {
-        active: true,
-        message: alert.message || 'Unauthorized movement detected!',
-        time: new Date(alertTimestamp).toLocaleTimeString(),
-        level: alertLevel,
-        severity: severity,
-        timestamp: alertTimestamp
-      };
-      
-      alerts.value.unshift({
-        type: 'danger',
-        message: '🚨 Anti-Theft Alert',
-        details: antiTheftAlert.value.message,
-        time: antiTheftAlert.value.time
-      });
-      
-      playSound();
-      if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-    } else {
-      console.log('[ANTI-THEFT] Skipping old/dismissed theft alert event');
+
+    if (!initialTheftLoadDone) {
+      seenTheftKeys.add(key);
+      return;
     }
+    if (seenTheftKeys.has(key)) return;
+    seenTheftKeys.add(key);
+
+    console.log('[ANTI-THEFT] 🚨 New theft alert event:', alert);
+
+    antiTheftAlert.value = {
+      active: true,
+      message: alert.message || 'Unauthorized movement detected!',
+      time: new Date().toLocaleTimeString(),
+      level: alert.alertLevel || 1,
+      severity: alert.severity || 'high',
+      timestamp: Date.now()
+    };
+
+    alerts.value.unshift({
+      type: 'theft',
+      message: '🚨 Anti-Theft Alert',
+      details: antiTheftAlert.value.message,
+      time: antiTheftAlert.value.time,
+      timestamp: Date.now()
+    });
+
+    playSound();
+    if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
   });
 };
 
@@ -2776,17 +2774,37 @@ const dismissAntiTheftAlert = () => {
 };
 
 // ✅ NEW: Weather Functions
+const getBrowserLocation = () => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ lat: 14.5995, lng: 120.9842 }); // Last-resort fallback
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat: 14.5995, lng: 120.9842 }), // Denied or unavailable
+      { timeout: 5000, maximumAge: 60000 }
+    );
+  });
+};
+
 const fetchWeather = async () => {
   try {
     weather.value.loading = true;
     weather.value.error = null;
     
-    // Get user's location (use GPS data if available, otherwise use default)
-    const lat = location.value.lat || 14.5995; // Default to Manila
-    const lng = location.value.lng || 120.9842;
+    // Use motorcycle GPS if available, otherwise fall back to browser geolocation
+    let lat = location.value.lat;
+    let lng = location.value.lng;
+
+    if (!lat || !lng) {
+      const browserPos = await getBrowserLocation();
+      lat = browserPos.lat;
+      lng = browserPos.lng;
+    }
     
     // Using Open-Meteo API (free, no API key required)
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,visibility&timezone=Asia/Manila`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,visibility&timezone=auto`;
     
     const response = await fetch(weatherUrl);
     if (!response.ok) throw new Error('Weather data unavailable');
@@ -2802,7 +2820,7 @@ const fetchWeather = async () => {
     weather.value = {
       loading: false,
       error: null,
-      location: locationData.address?.city || locationData.address?.town || locationData.address?.county || 'Current Location',
+      location: locationData.address?.city || locationData.address?.town || locationData.address?.municipality || locationData.address?.village || locationData.address?.county || locationData.address?.state || 'Current Location',
       temperature: Math.round(current.temperature_2m),
       feelsLike: Math.round(current.apparent_temperature),
       description: getWeatherDescription(current.weather_code),
