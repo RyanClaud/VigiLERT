@@ -2046,30 +2046,74 @@ void checkHelmetConnection() {
     String response = http.getString();
     http.end();
 
-    // Simple rule: if status is "On" AND we got a 200 response, helmet is alive.
-    // Update lastHelmetUpdateTime on EVERY successful read — no value comparison.
-    // Value comparison caused false disconnects due to uint32_t overflow.
-    bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
+    // Parse lastHeartbeat timestamp.
+    // Helmet writes: lastHeartbeat = 1746057600000 + millis()
+    // We track whether this value ADVANCES between our polls.
+    // If it stops advancing for > HELMET_TIMEOUT ms, helmet is off.
+    // This correctly detects power-cut disconnection even when status:"On"
+    // is stale in Firebase.
 
-    if (statusIsOn) {
-      lastHelmetUpdateTime  = millis();  // always refresh on every successful read
-      helmetStatusForcedOff = false;
-      if (!helmetConnected) {
-        Serial.println("[HELMET] Connected");
-        helmetConnected = true;
+    const uint64_t BASE = 1746057600000ULL;
+    static unsigned long lastHelmetMillisSeen = 0;
+    static unsigned long lastHelmetMillisTime = 0;
+
+    int idx = response.indexOf("\"lastHeartbeat\":");
+    if (idx != -1) {
+      int s = idx + 16;
+      while (s < (int)response.length() && (response[s] == ' ' || response[s] == '"')) s++;
+      int e = s;
+      while (e < (int)response.length() && response[e] >= '0' && response[e] <= '9') e++;
+
+      if (e > s) {
+        double hbDouble = response.substring(s, e).toDouble();
+        uint64_t hbFull = (uint64_t)hbDouble;
+        unsigned long myMillis = millis();
+
+        if (hbFull > BASE) {
+          unsigned long helmetMillis = (unsigned long)(hbFull - BASE);
+
+          if (helmetMillis != lastHelmetMillisSeen) {
+            // Heartbeat value advanced — helmet is alive
+            lastHelmetMillisSeen = helmetMillis;
+            lastHelmetMillisTime = myMillis;
+            lastHelmetUpdateTime = myMillis;
+            helmetStatusForcedOff = false;
+            if (!helmetConnected) {
+              Serial.println("[HELMET] Connected — heartbeat advancing");
+              helmetConnected = true;
+            }
+          } else {
+            // Heartbeat value unchanged — check how long since it last changed
+            unsigned long frozen = myMillis - lastHelmetMillisTime;
+            if (frozen <= HELMET_TIMEOUT) {
+              lastHelmetUpdateTime = myMillis;  // still within grace period
+            } else {
+              if (helmetConnected) {
+                Serial.printf("[HELMET] Heartbeat frozen %lu ms — DISCONNECTED\n", frozen);
+                helmetConnected = false;
+                lastHelmetUpdateTime = 0;
+                lastHelmetMillisSeen = 0;
+              }
+            }
+          }
+        }
       }
     } else {
-      // Explicit "Off" status — helmet turned off
-      if (helmetConnected) {
-        Serial.println("[HELMET] Status Off — disconnected");
-        helmetConnected = false;
-        lastHelmetUpdateTime = 0;
+      // No lastHeartbeat field — fallback to status field
+      bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
+      if (statusIsOn) {
+        lastHelmetUpdateTime = millis();
+        if (!helmetConnected) { helmetConnected = true; }
+      } else {
+        if (helmetConnected) {
+          Serial.println("[HELMET] Status Off — disconnected");
+          helmetConnected = false;
+          lastHelmetUpdateTime = 0;
+        }
       }
     }
   } else {
     http.end();
-    // HTTP failed — don't disconnect immediately; let the timeout in
-    // checkComprehensiveSecurity() handle it after HELMET_TIMEOUT ms
     static unsigned long lastFailLog = 0;
     if (millis() - lastFailLog > 5000) {
       Serial.printf("[HELMET] HTTP %d\n", httpCode);
