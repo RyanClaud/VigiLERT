@@ -310,8 +310,8 @@ void playConfirmBeep() {
 void playWarningBeep(int count) {
   int freqs[] = {1400, 1200, 1000, 800};
   for (int i = 0; i < count && i < 4; i++) {
-    ledcWriteTone(buzzerPin, freqs[i]); delay(120);
-    noTone(buzzerPin);            delay(60);
+    tone(buzzerPin, freqs[i]); delay(120);
+    noTone(buzzerPin);         delay(60);
   }
 }
 
@@ -393,29 +393,36 @@ void setup() {
   mpu.setGyroRange(MPU6050_RANGE_2000_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
-  // Initialize GPS
+  // Initialize GPS — must start before GSM to avoid UART conflicts
   gpsSerial.begin(9600, SERIAL_8N1, 16, 17);
   Serial.println("[SETUP] GPS Serial started on RX:16, TX:17");
+  // Flush any GPS startup garbage
+  delay(100);
+  while (gpsSerial.available()) gpsSerial.read();
 
   // Initialize GSM
   gsmSerial.begin(9600, SERIAL_8N1, GSM_RX, GSM_TX);
   Serial.println("[SETUP] GSM Serial started on RX:4, TX:5");
   initializeGSM();
 
-  // Initialize pins — SINGLE RELAY on starter switch
+  // Initialize pins — correct order: pinMode THEN tone/noTone
   pinMode(relayPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
-  noTone(buzzerPin);
   pinMode(lightIndicatorPin, OUTPUT);
   pinMode(vibrationSensorPin, INPUT_PULLUP);
+
+  // Set initial pin states
+  digitalWrite(relayPin, HIGH);       // Relay OFF (active-low)
+  noTone(buzzerPin);                  // Buzzer silent
+  digitalWrite(lightIndicatorPin, LOW);
 
   // Hardware interrupt for vibration sensor
   attachInterrupt(digitalPinToInterrupt(vibrationSensorPin), onVibration, CHANGE);
 
-  // Relay OFF at startup (HIGH = OFF for active-low relay)
-  digitalWrite(relayPin, HIGH);
+  // Startup beep — confirms buzzer is working
+  tone(buzzerPin, 1200, 150); delay(200);
+  tone(buzzerPin, 1600, 150); delay(200);
   noTone(buzzerPin);
-  digitalWrite(lightIndicatorPin, LOW);
 
   delay(100);
   Serial.println("\n[SETUP] ═══════════════════════════════════");
@@ -507,17 +514,17 @@ void loop() {
     lastSecurityCheck = millis();
   }
 
-  // ── GPS: read continuously ────────────────────────────────────────────────
-  while (gpsSerial.available() > 0) {
-    char c = gpsSerial.read();
-    gps.encode(c);
+  // ── GPS: read ALL available bytes every loop — don't limit to one char ──────
+  // Reading more bytes per iteration ensures full NMEA sentences are parsed
+  // before the next loop cycle, giving faster fix acquisition.
+  unsigned long gpsReadStart = millis();
+  while (gpsSerial.available() > 0 && millis() - gpsReadStart < 20) {
+    gps.encode(gpsSerial.read());
   }
   if (millis() - lastGPSUpdate >= GPS_UPDATE_INTERVAL) {
     if (gps.speed.isValid()) {
       float rawSpeed = gps.speed.kmph();
-      // Apply deadband: GPS noise can show 1-5 km/h when stationary.
-      // Only trust speed if it's above 3 km/h AND we have satellite data.
-      const float GPS_SPEED_DEADBAND = 3.0;  // km/h — below this = treat as 0
+      const float GPS_SPEED_DEADBAND = 3.0;
       currentSpeed = (rawSpeed > GPS_SPEED_DEADBAND) ? rawSpeed : 0.0;
     } else {
       currentSpeed = 0.0;
