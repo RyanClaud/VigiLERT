@@ -2040,65 +2040,36 @@ void checkHelmetConnection() {
   http.setTimeout(1500);
   String helmetPath = firebaseHost + "/helmet_public/" + userUID + "/devices/helmet.json?auth=" + firebaseAuth;
   http.begin(helmetPath);
-
   int httpCode = http.GET();
 
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
     http.end();
 
-    // Parse lastHeartbeat value
-    int idx = response.indexOf("\"lastHeartbeat\":");
-    if (idx != -1) {
-      int s = response.indexOf(":", idx) + 1;
-      // skip whitespace
-      while (s < response.length() && response[s] == ' ') s++;
-      int e = response.indexOf(",", s);
-      if (e == -1) e = response.indexOf("}", s);
-      if (e > s) {
-        // Use the raw numeric value as a change detector
-        // We don't need the actual time â€” just whether it changed
-        String hbStr = response.substring(s, e);
-        hbStr.trim();
-        // Convert to a comparable value (last 9 digits to avoid float precision loss)
-        uint32_t hbLow = (uint32_t)(hbStr.toDouble());  // lower 32 bits
+    // Simple rule: if status is "On" AND we got a 200 response, helmet is alive.
+    // Update lastHelmetUpdateTime on EVERY successful read — no value comparison.
+    // Value comparison caused false disconnects due to uint32_t overflow.
+    bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
 
-        if (hbLow != (uint32_t)lastHelmetHeartbeat || !helmetConnected) {
-          // Heartbeat changed OR we just reconnected ï¿½ helmet is alive
-          lastHelmetHeartbeat  = hbLow;
-          lastHelmetUpdateTime = millis();
-          helmetStatusForcedOff = false;
-
-          if (!helmetConnected) {
-            Serial.println("[HELMET] Connected ï¿½ resetting heartbeat timer");
-            helmetConnected = true;
-          }
-        } else {
-          // Heartbeat value unchanged ï¿½ check staleness
-          unsigned long stale = millis() - lastHelmetUpdateTime;
-          if (stale > HELMET_TIMEOUT) {
-            if (helmetConnected) {
-              Serial.printf("[HELMET] Stale for %lu ms ï¿½ DISCONNECTED\n", stale);
-              helmetConnected = false;
-              lastHelmetHeartbeat = 0;  // reset so next read triggers "changed"
-            }
-          } else {
-            // Still within timeout ï¿½ keep connected, refresh timestamp
-            lastHelmetUpdateTime = millis();
-          }
-        }
+    if (statusIsOn) {
+      lastHelmetUpdateTime  = millis();  // always refresh on every successful read
+      helmetStatusForcedOff = false;
+      if (!helmetConnected) {
+        Serial.println("[HELMET] Connected");
+        helmetConnected = true;
       }
     } else {
-      // No lastHeartbeat field â€” check status field as fallback
-      bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
-      if (!statusIsOn && helmetConnected) {
-        Serial.println("[HELMET] Status Off â€” DISCONNECTED");
+      // Explicit "Off" status — helmet turned off
+      if (helmetConnected) {
+        Serial.println("[HELMET] Status Off — disconnected");
         helmetConnected = false;
+        lastHelmetUpdateTime = 0;
       }
     }
   } else {
     http.end();
-    // HTTP failed â€” don't immediately disconnect; let timeout handle it
+    // HTTP failed — don't disconnect immediately; let the timeout in
+    // checkComprehensiveSecurity() handle it after HELMET_TIMEOUT ms
     static unsigned long lastFailLog = 0;
     if (millis() - lastFailLog > 5000) {
       Serial.printf("[HELMET] HTTP %d\n", httpCode);
@@ -2109,9 +2080,9 @@ void checkHelmetConnection() {
   // Status log every 3 seconds
   static unsigned long lastDebug = 0;
   if (millis() - lastDebug >= 3000) {
-    unsigned long stale = (lastHelmetUpdateTime > 0) ? (millis() - lastHelmetUpdateTime) : 0;
-    Serial.printf("[HELMET] %s | Heartbeat age: %lu ms\n",
-                  helmetConnected ? "CONNECTED" : "DISCONNECTED", stale);
+    unsigned long age = (lastHelmetUpdateTime > 0) ? (millis() - lastHelmetUpdateTime) : 0;
+    Serial.printf("[HELMET] %s | Age: %lu ms\n",
+                  helmetConnected ? "CONNECTED" : "DISCONNECTED", age);
     lastDebug = millis();
   }
 }
