@@ -121,9 +121,9 @@ const unsigned long ALCOHOL_CHECK_INTERVAL = 500;  // 500ms — matches helmet w
 // ✅ ENHANCED: Comprehensive security system with BALANCED timeouts
 bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
-const unsigned long HELMET_CHECK_INTERVAL = 3000;  // 3s — helmet updates every 1s so 3s is safe
+const unsigned long HELMET_CHECK_INTERVAL = 2000;  // Check every 2s
 uint64_t lastHelmetHeartbeat = 0;
-const unsigned long HELMET_TIMEOUT = 15000;  // 15s — generous to avoid false disconnects
+const unsigned long HELMET_TIMEOUT = 10000;  // 10s — if heartbeat stops for 10s, shut down
 const unsigned long HELMET_FORCE_OFF_TIMEOUT = 20000;
 unsigned long lastHelmetUpdateTime = 0;
 bool helmetStatusForcedOff = false;
@@ -1879,7 +1879,7 @@ void checkComprehensiveSecurity() {
                                   : 0;
   bool wifiTimeout = (lastWiFiConnected > 0) && (timeSinceWiFi > WIFI_TIMEOUT);
 
-  // 2. Helmet check � engine must not run without an active helmet connection.
+  // 2. Helmet check � engine must not run without an active helmet connection.
   //    "never seen" (lastHelmetUpdateTime==0) is treated as disconnected.
   unsigned long timeSinceHelmet = (lastHelmetUpdateTime > 0)
                                     ? (currentTime - lastHelmetUpdateTime)
@@ -2037,6 +2037,12 @@ void checkWiFiWatchdog() {
 // ✅ Check helmet connection — simplified: if Firebase GET succeeds and
 // status is "On", the helmet is connected. No timestamp comparison needed.
 void checkHelmetConnection() {
+// ── Helmet heartbeat check ────────────────────────────────────────────────
+// Reads the helmet's lastHeartbeat timestamp from Firebase.
+// The helmet writes this every 1 second. If it hasn't changed in
+// HELMET_TIMEOUT ms (10s), the helmet is considered disconnected.
+// Uses wall-clock millis() comparison — not the Arduino fake timestamp.
+void checkHelmetConnection() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
@@ -2048,41 +2054,67 @@ void checkHelmetConnection() {
 
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
+    http.end();
 
-    // If status is "On" → helmet is alive. Update our wall-clock timestamp.
-    bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
+    // Parse lastHeartbeat value
+    int idx = response.indexOf("\"lastHeartbeat\":");
+    if (idx != -1) {
+      int s = response.indexOf(":", idx) + 1;
+      // skip whitespace
+      while (s < response.length() && response[s] == ' ') s++;
+      int e = response.indexOf(",", s);
+      if (e == -1) e = response.indexOf("}", s);
+      if (e > s) {
+        // Use the raw numeric value as a change detector
+        // We don't need the actual time — just whether it changed
+        String hbStr = response.substring(s, e);
+        hbStr.trim();
+        // Convert to a comparable value (last 9 digits to avoid float precision loss)
+        uint32_t hbLow = (uint32_t)(hbStr.toDouble());  // lower 32 bits
 
-    if (statusIsOn) {
-      // ✅ Every successful "On" read counts as a fresh heartbeat
-      lastHelmetUpdateTime = millis();
-      helmetStatusForcedOff = false;
+        if (hbLow != (uint32_t)lastHelmetHeartbeat) {
+          // Heartbeat changed — helmet is alive
+          lastHelmetHeartbeat  = hbLow;
+          lastHelmetUpdateTime = millis();  // record wall-clock time of this update
+          helmetStatusForcedOff = false;
 
-      if (!helmetConnected) {
-        Serial.println("[HELMET] ✅ Connected");
-        helmetConnected = true;
+          if (!helmetConnected) {
+            Serial.println("[HELMET] Connected");
+            helmetConnected = true;
+          }
+        } else {
+          // Heartbeat unchanged — check how long since last change
+          unsigned long stale = millis() - lastHelmetUpdateTime;
+          if (stale > HELMET_TIMEOUT && helmetConnected) {
+            Serial.printf("[HELMET] Heartbeat stale for %lu ms — DISCONNECTED\n", stale);
+            helmetConnected = false;
+          }
+        }
       }
     } else {
-      // Status is "Off" or missing
-      if (helmetConnected) {
-        Serial.println("[HELMET] ⚠️ Status is Off");
+      // No lastHeartbeat field — check status field as fallback
+      bool statusIsOn = (response.indexOf("\"status\":\"On\"") != -1);
+      if (!statusIsOn && helmetConnected) {
+        Serial.println("[HELMET] Status Off — DISCONNECTED");
+        helmetConnected = false;
       }
-      helmetConnected = false;
-      // Don't zero lastHelmetUpdateTime here — let the timeout in
-      // checkComprehensiveSecurity() handle the grace period naturally
     }
   } else {
+    http.end();
     // HTTP failed — don't immediately disconnect; let timeout handle it
-    Serial.printf("[HELMET] HTTP %d — keeping last known state\n", httpCode);
+    static unsigned long lastFailLog = 0;
+    if (millis() - lastFailLog > 5000) {
+      Serial.printf("[HELMET] HTTP %d\n", httpCode);
+      lastFailLog = millis();
+    }
   }
 
-  http.end();
-
-  // Status log every 5 seconds
+  // Status log every 3 seconds
   static unsigned long lastDebug = 0;
-  if (millis() - lastDebug >= 5000) {
-    unsigned long timeSince = (lastHelmetUpdateTime > 0) ? (millis() - lastHelmetUpdateTime) : 0;
-    Serial.printf("[HELMET] %s | Last seen: %lu ms ago\n",
-                  helmetConnected ? "CONNECTED ✅" : "DISCONNECTED ❌", timeSince);
+  if (millis() - lastDebug >= 3000) {
+    unsigned long stale = (lastHelmetUpdateTime > 0) ? (millis() - lastHelmetUpdateTime) : 0;
+    Serial.printf("[HELMET] %s | Heartbeat age: %lu ms\n",
+                  helmetConnected ? "CONNECTED" : "DISCONNECTED", stale);
     lastDebug = millis();
   }
 }
