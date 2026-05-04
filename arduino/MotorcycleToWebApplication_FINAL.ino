@@ -1351,10 +1351,11 @@ void startEngine() {
   unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
   unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
   
-  bool wifiOK = (timeSinceWiFi <= WIFI_TIMEOUT);
-  bool helmetOK = (timeSinceHelmet <= HELMET_TIMEOUT || lastHelmetUpdateTime == 0 || helmetConnected);
+  bool wifiOK   = (lastWiFiConnected > 0) && (timeSinceWiFi <= WIFI_TIMEOUT);
+  // Helmet MUST be actively connected — no bypass if never seen
+  bool helmetOK = helmetConnected && (lastHelmetUpdateTime > 0) && (timeSinceHelmet <= HELMET_TIMEOUT);
   bool alcoholOK = !alcoholDetected;
-  bool crashOK = !crashDetected;
+  bool crashOK   = !crashDetected;
   
   Serial.printf("[ENGINE] WiFi: %s (%lu ms ago)\n", wifiOK ? "OK ✅" : "TIMEOUT ❌", timeSinceWiFi);
   Serial.printf("[ENGINE] Helmet: %s (%lu ms ago)\n", helmetOK ? "OK ✅" : "TIMEOUT ❌", timeSinceHelmet);
@@ -1878,14 +1879,12 @@ void checkComprehensiveSecurity() {
                                   : 0;
   bool wifiTimeout = (lastWiFiConnected > 0) && (timeSinceWiFi > WIFI_TIMEOUT);
 
-  // 2. Helmet timeout � only flag if engine running AND helmet was seen before
+  // 2. Helmet check � engine must not run without an active helmet connection.
+  //    "never seen" (lastHelmetUpdateTime==0) is treated as disconnected.
   unsigned long timeSinceHelmet = (lastHelmetUpdateTime > 0)
                                     ? (currentTime - lastHelmetUpdateTime)
-                                    : 0;
-  bool helmetTimeout = engineRunning &&
-                       (lastHelmetUpdateTime > 0) &&
-                       (timeSinceHelmet > HELMET_TIMEOUT) &&
-                       !helmetConnected;
+                                    : currentTime;  // never seen = infinite time ago
+  bool helmetTimeout = engineRunning && (!helmetConnected || timeSinceHelmet > HELMET_TIMEOUT);
 
   bool securityViolation = wifiTimeout || helmetTimeout;
 
