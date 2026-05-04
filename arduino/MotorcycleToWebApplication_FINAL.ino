@@ -2131,7 +2131,6 @@ void checkHelmetConnection() {
     lastDebug = millis();
   }
 }
-}
 
 // ✅ NEW: Force helmet status to "Off" in Firebase
 void forceHelmetStatusOff() {
