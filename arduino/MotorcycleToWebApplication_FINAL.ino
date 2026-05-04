@@ -121,9 +121,9 @@ const unsigned long ALCOHOL_CHECK_INTERVAL = 500;  // 500ms — matches helmet w
 // ✅ ENHANCED: Comprehensive security system with BALANCED timeouts
 bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
-const unsigned long HELMET_CHECK_INTERVAL = 2000;  // Check every 2s
+const unsigned long HELMET_CHECK_INTERVAL = 1000;  // Check every 1s for faster detection
 uint64_t lastHelmetHeartbeat = 0;
-const unsigned long HELMET_TIMEOUT = 10000;  // 10s — if heartbeat stops for 10s, shut down
+const unsigned long HELMET_TIMEOUT = 5000;   // 5s � engine cuts within ~6s of helmet disconnect
 const unsigned long HELMET_FORCE_OFF_TIMEOUT = 20000;
 unsigned long lastHelmetUpdateTime = 0;
 bool helmetStatusForcedOff = false;
@@ -2455,6 +2455,7 @@ void printSecurityStatus() {
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
+
 
 
 
