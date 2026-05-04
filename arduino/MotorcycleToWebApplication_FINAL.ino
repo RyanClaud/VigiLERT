@@ -2036,12 +2036,17 @@ void checkWiFiWatchdog() {
 }
 
 void checkHelmetConnection() {
-  // -- Definitive helmet detection -------------------------------------------
-  // Track the wall-clock time of the last successful HTTP 200 response.
-  // If no successful response for HELMET_TIMEOUT ms, helmet is disconnected.
-  // This works regardless of what Firebase contains — if the helmet is off,
-  // its WiFi drops, Firebase becomes unreachable or slow, and HTTP calls fail.
-  // After HELMET_TIMEOUT ms of failed calls, we cut the engine.
+  // -- Helmet liveness detection ---------------------------------------------
+  // Strategy: track the last 6 digits of lastHeartbeat (changes every ms).
+  // On disconnect: keep the frozen suffix — do NOT reset it to "".
+  //   This prevents false reconnect: next read still has the same frozen
+  //   suffix, so it stays disconnected until the suffix actually changes.
+  // On reconnect: suffix changes from frozen value to a new one ? alive.
+  // On HTTP failure: if no successful read for HELMET_TIMEOUT ms ? disconnect.
+
+  static String  lastSuffix     = "";    // last seen suffix (kept on disconnect)
+  static unsigned long lastAdvTime = 0;  // millis() when suffix last changed
+  static bool    initialized    = false; // first-read flag
 
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -2050,17 +2055,14 @@ void checkHelmetConnection() {
   String helmetPath = firebaseHost + "/helmet_public/" + userUID + "/devices/helmet.json?auth=" + firebaseAuth;
   http.begin(helmetPath);
   int httpCode = http.GET();
+  unsigned long now = millis();
 
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
     http.end();
 
-    // Got a valid response — now check if the heartbeat is actually advancing.
-    // Extract last 6 digits of lastHeartbeat (changes every ms while helmet runs).
-    static String lastSuffix = "";
-    static unsigned long lastSuffixTime = 0;
-    unsigned long now = millis();
-
+    // Extract last 6 digits of lastHeartbeat
+    String suffix = "";
     int idx = response.indexOf("\"lastHeartbeat\":");
     if (idx != -1) {
       int s = idx + 16;
@@ -2069,62 +2071,75 @@ void checkHelmetConnection() {
       while (e < (int)response.length() && response[e] >= '0' && response[e] <= '9') e++;
       if (e > s) {
         String hbStr = response.substring(s, e);
-        String suffix = hbStr.length() >= 6 ? hbStr.substring(hbStr.length() - 6) : hbStr;
-
-        if (suffix != lastSuffix || lastSuffixTime == 0) {
-          // Heartbeat advancing (or first read) — helmet is alive
-          lastSuffix     = suffix;
-          lastSuffixTime = now;
-          lastHelmetUpdateTime = now;
-          helmetStatusForcedOff = false;
-          if (!helmetConnected) {
-            Serial.println("[HELMET] Connected");
-            helmetConnected = true;
-          }
-        } else {
-          // Suffix unchanged — check staleness
-          unsigned long frozen = now - lastSuffixTime;
-          if (frozen > HELMET_TIMEOUT) {
-            if (helmetConnected) {
-              Serial.printf("[HELMET] Heartbeat frozen %lu ms — DISCONNECTED\n", frozen);
-              helmetConnected = false;
-              lastHelmetUpdateTime = 0;
-              lastSuffix = "";
-            }
-          } else {
-            lastHelmetUpdateTime = now;  // still fresh
-          }
-        }
+        suffix = hbStr.length() >= 6 ? hbStr.substring(hbStr.length() - 6) : hbStr;
       }
-    } else {
-      // No lastHeartbeat field — use status as fallback
+    }
+
+    if (suffix.length() == 0) {
+      // No heartbeat field — fallback to status
       bool on = (response.indexOf("\"status\":\"On\"") != -1);
       if (on) {
         lastHelmetUpdateTime = now;
-        if (!helmetConnected) { helmetConnected = true; }
+        if (!helmetConnected) { helmetConnected = true; Serial.println("[HELMET] Connected (status)"); }
       } else if (helmetConnected) {
         Serial.println("[HELMET] Status Off — disconnected");
         helmetConnected = false;
         lastHelmetUpdateTime = 0;
       }
+      return;
+    }
+
+    if (!initialized) {
+      // Very first read — just record the suffix, don't connect yet
+      // Wait for it to change on the next read to confirm it's live
+      lastSuffix   = suffix;
+      lastAdvTime  = now;
+      initialized  = true;
+      lastHelmetUpdateTime = now;
+      Serial.printf("[HELMET] First read — suffix: %s\n", suffix.c_str());
+      return;
+    }
+
+    if (suffix != lastSuffix) {
+      // Suffix changed — helmet is alive and sending fresh data
+      lastSuffix   = suffix;
+      lastAdvTime  = now;
+      lastHelmetUpdateTime = now;
+      helmetStatusForcedOff = false;
+      if (!helmetConnected) {
+        Serial.println("[HELMET] Connected — heartbeat advancing");
+        helmetConnected = true;
+      }
+    } else {
+      // Suffix unchanged — check how long since it last changed
+      unsigned long frozen = now - lastAdvTime;
+      if (frozen > HELMET_TIMEOUT) {
+        // Heartbeat frozen too long — helmet is off
+        // DO NOT reset lastSuffix — keep it so we don't false-reconnect
+        if (helmetConnected) {
+          Serial.printf("[HELMET] Frozen %lu ms — DISCONNECTED\n", frozen);
+          helmetConnected = false;
+          lastHelmetUpdateTime = 0;
+        }
+      } else {
+        // Still within grace period — keep alive
+        lastHelmetUpdateTime = now;
+      }
     }
 
   } else {
-    // HTTP failed — this is the key fix:
-    // If we haven't had a successful response for HELMET_TIMEOUT ms, disconnect.
     http.end();
-    unsigned long now = millis();
-    unsigned long timeSinceLastOK = (lastHelmetUpdateTime > 0) ? (now - lastHelmetUpdateTime) : now;
-
-    if (timeSinceLastOK > HELMET_TIMEOUT && helmetConnected) {
-      Serial.printf("[HELMET] No response for %lu ms (HTTP %d) — DISCONNECTED\n",
-                    timeSinceLastOK, httpCode);
+    // HTTP failed — if no successful read for HELMET_TIMEOUT ms, disconnect
+    unsigned long sinceLastOK = (lastHelmetUpdateTime > 0) ? (now - lastHelmetUpdateTime) : now;
+    if (sinceLastOK > HELMET_TIMEOUT && helmetConnected) {
+      Serial.printf("[HELMET] HTTP %d for %lu ms — DISCONNECTED\n", httpCode, sinceLastOK);
       helmetConnected = false;
       lastHelmetUpdateTime = 0;
+      // Keep lastSuffix — don't reset, prevents false reconnect
     } else {
       static unsigned long lastFailLog = 0;
       if (now - lastFailLog > 3000) {
-        Serial.printf("[HELMET] HTTP %d | No response for %lu ms\n", httpCode, timeSinceLastOK);
+        Serial.printf("[HELMET] HTTP %d | No OK for %lu ms\n", httpCode, sinceLastOK);
         lastFailLog = now;
       }
     }
@@ -2132,11 +2147,11 @@ void checkHelmetConnection() {
 
   // Status log every 3 seconds
   static unsigned long lastDebug = 0;
-  if (millis() - lastDebug >= 3000) {
-    unsigned long age = (lastHelmetUpdateTime > 0) ? (millis() - lastHelmetUpdateTime) : 0;
-    Serial.printf("[HELMET] %s | Age: %lu ms\n",
-                  helmetConnected ? "CONNECTED" : "DISCONNECTED", age);
-    lastDebug = millis();
+  if (now - lastDebug >= 3000) {
+    unsigned long age = (lastHelmetUpdateTime > 0) ? (now - lastHelmetUpdateTime) : 0;
+    Serial.printf("[HELMET] %s | Age: %lu ms | Suffix: %s\n",
+                  helmetConnected ? "CONNECTED" : "DISCONNECTED", age, lastSuffix.c_str());
+    lastDebug = now;
   }
 }
 
