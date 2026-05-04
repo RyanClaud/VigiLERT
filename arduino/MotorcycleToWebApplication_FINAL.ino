@@ -1882,14 +1882,12 @@ void checkComprehensiveSecurity() {
                                   : 0;
   bool wifiTimeout = (lastWiFiConnected > 0) && (timeSinceWiFi > WIFI_TIMEOUT);
 
-  // 2. Helmet check — only enforce after first successful read (lastHelmetUpdateTime > 0)
-  //    On boot, lastHelmetUpdateTime=0 means not yet seen — do not trigger shutdown.
-  unsigned long timeSinceHelmet = (lastHelmetUpdateTime > 0)
-                                    ? (currentTime - lastHelmetUpdateTime)
-                                    : 0;
-  bool helmetTimeout = engineRunning &&
-                       (lastHelmetUpdateTime > 0) &&
-                       (!helmetConnected || timeSinceHelmet > HELMET_TIMEOUT);
+  // 2. Helmet check — use helmetConnected boolean directly.
+  //    checkHelmetConnection() sets this to false when helmet is off.
+  //    Only skip on boot (lastHelmetUpdateTime==0 AND never connected).
+  //    Once we have seen the helmet, !helmetConnected = violation.
+  bool helmetSeen = (lastHelmetUpdateTime > 0) || helmetConnected;
+  bool helmetTimeout = engineRunning && helmetSeen && !helmetConnected;
 
   bool securityViolation = wifiTimeout || helmetTimeout;
 
