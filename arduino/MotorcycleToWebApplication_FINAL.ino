@@ -32,7 +32,7 @@
 
 // WiFi Configuration
 const char* ssid = "DPWH";
-const char* password = "12345678900";
+const char* password = "123456789000";
 
 // Firebase Configuration
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
@@ -298,9 +298,6 @@ void stopSiren() {
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Stopped");
 }
-  digitalWrite(lightIndicatorPin, LOW);
-  Serial.println("[SIREN] Stopped");
-}
 
 // Short pleasant double-chirp — used for confirmations (arming, blocked start)
 // Two quick rising tones: 1000Hz → 1400Hz, 80ms each. Non-blocking via tone duration.
@@ -331,9 +328,11 @@ void forceHelmetStatusOff();
 void startEngine();
 void stopEngine();
 void checkStarterTimeout();
+void triggerCrashShutdown(float impact, float roll);
 void sendCrashToFirebase(float impact, float roll);
 void sendLiveToFirebase();
 void connectToWiFi();
+bool sendMotorcycleHeartbeat(bool isActive);
 // Trip
 void startTrip();
 void endTrip();
@@ -343,6 +342,12 @@ float calculateDistance(double lat1, double lng1, double lat2, double lng2);
 // Alcohol / security
 void checkAlcoholStatus();
 void triggerAlcoholShutdown();
+// Anti-theft
+void triggerTheftAlert();
+void logTheftToFirebase(String location);
+// GSM
+void initializeGSM();
+void tickGSMInit();
 // Dashboard button
 void handleDashboardButton();
 void checkDashboardButton();
@@ -400,8 +405,8 @@ void setup() {
   // Initialize pins — SINGLE RELAY on starter switch
   pinMode(relayPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
-  // Attach LEDC to buzzer pin — claims channel before other libs can take it
-  noTone(buzzerPin);\n  pinMode(lightIndicatorPin, OUTPUT);
+  noTone(buzzerPin);
+  pinMode(lightIndicatorPin, OUTPUT);
   pinMode(vibrationSensorPin, INPUT_PULLUP);
 
   // Hardware interrupt for vibration sensor
