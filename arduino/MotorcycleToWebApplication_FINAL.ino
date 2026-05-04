@@ -1352,8 +1352,10 @@ void startEngine() {
   unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
   
   bool wifiOK   = (lastWiFiConnected > 0) && (timeSinceWiFi <= WIFI_TIMEOUT);
-  // Helmet MUST be actively connected â€” no bypass if never seen
-  bool helmetOK = helmetConnected && (lastHelmetUpdateTime > 0) && (timeSinceHelmet <= HELMET_TIMEOUT);
+  // Use helmetConnected boolean directly â€” it's kept current by checkHelmetConnection()
+  // Don't use timeSinceHelmet here: the check runs every 2s so the timestamp
+  // can be up to 2s stale even when the helmet is live.
+  bool helmetOK = helmetConnected;
   bool alcoholOK = !alcoholDetected;
   bool crashOK   = !crashDetected;
   
@@ -1374,12 +1376,13 @@ void startEngine() {
   }
 
   // âœ… 2. Helmet Security Check
-  if (!helmetOK && lastHelmetUpdateTime > 0) {
-    Serial.println("\nâŒ ENGINE START BLOCKED - HELMET TIMEOUT!");
-    Serial.printf("ðŸ’¡ Helmet disconnected for %lu ms (>%lu ms limit)\n", timeSinceHelmet, HELMET_TIMEOUT);
+  if (!helmetOK) {
+    Serial.println("\nâŒ ENGINE START BLOCKED - HELMET NOT CONNECTED!");
+    Serial.printf("ðŸ’¡ helmetConnected=%s | Last seen: %lu ms ago\n",
+                  helmetConnected ? "true" : "false", timeSinceHelmet);
     digitalWrite(relayPin, HIGH);
     playWarningBeep(2);
-    logSecurityEventToFirebase("Engine Start Blocked - Helmet Timeout");
+    logSecurityEventToFirebase("Engine Start Blocked - Helmet Not Connected");
     return;
   }
 
@@ -2061,26 +2064,26 @@ void checkHelmetConnection() {
         uint32_t hbLow = (uint32_t)(hbStr.toDouble());  // lower 32 bits
 
         if (hbLow != (uint32_t)lastHelmetHeartbeat || !helmetConnected) {
-          // Heartbeat changed OR we just reconnected — helmet is alive
+          // Heartbeat changed OR we just reconnected ï¿½ helmet is alive
           lastHelmetHeartbeat  = hbLow;
           lastHelmetUpdateTime = millis();
           helmetStatusForcedOff = false;
 
           if (!helmetConnected) {
-            Serial.println("[HELMET] Connected — resetting heartbeat timer");
+            Serial.println("[HELMET] Connected ï¿½ resetting heartbeat timer");
             helmetConnected = true;
           }
         } else {
-          // Heartbeat value unchanged — check staleness
+          // Heartbeat value unchanged ï¿½ check staleness
           unsigned long stale = millis() - lastHelmetUpdateTime;
           if (stale > HELMET_TIMEOUT) {
             if (helmetConnected) {
-              Serial.printf("[HELMET] Stale for %lu ms — DISCONNECTED\n", stale);
+              Serial.printf("[HELMET] Stale for %lu ms ï¿½ DISCONNECTED\n", stale);
               helmetConnected = false;
               lastHelmetHeartbeat = 0;  // reset so next read triggers "changed"
             }
           } else {
-            // Still within timeout — keep connected, refresh timestamp
+            // Still within timeout ï¿½ keep connected, refresh timestamp
             lastHelmetUpdateTime = millis();
           }
         }
