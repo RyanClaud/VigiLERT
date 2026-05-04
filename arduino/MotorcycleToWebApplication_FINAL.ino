@@ -213,12 +213,9 @@ volatile bool vibrationISRTriggered = false;
 volatile unsigned long vibrationISRTime = 0;
 
 void IRAM_ATTR onVibration() {
-  unsigned long now = millis();
-  // Simple debounce in ISR — ignore if too soon after last trigger
-  if (now - vibrationISRTime >= 30) {
-    vibrationISRTriggered = true;
-    vibrationISRTime = now;
-  }
+  // Keep ISR minimal — no millis(), no Serial, no heap operations
+  // Debounce is handled in loop() handler
+  vibrationISRTriggered = true;
 }
 
 // ── Non-blocking buzzer state machine ─────────────────────────────────────
@@ -474,21 +471,23 @@ void loop() {
   tickSiren();
 
   // ── PRIORITY #1: Vibration interrupt handler ──────────────────────────────
-  // Process ISR flag immediately — before any HTTP calls that could block.
-  // This ensures vibration is detected even if the loop was blocked.
-  if (vibrationISRTriggered && !engineRunning && antiTheftArmed) {
-    vibrationISRTriggered = false;
-    consecutiveVibrations++;
-    Serial.printf("[ANTI-THEFT] INTERRUPT: Movement #%d detected!\n", consecutiveVibrations);
-    startSiren();
+  if (vibrationISRTriggered) {
+    vibrationISRTriggered = false;  // clear flag immediately
     unsigned long now = millis();
-    if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
-      triggerTheftAlert();
-      lastTheftAlert = now;
-      theftAlertSent = true;
+    // Debounce in loop — ignore if too soon after last trigger
+    if (now - vibrationISRTime >= VIBRATION_DEBOUNCE) {
+      vibrationISRTime = now;
+      if (!engineRunning && antiTheftArmed) {
+        consecutiveVibrations++;
+        Serial.printf("[ANTI-THEFT] INTERRUPT: Movement #%d!\n", consecutiveVibrations);
+        startSiren();
+        if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
+          triggerTheftAlert();
+          lastTheftAlert = now;
+          theftAlertSent = true;
+        }
+      }
     }
-  } else {
-    vibrationISRTriggered = false;  // clear flag if not armed
   }
 
   // ── WiFi auto-reconnect (non-blocking) ────────────────────────────────────
