@@ -1894,7 +1894,7 @@ void checkComprehensiveSecurity() {
   if (SECURITY_SHUTDOWNS_ENABLED && securityViolation && engineRunning) {
     Serial.println("\n?????? SECURITY VIOLATION ï¿½ AUTO SHUTDOWN! ??????");
     if (wifiTimeout)   Serial.printf("?? WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
-    if (helmetTimeout) Serial.printf("?? HELMET TIMEOUT: %lu ms (>%lu ms)\n", timeSinceHelmet, HELMET_TIMEOUT);
+    if (helmetTimeout) Serial.println("[SECURITY] HELMET DISCONNECTED — shutdown triggered");
     triggerSecurityShutdown("Security Violation");
   }
 
@@ -1903,9 +1903,9 @@ void checkComprehensiveSecurity() {
   // Debug every 5 seconds
   static unsigned long lastSecurityDebug = 0;
   if (currentTime - lastSecurityDebug > 5000) {
-    Serial.printf("[SECURITY] WiFi:%s(%lums) Helmet:%s(%lums) Engine:%s\n",
-                  wifiTimeout ? "TIMEOUT?" : "OK?", timeSinceWiFi,
-                  helmetTimeout ? "TIMEOUT?" : "OK?", timeSinceHelmet,
+    Serial.printf("[SECURITY] WiFi:%s(%lums) Helmet:%s Engine:%s\n",
+                  wifiTimeout ? "TIMEOUT" : "OK", timeSinceWiFi,
+                  helmetConnected ? "CONN" : "DISC",
                   engineRunning ? "RUNNING" : "STOPPED");
     lastSecurityDebug = currentTime;
   }
