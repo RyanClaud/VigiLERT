@@ -2060,22 +2060,28 @@ void checkHelmetConnection() {
         // Convert to a comparable value (last 9 digits to avoid float precision loss)
         uint32_t hbLow = (uint32_t)(hbStr.toDouble());  // lower 32 bits
 
-        if (hbLow != (uint32_t)lastHelmetHeartbeat) {
-          // Heartbeat changed â€” helmet is alive
+        if (hbLow != (uint32_t)lastHelmetHeartbeat || !helmetConnected) {
+          // Heartbeat changed OR we just reconnected — helmet is alive
           lastHelmetHeartbeat  = hbLow;
-          lastHelmetUpdateTime = millis();  // record wall-clock time of this update
+          lastHelmetUpdateTime = millis();
           helmetStatusForcedOff = false;
 
           if (!helmetConnected) {
-            Serial.println("[HELMET] Connected");
+            Serial.println("[HELMET] Connected — resetting heartbeat timer");
             helmetConnected = true;
           }
         } else {
-          // Heartbeat unchanged â€” check how long since last change
+          // Heartbeat value unchanged — check staleness
           unsigned long stale = millis() - lastHelmetUpdateTime;
-          if (stale > HELMET_TIMEOUT && helmetConnected) {
-            Serial.printf("[HELMET] Heartbeat stale for %lu ms â€” DISCONNECTED\n", stale);
-            helmetConnected = false;
+          if (stale > HELMET_TIMEOUT) {
+            if (helmetConnected) {
+              Serial.printf("[HELMET] Stale for %lu ms — DISCONNECTED\n", stale);
+              helmetConnected = false;
+              lastHelmetHeartbeat = 0;  // reset so next read triggers "changed"
+            }
+          } else {
+            // Still within timeout — keep connected, refresh timestamp
+            lastHelmetUpdateTime = millis();
           }
         }
       }
