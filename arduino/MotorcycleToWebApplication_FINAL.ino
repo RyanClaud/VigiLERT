@@ -2083,6 +2083,13 @@ void checkHelmetConnection() {
         Serial.println("[HELMET] Status Off — disconnected");
         helmetConnected = false;
         lastHelmetUpdateTime = 0;
+        if (engineRunning) {
+          Serial.println("[HELMET] Status Off — cutting ignition relay NOW");
+          digitalWrite(relayPin, HIGH);
+          engineRunning = false;
+          endTrip();
+          startSiren();
+        }
       }
       return;
     }
@@ -2115,10 +2122,18 @@ void checkHelmetConnection() {
         // Heartbeat frozen too long — helmet is off
         // DO NOT reset lastSuffix — keep it so we don't false-reconnect
         if (helmetConnected) {
-          Serial.printf("[HELMET] Frozen %lu ms — DISCONNECTED\n", frozen);
+        if (helmetConnected) {
+          Serial.printf("[HELMET] Frozen %lu ms — DISCONNECTED — cutting engine\n", frozen);
           helmetConnected = false;
           lastHelmetUpdateTime = 0;
-        }
+          // Cut relay immediately — do not wait for security check chain
+          if (engineRunning) {
+            Serial.println("[HELMET] Cutting ignition relay NOW");
+            digitalWrite(relayPin, HIGH);
+            engineRunning = false;
+            endTrip();
+            startSiren();
+          }
       } else {
         // Still within grace period — keep alive
         lastHelmetUpdateTime = now;
@@ -2133,6 +2148,14 @@ void checkHelmetConnection() {
       Serial.printf("[HELMET] HTTP %d for %lu ms — DISCONNECTED\n", httpCode, sinceLastOK);
       helmetConnected = false;
       lastHelmetUpdateTime = 0;
+      // Cut relay immediately
+      if (engineRunning) {
+        Serial.println("[HELMET] HTTP timeout — cutting ignition relay NOW");
+        digitalWrite(relayPin, HIGH);
+        engineRunning = false;
+        endTrip();
+        startSiren();
+      }
       // Keep lastSuffix — don't reset, prevents false reconnect
     } else {
       static unsigned long lastFailLog = 0;
