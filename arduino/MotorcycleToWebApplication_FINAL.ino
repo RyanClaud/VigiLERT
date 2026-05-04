@@ -2030,18 +2030,6 @@ void checkWiFiWatchdog() {
   }
 }
 
-// ✅ NEW: Enhanced physical key with security checks
-// ✅ REMOVED: Physical key security monitoring (not needed for basic dual relay system)
-// Security is enforced by the dual relay system cutting ignition power
-
-// ✅ Check helmet connection — simplified: if Firebase GET succeeds and
-// status is "On", the helmet is connected. No timestamp comparison needed.
-void checkHelmetConnection() {
-// ── Helmet heartbeat check ────────────────────────────────────────────────
-// Reads the helmet's lastHeartbeat timestamp from Firebase.
-// The helmet writes this every 1 second. If it hasn't changed in
-// HELMET_TIMEOUT ms (10s), the helmet is considered disconnected.
-// Uses wall-clock millis() comparison — not the Arduino fake timestamp.
 void checkHelmetConnection() {
   if (WiFi.status() != WL_CONNECTED) return;
 
