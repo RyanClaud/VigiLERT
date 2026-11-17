@@ -1,140 +1,154 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0f1e] via-[#0f1729] to-[#0a0f1e] pb-20">
-    <!-- Enhanced User Profile Header -->
-    <div class="relative overflow-hidden bg-gradient-to-r from-[#0a0f1e] via-[#1a2a5e] to-[#0a0f1e] py-8 px-4 md:px-8 shadow-2xl border-b border-white/5">
-      <!-- Animated Background Elements -->
-      <div class="absolute inset-0 overflow-hidden">
-        <div class="absolute -top-24 -left-24 w-96 h-96 bg-[#3D52A0]/20 rounded-full blur-3xl animate-pulse"></div>
-        <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-[#7091E6]/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
+  <div class="min-h-screen flex flex-col bg-[#061B2B] text-white pb-20">
+    
+    <!-- ============================================================== -->
+    <!-- PANORAMIC HERO WELCOME BANNER (Matches Reference Mockup)      -->
+    <!-- ============================================================== -->
+    <div class="relative overflow-hidden rounded-3xl shadow-2xl mb-6 border border-[#00B85C]/20 bg-[#0B2540] group">
+      <!-- Panoramic Mountain Rider Background -->
+      <div class="absolute inset-0 z-0">
+        <img 
+          src="/images/dashboard-banner.jpg" 
+          alt="VigiLERT Rider Banner" 
+          class="w-full h-full object-cover object-left md:object-center opacity-85 group-hover:scale-[1.01] transition-transform duration-700" 
+        />
+        <!-- Dark Cyber Navy Gradient Overlay -->
+        <div class="absolute inset-0 bg-gradient-to-r from-[#061B2B]/95 via-[#0B2540]/75 to-[#061B2B]/90"></div>
       </div>
-      <!-- Grid overlay -->
-      <div class="absolute inset-0 opacity-3"
-        style="background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 40px 40px;"></div>
-      
-      <div class="relative max-w-7xl mx-auto">
-        <div class="flex flex-col md:flex-row items-center justify-between gap-6">
-          <!-- User Info Section -->
-          <div class="flex items-center gap-6">
-            <!-- Avatar with Status -->
-            <div class="relative group">
-              <div class="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <div class="relative">
-                <div v-if="authStore.user && authStore.user.photoURL" class="relative">
-                  <img :src="authStore.user.photoURL" alt="User Avatar"
-                    class="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white shadow-2xl object-cover ring-4 ring-white/30 transition-transform duration-300 group-hover:scale-105" />
-                  <div class="absolute -bottom-1 -right-1 flex items-center gap-1 bg-green-500 px-2 py-1 rounded-full border-2 border-white shadow-lg">
-                    <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    <span class="text-xs font-bold text-white">Online</span>
-                  </div>
-                </div>
-                <div v-else class="relative bg-gradient-to-br from-white/20 to-white/10 backdrop-blur-sm p-4 rounded-full border-4 border-white shadow-2xl">
-                  <span class="material-icons text-5xl md:text-6xl text-white">account_circle</span>
-                  <div class="absolute -bottom-1 -right-1 flex items-center gap-1 bg-green-500 px-2 py-1 rounded-full border-2 border-white shadow-lg">
-                    <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    <span class="text-xs font-bold text-white">Online</span>
-                  </div>
-                </div>
-              </div>
+
+      <!-- Faint Tech Overlay Pattern -->
+      <div class="absolute inset-0 opacity-[0.05] pointer-events-none"
+        style="background-image: linear-gradient(rgba(112,227,74,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(112,227,74,0.3) 1px, transparent 1px); background-size: 32px 32px;">
+      </div>
+
+      <div class="relative z-10 p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <!-- Rider Welcome Header -->
+        <div class="max-w-xl">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00B85C]/15 border border-[#00B85C]/30 text-[#00B85C] text-xs font-bold mb-3 shadow-sm">
+            <span class="w-2 h-2 rounded-full bg-[#00B85C] animate-pulse"></span>
+            <span>CONNECTED SAFETY SYSTEM ACTIVE</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-md">
+            Welcome Back, <span class="text-white">{{ authStore.user?.displayName || authStore.user?.email?.split('@')[0] || 'Rider' }}</span>!
+          </h1>
+          <p class="text-white/90 text-sm sm:text-base font-medium italic mt-1 drop-shadow">
+            Ride Smart. Stay Safe.
+          </p>
+          <div class="flex flex-wrap items-center gap-3 text-slate-300 text-xs mt-3">
+            <div class="flex items-center gap-1.5">
+              <span class="material-icons text-xs text-[#00B85C]">account_circle</span>
+              <span>{{ authStore.user?.email || 'Logged in' }}</span>
             </div>
-            
-            <!-- User Details -->
-            <div class="text-center md:text-left">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="material-icons text-yellow-300 text-sm animate-pulse">star</span>
-                <p class="text-xs md:text-sm text-white/90 font-semibold uppercase tracking-widest">
-                  Premium Rider
-                </p>
-              </div>
-              <h1 class="text-2xl md:text-4xl font-bold text-white mb-2 drop-shadow-lg">
-                Welcome Back,
-                <span class="bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-transparent">
-                  <span v-if="authStore.user?.displayName">{{ authStore.user.displayName }}</span>
-                  <span v-else-if="authStore.user?.email">{{ authStore.user.email.split('@')[0] }}</span>
-                  <span v-else>Rider</span>
-                </span>
-              </h1>
-              <div class="flex flex-wrap items-center gap-3 text-white/80 text-sm">
-                <div class="flex items-center gap-1">
-                  <span class="material-icons text-sm">email</span>
-                  <span v-if="authStore.user?.email">{{ authStore.user.email }}</span>
-                  <span v-else>Not available</span>
-                </div>
-                <div class="hidden md:flex items-center gap-1">
-                  <span class="material-icons text-sm">schedule</span>
-                  <span>{{ getCurrentTime() }}</span>
-                </div>
-              </div>
+            <span>•</span>
+            <div class="flex items-center gap-1.5">
+              <span class="material-icons text-xs text-[#00B85C]">schedule</span>
+              <span>{{ getCurrentTime() }}</span>
             </div>
           </div>
-          
-          <!-- Weather & Quick Stats -->
-          <div class="flex flex-col gap-4">
-            <!-- Compact Weather Widget -->
-            <div v-if="!weather.loading && !weather.error" class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 hover:bg-white/20 transition-all duration-300">
-              <div class="flex items-center gap-4">
-                <!-- Weather Icon & Temp -->
-                <div class="flex items-center gap-3">
-                  <div class="text-5xl">{{ getWeatherEmoji(weather.condition) }}</div>
-                  <div>
-                    <p class="text-3xl font-bold text-white">{{ weather.temperature }}°C</p>
-                    <p class="text-sm text-white/80">{{ weather.description }}</p>
-                  </div>
-                </div>
-                
-                <!-- Divider -->
-                <div class="h-16 w-px bg-white/20"></div>
-                
-                <!-- Weather Details -->
-                <div class="grid grid-cols-2 gap-x-4 gap-y-2">
-                  <div class="flex items-center gap-2">
-                    <span class="material-icons text-sm text-white/70">location_on</span>
-                    <span class="text-xs text-white/90 font-medium">{{ weather.location }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span class="material-icons text-sm text-white/70">air</span>
-                    <span class="text-xs text-white/90">{{ weather.windSpeed }} km/h</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span class="material-icons text-sm text-white/70">water_drop</span>
-                    <span class="text-xs text-white/90">{{ weather.humidity }}%</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span :class="['material-icons text-sm', getRidingSafetyIconColor()]">{{ getRidingSafetyIcon() }}</span>
-                    <span :class="['text-xs font-semibold', getRidingSafetyTextColor()]">{{ getRidingSafetyLevel() }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Quick Stats -->
-            <div class="flex gap-3">
-              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group flex-1">
-                <div class="flex items-center justify-center mb-1">
-                  <span class="material-icons text-cyan-300 text-2xl group-hover:scale-110 transition-transform">two_wheeler</span>
-                </div>
-                <p class="text-xl font-bold text-white">{{ recentTrips.length }}</p>
-                <p class="text-xs text-white/70 font-medium">Trips</p>
-              </div>
-              
-              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group flex-1">
-                <div class="flex items-center justify-center mb-1">
-                  <span class="material-icons text-green-300 text-2xl group-hover:scale-110 transition-transform">verified_user</span>
-                </div>
-                <p class="text-xl font-bold text-white">{{ tripStats.safetyScore }}</p>
-                <p class="text-xs text-white/70 font-medium">Safety</p>
-              </div>
-              
-              <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 text-center hover:bg-white/20 transition-all duration-300 cursor-pointer group flex-1">
-                <div class="flex items-center justify-center mb-1">
-                  <span class="material-icons text-yellow-300 text-2xl group-hover:scale-110 transition-transform">notifications_active</span>
-                </div>
-                <p class="text-xl font-bold text-white">{{ alerts.length }}</p>
-                <p class="text-xs text-white/70 font-medium">Alerts</p>
-              </div>
+        </div>
+
+        <!-- Integrated Floating Weather Pill (Compact) -->
+        <div v-if="!weather.loading && !weather.error" class="flex items-center gap-4 bg-[#061B2B]/85 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-xl">
+          <div class="text-4xl filter drop-shadow">{{ getWeatherEmoji(weather.condition) }}</div>
+          <div class="text-left">
+            <p class="text-2xl font-bold text-white leading-none">{{ weather.temperature }}°C</p>
+            <p class="text-xs text-slate-300 font-medium mt-1">{{ weather.description }}</p>
+            <div class="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
+              <span class="flex items-center gap-1">
+                <span class="material-icons text-[12px] text-slate-400">location_on</span>
+                {{ weather.location }}
+              </span>
+              <span>•</span>
+              <span :class="['font-semibold', getRidingSafetyTextColor()]">
+                {{ getRidingSafetyLevel() }}
+              </span>
             </div>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 4 TOP KPI STAT CARDS (Matches Reference Mockup)               -->
+    <!-- ============================================================== -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      
+      <!-- KPI 1: Active Rides / Engine State (Green Theme) -->
+      <div class="relative overflow-hidden bg-[#0B2540]/75 hover:bg-[#0B2540]/95 border border-white/10 hover:border-[#00B85C]/40 backdrop-blur-md rounded-2xl p-4 sm:p-5 shadow-lg transition-all duration-300 hover:scale-[1.02] group">
+        <div class="flex items-center gap-3.5 mb-2">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#00B85C]/20 border border-[#00B85C]/40 flex items-center justify-center text-[#00B85C] flex-shrink-0 group-hover:scale-110 transition-transform">
+            <span class="material-icons text-xl sm:text-2xl">two_wheeler</span>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Active Rides</p>
+            <p class="text-xl sm:text-2xl font-black text-white leading-tight">
+              {{ recentTrips.length }}
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 text-xs font-semibold text-[#00B85C] mt-2 pt-2 border-t border-white/5">
+          <span class="w-2 h-2 rounded-full" :class="engineRunning ? 'bg-[#00B85C] animate-pulse' : 'bg-slate-500'"></span>
+          <span>{{ engineRunning ? ('Running • ' + currentSpeedText) : 'Engine Idle' }}</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: Active Alerts (Red Theme) -->
+      <div class="relative overflow-hidden bg-[#0B2540]/75 hover:bg-[#0B2540]/95 border border-white/10 hover:border-red-500/40 backdrop-blur-md rounded-2xl p-4 sm:p-5 shadow-lg transition-all duration-300 hover:scale-[1.02] group">
+        <div class="flex items-center gap-3.5 mb-2">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0 group-hover:scale-110 transition-transform">
+            <span class="material-icons text-xl sm:text-2xl" :class="alerts.length ? 'animate-pulse' : ''">warning</span>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Active Alerts</p>
+            <p class="text-xl sm:text-2xl font-black text-white leading-tight">
+              {{ alerts.length }}
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 text-xs font-semibold mt-2 pt-2 border-t border-white/5" :class="alerts.length ? 'text-red-400' : 'text-emerald-400'">
+          <span class="material-icons text-xs">{{ alerts.length ? 'notifications_active' : 'check_circle' }}</span>
+          <span>{{ alerts.length ? (alerts.length + ' requiring attention') : 'All Clear • Safe' }}</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: Safety Status (Blue Theme) -->
+      <div class="relative overflow-hidden bg-[#0B2540]/75 hover:bg-[#0B2540]/95 border border-white/10 hover:border-blue-400/40 backdrop-blur-md rounded-2xl p-4 sm:p-5 shadow-lg transition-all duration-300 hover:scale-[1.02] group">
+        <div class="flex items-center gap-3.5 mb-2">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400 flex-shrink-0 group-hover:scale-110 transition-transform">
+            <span class="material-icons text-xl sm:text-2xl">verified_user</span>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Safety Status</p>
+            <p class="text-xl sm:text-2xl font-black text-white leading-tight">
+              {{ tripStats.safetyScore || 100 }}%
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 text-xs font-semibold text-blue-300 mt-2 pt-2 border-t border-white/5">
+          <span class="material-icons text-xs">shield</span>
+          <span>{{ alcoholStatus === 'Safe' ? 'Rider Protected' : 'Alcohol Violation' }}</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: Tracked Devices (Purple Theme) -->
+      <div class="relative overflow-hidden bg-[#0B2540]/75 hover:bg-[#0B2540]/95 border border-white/10 hover:border-purple-400/40 backdrop-blur-md rounded-2xl p-4 sm:p-5 shadow-lg transition-all duration-300 hover:scale-[1.02] group">
+        <div class="flex items-center gap-3.5 mb-2">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-400 flex-shrink-0 group-hover:scale-110 transition-transform">
+            <span class="material-icons text-xl sm:text-2xl">devices</span>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Tracked Devices</p>
+            <p class="text-xl sm:text-2xl font-black text-white leading-tight">
+              {{ (helmetPaired ? 1 : 0) + (motorcyclePaired ? 1 : 0) }} / 2
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 text-xs font-semibold text-purple-300 mt-2 pt-2 border-t border-white/5">
+          <span class="w-2 h-2 rounded-full" :class="helmetPaired && motorcyclePaired ? 'bg-purple-400 animate-pulse' : 'bg-amber-400'"></span>
+          <span>{{ helmetPaired && motorcyclePaired ? 'Helmet & Bike Online' : 'Check Pairing' }}</span>
+        </div>
+      </div>
+
     </div>
 
     <!-- ⚠️ HELMET REMOVED WARNING BANNER -->
@@ -252,15 +266,15 @@
         </div>
       </div>
 
-      <!-- ⚡ ENGINE CONTROL -->
-      <div id="engine" class="relative overflow-hidden rounded-3xl shadow-2xl mb-6 transition-all duration-500"
-        :class="engineRunning ? 'bg-gradient-to-br from-[#0f1729] via-[#1a2a5e] to-[#0f1729] border border-green-500/30' : 'bg-gradient-to-br from-[#0f1729] via-[#1a2a5e] to-[#0f1729] border border-white/10'">
+      <!-- ⚡ ENGINE CONTROL DECK -->
+      <div id="engine" class="relative overflow-hidden rounded-3xl shadow-2xl mb-6 transition-all duration-500 backdrop-blur-md"
+        :class="engineRunning ? 'bg-[#0B2540]/85 border-2 border-[#00B85C]/50 shadow-[0_0_30px_rgba(0,184,92,0.25)]' : 'bg-[#0B2540]/75 border border-white/10'">
 
         <!-- Animated background glow when running -->
-        <div v-if="engineRunning" class="absolute inset-0 bg-green-500/5 animate-pulse rounded-3xl pointer-events-none"></div>
+        <div v-if="engineRunning" class="absolute inset-0 bg-[#00B85C]/5 animate-pulse rounded-3xl pointer-events-none"></div>
         <div class="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
           <div class="absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-20"
-            :class="engineRunning ? 'bg-green-400' : 'bg-[#3D52A0]'"></div>
+            :class="engineRunning ? 'bg-[#00B85C]' : 'bg-[#0B2540]'"></div>
         </div>
 
         <div class="relative p-6 md:p-8">
@@ -314,7 +328,7 @@
                   ? 'bg-red-500/20 border border-red-400/30 text-red-300 hover:bg-red-500/30 hover:border-red-400/50 active:scale-98'
                   : (alcoholDetected || !helmetPaired || !motorcyclePaired)
                     ? 'bg-white/5 border border-white/10 text-white/25 cursor-not-allowed'
-                    : 'bg-green-500/20 border border-green-400/30 text-green-300 hover:bg-green-500/30 hover:border-green-400/50 active:scale-98 hover:-translate-y-0.5']">
+                    : 'bg-gradient-to-r from-[#00B85C] to-[#087A45] hover:from-[#00c965] hover:to-[#0a8c4f] text-white shadow-lg shadow-[#00B85C]/30 active:scale-98 hover:-translate-y-0.5']">
 
             <!-- Shimmer effect on hover when enabled -->
             <div v-if="!enginePending && !engineRunning && helmetPaired && motorcyclePaired && !alcoholDetected"
@@ -535,15 +549,15 @@
         </div>
       </div>
 
-      <!-- Tabs -->
+      <!-- Tabs (Location vs Speed) -->
       <div class="mb-4 relative z-10">
-        <div class="bg-white/5 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 flex gap-1.5">
+        <div class="bg-[#0B2540]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 flex gap-1.5">
           <button v-for="tab in ['My Location', 'Speed Data']" :key="tab"
             @click="activeTab = tab"
-            :class="['flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300',
+            :class="['flex-1 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-300',
               activeTab === tab
-                ? 'bg-gradient-to-r from-[#3D52A0] to-[#7091E6] text-white shadow-lg'
-                : 'text-white/40 hover:text-white/70 hover:bg-white/5']">
+                ? 'bg-[#00B85C] text-white shadow-lg shadow-[#00B85C]/30'
+                : 'text-slate-400 hover:text-white hover:bg-white/5']">
             {{ tab }}
           </button>
         </div>
@@ -551,10 +565,10 @@
 
       <!-- Tab Content -->
       <div id="map" class="relative z-0">
-        <div v-show="activeTab === 'My Location'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10 transition-all duration-300">
+        <div v-show="activeTab === 'My Location'" class="bg-[#0B2540]/75 backdrop-blur-md rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6 border border-white/10 hover:border-[#00B85C]/30 transition-all duration-300">
           <LocationSection :location="location" :user="user" :crash-events="crashEvents" @update-location="handleLocationUpdate" />
         </div>
-        <div v-show="activeTab === 'Speed Data'" class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border border-white/10 transition-all duration-300">
+        <div v-show="activeTab === 'Speed Data'" class="bg-[#0B2540]/75 backdrop-blur-md rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6 border border-white/10 hover:border-[#00B85C]/30 transition-all duration-300">
           <SpeedDataSection
             :currentSpeed="currentSpeed"
             :speedLimit="speedLimit"
@@ -654,11 +668,20 @@
                 <p class="text-xs text-white/25 mt-0.5">{{ alert.time }}</p>
               </div>
 
-              <!-- Delete button (visible on hover) -->
-              <button @click="alerts.splice(index, 1)"
-                class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-red-400 p-1 rounded-lg hover:bg-red-500/10">
-                <span class="material-icons text-sm">close</span>
-              </button>
+              <!-- Severity badge & Dismiss button -->
+              <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                <span :class="['px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                  alert.type === 'danger' || alert.type === 'crash' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                  alert.type === 'alcohol' || alert.type === 'theft' || alert.type === 'warning' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                  'bg-blue-500/20 text-blue-300 border border-blue-500/30']">
+                  {{ alert.type === 'danger' || alert.type === 'crash' ? 'High' : (alert.type === 'alcohol' || alert.type === 'theft') ? 'Medium' : 'Info' }}
+                </span>
+                <button @click="alerts.splice(index, 1)"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-red-400 p-0.5 rounded-lg hover:bg-red-500/10"
+                  title="Dismiss alert">
+                  <span class="material-icons text-sm">close</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -666,21 +689,21 @@
 
       <!-- Recent Trips Preview -->
       <section id="trips" class="mb-6">
-        <div class="relative overflow-hidden bg-white/5 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/10 hover:border-white/20 transition-all duration-300">
+        <div class="relative overflow-hidden bg-[#0B2540]/75 backdrop-blur-md rounded-2xl shadow-xl p-6 border border-white/10 hover:border-[#00B85C]/30 transition-all duration-300">
           <h3 class="text-lg font-bold text-white mb-5 flex items-center gap-2">
-            <span class="material-icons text-[#7091E6]">route</span>
+            <span class="material-icons text-[#00B85C]">route</span>
             <span>Recent Trips</span>
           </h3>
           <div v-if="recentTrips.length > 0" class="relative space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
             <div v-for="trip in recentTrips" :key="trip.id" 
-              class="group relative overflow-hidden p-4 border border-white/10 rounded-xl hover:border-white/20 hover:bg-white/5 transition-all duration-300">
+              class="group relative overflow-hidden p-4 border border-white/10 rounded-xl hover:border-[#00B85C]/40 hover:bg-white/5 transition-all duration-300">
               <div class="space-y-1.5 mb-3">
                 <p class="text-sm flex items-start gap-2 text-white/70">
-                  <span class="material-icons text-[#7091E6] text-base">trip_origin</span>
+                  <span class="material-icons text-[#00B85C] text-base">trip_origin</span>
                   <span><strong class="text-white/50">From:</strong> {{ trip.startLocationName || formatLatLng(trip.startLat, trip.startLng) }}</span>
                 </p>
                 <p class="text-sm flex items-start gap-2 text-white/70">
-                  <span class="material-icons text-[#7091E6] text-base">location_on</span>
+                  <span class="material-icons text-[#00B85C] text-base">location_on</span>
                   <span><strong class="text-white/50">To:</strong> {{ trip.endLocationName || formatLatLng(trip.endLat, trip.endLng) }}</span>
                 </p>
                 <p class="text-sm flex items-center gap-2 text-white/70">
