@@ -23,6 +23,58 @@
         ".write": "$uid === auth.uid"
       }
     },
+    "helmet_public": {
+      "$uid": {
+        ".read": true,
+        ".write": true,
+        "devices": {
+          ".read": true,
+          ".write": true
+        },
+        "live": {
+          ".read": true,
+          ".write": true
+        },
+        "crashes": {
+          ".read": true,
+          ".write": true
+        },
+        "alcohol": {
+          ".read": true,
+          ".write": true
+        },
+        "theft_alerts": {
+          ".read": true,
+          ".write": true
+        },
+        "trips": {
+          ".read": true,
+          ".write": true
+        },
+        "sos": {
+          ".read": true,
+          ".write": true
+        }
+      }
+    },
+    "$uid": {
+      "engineControl": {
+        ".read": true,
+        ".write": true
+      },
+      "alcohol": {
+        ".read": true,
+        ".write": true
+      },
+      "antiTheft": {
+        ".read": true,
+        ".write": true
+      },
+      "live": {
+        ".read": true,
+        ".write": true
+      }
+    },
     "trips": {
       "$uid": {
         ".read": "$uid === auth.uid",

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="min-h-screen flex flex-col bg-[#061B2B] text-white pb-20 font-['Inter',sans-serif]">
 
     <!-- ===== ONBOARDING WELCOME BANNER (only shown for new users) ===== -->

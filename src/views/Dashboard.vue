@@ -144,8 +144,8 @@
           </div>
         </div>
         <div class="flex items-center gap-1.5 text-xs font-semibold text-purple-300 mt-2 pt-2 border-t border-white/5">
-          <span class="w-2 h-2 rounded-full" :class="helmetPaired && motorcyclePaired ? 'bg-purple-400 animate-pulse' : 'bg-amber-400'"></span>
-          <span>{{ helmetPaired && motorcyclePaired ? 'Helmet & Bike Online' : 'Check Pairing' }}</span>
+          <span class="w-2 h-2 rounded-full" :class="helmetPaired && motorcyclePaired ? 'bg-emerald-400 animate-pulse' : (helmetPaired || motorcyclePaired ? 'bg-amber-400' : 'bg-slate-500')"></span>
+          <span>{{ helmetPaired && motorcyclePaired ? 'Helmet & Bike Online' : (helmetPaired ? 'Helmet Online • Bike Offline' : (motorcyclePaired ? 'Bike Online • Helmet Offline' : 'Devices Offline')) }}</span>
         </div>
       </div>
 
@@ -208,6 +208,10 @@
           <div :class="['px-4 py-2 rounded-xl', antiTheftAlert.severity === 'high' ? 'bg-red-500/30' : antiTheftAlert.severity === 'medium' ? 'bg-orange-500/30' : 'bg-yellow-500/30']">
             <p class="text-white text-sm font-bold">Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
           </div>
+          <button v-if="showStopSoundButton" @click="stopSound" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-lg">
+            <span class="material-icons text-base">volume_off</span>
+            Mute Alarm
+          </button>
           <button @click="dismissAntiTheftAlert" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all">
             Dismiss
           </button>
@@ -875,14 +879,14 @@
       </div>
     </div>
 
-    <!-- ✅ NEW: Floating Stop Sound Button -->
+    <!-- ✅ Floating Stop Sound Button (Bottom Right) -->
     <div v-if="showStopSoundButton" 
-         class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[9999]">
+         class="fixed bottom-24 right-4 sm:bottom-8 sm:right-8 z-[9999]">
       <button @click="stopSound"
-              class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-8 py-4 rounded-full shadow-2xl hover:from-orange-600 hover:to-red-600 transition-all duration-300 transform hover:scale-110 animate-pulse border-4 border-white">
-        <div class="flex items-center gap-3">
-          <span class="material-icons text-2xl">volume_off</span>
-          <span class="font-bold text-lg">Stop Alert Sound</span>
+              class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-5 py-3 rounded-full shadow-2xl hover:from-orange-600 hover:to-red-600 transition-all duration-300 transform hover:scale-105 active:scale-95 animate-pulse border-2 border-white/80 backdrop-blur-md">
+        <div class="flex items-center gap-2">
+          <span class="material-icons text-xl">volume_off</span>
+          <span class="font-bold text-sm sm:text-base">Stop Alert Sound</span>
         </div>
       </button>
     </div>
@@ -1263,103 +1267,7 @@ const setupFirebaseListeners = () => {
     if (data !== null) speedLimit.value = data;
   });
 
-  // ✅ STABLE: Listen for helmet pairing status with proper debouncing
-  const helmetStatusRef = dbRef(database, `helmet_public/${userId.value}/devices/helmet`);
-  onValue(helmetStatusRef, (snapshot) => {
-    const data = snapshot.val();
-    
-    // ✅ FIX: Determine raw connection status - check if status is "On"
-    let rawConnected = false;
-    if (data && data.status === 'On') {
-      // Device sent a heartbeat
-      lastHelmetUpdate.value = Date.now();
-      rawConnected = true;
-      console.log(`[HELMET] ✓ Heartbeat received - timestamp: ${data.timestamp || data.lastHeartbeat}`);
-      
-      // ✅ IMMEDIATE FIX: If we receive a heartbeat, device is connected NOW
-      if (!helmetPaired.value) {
-        helmetPaired.value = true;
-        helmetAlertShown = false;
-        console.log('[HELMET] ✓ Connected');
-      }
-    }
-    
-    helmetRawConnected.value = rawConnected;
-    console.log(`[HELMET] Status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
-    
-    // Clear any existing timers
-    if (helmetDisconnectTimer.value) clearTimeout(helmetDisconnectTimer.value);
-    if (helmetReconnectTimer.value) clearTimeout(helmetReconnectTimer.value);
-    
-    if (!rawConnected) {
-      // Device appears disconnected
-      if (helmetPaired.value) {
-        // Was connected, now disconnected - wait 10s before showing disconnected
-        console.log('[HELMET] Disconnection detected, waiting 10s to confirm...');
-        helmetDisconnectTimer.value = setTimeout(() => {
-          helmetPaired.value = false;
-          console.log('[HELMET] ✗ Sustained disconnection confirmed');
-          
-          if (!helmetAlertShown) {
-            const shown = addAlert('danger', '⚠️ Helmet Device Disconnected!', 'Helmet module has been offline for 10 seconds.');
-            if (shown) {
-              playSound();
-            }
-            helmetAlertShown = true;
-          }
-        }, DISCONNECT_DELAY);
-      }
-    }
-  });
-
-  // ✅ STABLE: Listen for motorcycle pairing status with proper debouncing
-  const motorcycleStatusRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
-  onValue(motorcycleStatusRef, (snapshot) => {
-    const data = snapshot.val();
-    
-    // ✅ FIX: Determine raw connection status - check if status is "On"
-    let rawConnected = false;
-    if (data && data.status === 'On') {
-      // Device sent a heartbeat
-      lastMotorcycleUpdate.value = Date.now();
-      rawConnected = true;
-      console.log(`[MOTORCYCLE] ✓ Heartbeat received - timestamp: ${data.timestamp || data.lastHeartbeat}`);
-      
-      // ✅ IMMEDIATE FIX: If we receive a heartbeat, device is connected NOW
-      if (!motorcyclePaired.value) {
-        motorcyclePaired.value = true;
-        motorcycleAlertShown = false;
-        console.log('[MOTORCYCLE] ✓ Connected');
-      }
-    }
-    
-    motorcycleRawConnected.value = rawConnected;
-    console.log(`[MOTORCYCLE] Status: ${rawConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
-    
-    // Clear any existing timers
-    if (motorcycleDisconnectTimer.value) clearTimeout(motorcycleDisconnectTimer.value);
-    if (motorcycleReconnectTimer.value) clearTimeout(motorcycleReconnectTimer.value);
-    
-    if (!rawConnected) {
-      // Device appears disconnected
-      if (motorcyclePaired.value) {
-        // Was connected, now disconnected - wait 10s before showing disconnected
-        console.log('[MOTORCYCLE] Disconnection detected, waiting 10s to confirm...');
-        motorcycleDisconnectTimer.value = setTimeout(() => {
-          motorcyclePaired.value = false;
-          console.log('[MOTORCYCLE] ✗ Sustained disconnection confirmed');
-          
-          if (!motorcycleAlertShown) {
-            const shown = addAlert('danger', '⚠️ Motorcycle Device Disconnected!', 'Motorcycle module has been offline for 10 seconds.');
-            if (shown) {
-              playSound();
-            }
-            motorcycleAlertShown = true;
-          }
-        }, DISCONNECT_DELAY);
-      }
-    }
-  });
+  // ✅ Note: Device connection monitoring (helmet & motorcycle) is unified in setupDeviceListeners()
 
   // Listen for device health
   const deviceHealthRef = dbRef(database, `helmet_public/${userId.value}/deviceHealth`);
@@ -1607,8 +1515,29 @@ const setupFirebaseListeners = () => {
       
       // ✅ Update crash detection status
       if (typeof liveData.crashDetected !== 'undefined') {
+        const wasCrash = sensorData.value.crashDetected;
         sensorData.value.crashDetected = liveData.crashDetected;
         console.log('[CRASH] Status updated:', liveData.crashDetected ? 'DETECTED' : 'CLEAR');
+
+        if (liveData.crashDetected && !wasCrash) {
+          crashDisplayStatus.value = 'Alerting';
+          crashDisplayMessage.value = 'Crash Detected!';
+          const impactVal = liveData.mpu6050?.totalAccel ? (liveData.mpu6050.totalAccel / 9.81).toFixed(1) + ' g' : 'Severe';
+          const leanVal = liveData.mpu6050?.roll ? Math.abs(liveData.mpu6050.roll).toFixed(1) + '°' : '';
+          alerts.value.unshift({
+            type: 'crash',
+            message: '🚨 CRASH DETECTED!',
+            details: `Impact: ${impactVal} | Lean: ${leanVal}`,
+            time: new Date().toLocaleTimeString(),
+            timestamp: Date.now()
+          });
+          if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+          flashCrashMessage();
+          playSound();
+        } else if (!liveData.crashDetected && wasCrash) {
+          crashDisplayStatus.value = 'Stable';
+          crashDisplayMessage.value = 'Vehicle Stable';
+        }
       }
       
       // ✅ Update anti-theft armed status
@@ -1732,6 +1661,9 @@ const setupFirebaseListeners = () => {
       recentTrips.value = tripList.slice(0, 5);
     }
   });
+
+  // ✅ Real-time device connection monitoring (helmet & motorcycle)
+  setupDeviceListeners();
 
   // ✅ NEW: Listen for anti-theft alerts
   setupAntiTheftListener();
@@ -2132,48 +2064,47 @@ const triggerSOS = async () => {
 
 // Initialize crash event listener
 const initializeCrashListener = () => {
-  console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId.value}/crashes`);
-
-  if (!crashRef.value) {
-    console.error('[CRASH] crashRef is null, cannot set up listener');
+  if (!userId.value || !crashRef.value) {
+    console.warn('[CRASH] crashRef not ready, cannot setup listener');
     return;
   }
+  console.log('[INIT] Setting up crash listener on path:', `/helmet_public/${userId.value}/crashes`);
 
   // Track Firebase keys we've already processed so we never show the same crash twice
-  // but also never block a crash just because the Arduino clock is behind real time
   const seenCrashKeys = new Set();
+  let initialCrashLoadDone = false;
 
-  // Pre-populate with keys that already existed before app opened
-  // (onChildAdded fires for existing children first, then new ones)
-  let initialLoadDone = false;
-  setTimeout(() => { initialLoadDone = true; }, 3000); // 3s grace period for initial load
+  // Pre-index existing keys using get() so historical crashes don't trigger alerts on boot
+  get(crashRef.value).then((snapshot) => {
+    if (snapshot.exists()) {
+      snapshot.forEach((child) => {
+        seenCrashKeys.add(child.key);
+      });
+    }
+    initialCrashLoadDone = true;
+    console.log('[CRASH] Pre-existing crashes indexed:', seenCrashKeys.size);
+  }).catch((err) => {
+    console.warn('[CRASH] Error pre-indexing crashes:', err);
+    initialCrashLoadDone = true;
+  });
 
   onChildAdded(crashRef.value, (snapshot) => {
     const key = snapshot.key;
     const event = snapshot.val();
 
-    if (!event || !event.timestamp) {
-      console.warn('[CRASH] Invalid crash event (missing timestamp)', event);
-      return;
-    }
+    if (!event) return;
 
-    // During the first 3 seconds, mark existing keys as seen but don't alert
-    if (!initialLoadDone) {
+    if (!initialCrashLoadDone) {
       seenCrashKeys.add(key);
-      console.log('[CRASH] ⏭️ Pre-existing crash (initial load), marking as seen:', key);
       return;
     }
 
-    // After initial load: any new key is a real new crash — show it
-    if (seenCrashKeys.has(key)) {
-      console.log('[CRASH] ⏭️ Already processed crash key:', key);
-      return;
-    }
+    if (seenCrashKeys.has(key)) return;
     seenCrashKeys.add(key);
 
-    console.log('[CRASH] 🚨 NEW crash event from Firebase:', { key, timestamp: event.timestamp, impact: event.impactStrength });
+    console.log('[CRASH] 🚨 Real-time crash event received:', { key, event });
 
-    const eventTime = event.timestamp;
+    const eventTime = event.timestamp || Date.now();
 
     // Build crash event object
     const crashEvent = {
@@ -2185,7 +2116,7 @@ const initializeCrashListener = () => {
       lng: event.lng || (event.location && event.location.lng) || null,
       hasGPS: event.hasGPS || (event.gpsValid === true) || (event.lat && event.lat !== 0),
       severity: event.severity || 'Medium',
-      time: new Date().toLocaleTimeString(), // Use real wall-clock time for display
+      time: new Date().toLocaleTimeString(),
       speed: event.speed || 0
     };
 
@@ -2216,8 +2147,15 @@ const initializeCrashListener = () => {
   });
 };
 
+// Tracking heartbeat states across snapshots
+let previousHelmetHeartbeat = null;
+let previousMotorcycleHeartbeat = null;
+let helmetInitialLoadDone = false;
+let motorcycleInitialLoadDone = false;
+
 // ✅ BEST SOLUTION: Real-time Firebase listeners for device status
 const setupDeviceListeners = () => {
+  if (!userId.value) return;
   console.log('[DEVICE LISTENERS] Setting up real-time device status monitoring...');
   
   // ✅ Helmet real-time listener
@@ -2226,22 +2164,45 @@ const setupDeviceListeners = () => {
     const data = snapshot.val();
     console.log('[HELMET] Firebase update received:', data);
     
-    if (data && data.status === 'On') {
-      // ✅ FIX: Record when we received this update (not Arduino timestamp!)
-      lastHelmetUpdate.value = Date.now();
-      
-      if (!helmetPaired.value) {
-        console.log('[HELMET] Heartbeat received, marking as CONNECTED');
-        helmetPaired.value = true;
-      }
-    } else {
-      console.log('[HELMET] Status is Off or no data');
+    if (!data || data.status !== 'On') {
       if (helmetPaired.value) {
         console.log('[HELMET] Marking as DISCONNECTED');
         helmetPaired.value = false;
+        helmetRawConnected.value = false;
+      }
+      return;
+    }
+
+    const hb = data.lastHeartbeat || data.timestamp || 0;
+    const isTimestampFresh = (hb > 0 && Math.abs(Date.now() - hb) < 8000);
+
+    if (!helmetInitialLoadDone) {
+      helmetInitialLoadDone = true;
+      previousHelmetHeartbeat = hb;
+      if (isTimestampFresh) {
+        lastHelmetUpdate.value = Date.now();
+        helmetPaired.value = true;
+        helmetRawConnected.value = true;
+        console.log('[HELMET] Connected on startup (fresh heartbeat)');
+      } else {
+        helmetPaired.value = false;
+        helmetRawConnected.value = false;
+        console.log('[HELMET] Stale data on startup, marked as OFFLINE');
+      }
+      return;
+    }
+
+    // Live update received after startup
+    if (hb !== previousHelmetHeartbeat || isTimestampFresh) {
+      previousHelmetHeartbeat = hb;
+      lastHelmetUpdate.value = Date.now();
+      if (!helmetPaired.value) {
+        helmetPaired.value = true;
+        helmetRawConnected.value = true;
+        console.log('[HELMET] Live heartbeat active, marked as CONNECTED');
       }
     }
-  }); // ✅ NO onlyOnce - listen continuously for real-time updates!
+  });
   
   // ✅ Motorcycle real-time listener
   const motorcycleRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
@@ -2249,49 +2210,68 @@ const setupDeviceListeners = () => {
     const data = snapshot.val();
     console.log('[MOTORCYCLE] Firebase update received:', data);
     
-    if (data && data.status === 'On') {
-      // ✅ FIX: Record when we received this update (not Arduino timestamp!)
-      lastMotorcycleUpdate.value = Date.now();
-      
-      if (!motorcyclePaired.value) {
-        console.log('[MOTORCYCLE] Heartbeat received, marking as CONNECTED');
-        motorcyclePaired.value = true;
-      }
-    } else {
-      console.log('[MOTORCYCLE] Status is Off or no data');
+    if (!data || data.status !== 'On') {
       if (motorcyclePaired.value) {
         console.log('[MOTORCYCLE] Marking as DISCONNECTED');
         motorcyclePaired.value = false;
+        motorcycleRawConnected.value = false;
+      }
+      return;
+    }
+
+    const hb = data.lastHeartbeat || data.timestamp || 0;
+    const isTimestampFresh = (hb > 0 && Math.abs(Date.now() - hb) < 8000);
+
+    if (!motorcycleInitialLoadDone) {
+      motorcycleInitialLoadDone = true;
+      previousMotorcycleHeartbeat = hb;
+      if (isTimestampFresh) {
+        lastMotorcycleUpdate.value = Date.now();
+        motorcyclePaired.value = true;
+        motorcycleRawConnected.value = true;
+        console.log('[MOTORCYCLE] Connected on startup (fresh heartbeat)');
+      } else {
+        motorcyclePaired.value = false;
+        motorcycleRawConnected.value = false;
+        console.log('[MOTORCYCLE] Stale data on startup, marked as OFFLINE');
+      }
+      return;
+    }
+
+    // Live update received after startup
+    if (hb !== previousMotorcycleHeartbeat || isTimestampFresh) {
+      previousMotorcycleHeartbeat = hb;
+      lastMotorcycleUpdate.value = Date.now();
+      if (!motorcyclePaired.value) {
+        motorcyclePaired.value = true;
+        motorcycleRawConnected.value = true;
+        console.log('[MOTORCYCLE] Live heartbeat active, marked as CONNECTED');
       }
     }
-  }); // ✅ NO onlyOnce - listen continuously for real-time updates!
+  });
 };
 
-// ✅ FIX: Timeout check based on when we last received Firebase updates
+// ✅ FIX: Timeout check based on when we last received live Firebase heartbeats
 let heartbeatCheckInterval = null;
 
 const checkDeviceTimeouts = () => {
   const now = Date.now();
   
-  // ✅ Check time since last Firebase update (not Arduino timestamp!)
-  const timeSinceHelmetUpdate = now - lastHelmetUpdate.value;
-  const timeSinceMotorcycleUpdate = now - lastMotorcycleUpdate.value;
+  const timeSinceHelmetUpdate = lastHelmetUpdate.value > 0 ? now - lastHelmetUpdate.value : Infinity;
+  const timeSinceMotorcycleUpdate = lastMotorcycleUpdate.value > 0 ? now - lastMotorcycleUpdate.value : Infinity;
   
-  // Helmet timeout check
-  if (lastHelmetUpdate.value > 0 && timeSinceHelmetUpdate > 15000 && helmetPaired.value) {
-    console.log(`[HELMET] ⚠️ No update for ${(timeSinceHelmetUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
+  // Helmet timeout check (8 seconds)
+  if (helmetPaired.value && timeSinceHelmetUpdate > 8000) {
+    console.log(`[HELMET] ⚠️ No heartbeat for ${(timeSinceHelmetUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     helmetPaired.value = false;
+    helmetRawConnected.value = false;
   }
   
-  // Motorcycle timeout check
-  if (lastMotorcycleUpdate.value > 0 && timeSinceMotorcycleUpdate > 15000 && motorcyclePaired.value) {
-    console.log(`[MOTORCYCLE] ⚠️ No update for ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
+  // Motorcycle timeout check (8 seconds)
+  if (motorcyclePaired.value && timeSinceMotorcycleUpdate > 8000) {
+    console.log(`[MOTORCYCLE] ⚠️ No heartbeat for ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     motorcyclePaired.value = false;
-  }
-  
-  // Debug logging every 10 seconds
-  if (now % 10000 < 2000) {
-    console.log(`[TIMEOUT CHECK] Helmet: ${(timeSinceHelmetUpdate/1000).toFixed(1)}s ago | Motorcycle: ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s ago`);
+    motorcycleRawConnected.value = false;
   }
 };
 
@@ -2561,17 +2541,11 @@ const setupEngineStatusListener = () => {
     }
   });
   
-  // ✅ SECONDARY: Listen to device heartbeat for connection status
+  // ✅ Listen to device heartbeat for engine & sensor telemetry
   const deviceRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
   onValue(deviceRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      // Update motorcycle connection status
-      const isConnected = data.status === 'On';
-      if (motorcyclePaired.value !== isConnected) {
-        motorcyclePaired.value = isConnected;
-        console.log(`[MOTORCYCLE] Connection status:`, isConnected ? 'CONNECTED' : 'DISCONNECTED');
-      }
       
       // Update engine status from heartbeat if available
       if (typeof data.engineRunning !== 'undefined' && data.engineRunning !== engineRunning.value) {
@@ -2668,10 +2642,22 @@ const setupArduinoAlertsListener = () => {
   const arduinoAlertsRef = dbRef(database, `helmet_public/${userId.value}/alerts`);
 
   // Track seen keys — onChildAdded fires for existing children on load,
-  // then fires again for each new child. We skip the initial batch.
+  // then fires again for each new child. We pre-index existing keys to prevent stale alerts.
   const seenAlertKeys = new Set();
   let initialAlertLoadDone = false;
-  setTimeout(() => { initialAlertLoadDone = true; }, 3000);
+
+  get(arduinoAlertsRef).then((snapshot) => {
+    if (snapshot.exists()) {
+      snapshot.forEach((child) => {
+        seenAlertKeys.add(child.key);
+      });
+    }
+    initialAlertLoadDone = true;
+    console.log('[ALERTS] Pre-existing alerts indexed:', seenAlertKeys.size);
+  }).catch((err) => {
+    console.warn('[ALERTS] Error pre-indexing alerts:', err);
+    initialAlertLoadDone = true;
+  });
 
   onChildAdded(arduinoAlertsRef, (snapshot) => {
     const key = snapshot.key;
@@ -2719,55 +2705,34 @@ const setupArduinoAlertsListener = () => {
 
 // ✅ NEW: Setup anti-theft alert listener
 const setupAntiTheftListener = () => {
+  if (!userId.value) return;
   console.log('[ANTI-THEFT] Setting up alert listener...');
-  
-  // Listen for anti-theft status
-  const antiTheftStatusRef = dbRef(database, `${userId.value}/antiTheft/status`);
-  onValue(antiTheftStatusRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data && data.alertActive) {
-      console.log('[ANTI-THEFT] Alert received:', data);
-      
-      const alertTimestamp = data.lastVibration || 0;
-      
-      // ✅ FIX: Only show if alert is NEW (after app start) and not already shown
-      const isNew = alertTimestamp > appStartTime.value && shouldShowAlert(alertTimestamp);
-      if (isNew && alertTimestamp !== antiTheftAlert.value.timestamp) {
-        antiTheftAlert.value = {
-          active: true,
-          message: 'Unauthorized movement detected on your motorcycle!',
-          time: new Date(alertTimestamp).toLocaleTimeString(),
-          level: data.alertLevel || 1,
-          severity: data.alertLevel >= 3 ? 'high' : (data.alertLevel >= 2 ? 'medium' : 'low'),
-          timestamp: alertTimestamp
-        };
-        
-        alerts.value.unshift({
-          type: 'theft',
-          message: '🚨 Anti-Theft Alert',
-          details: antiTheftAlert.value.message,
-          time: antiTheftAlert.value.time
-        });
-        
-        playSound();
-        if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-      } else {
-        console.log('[ANTI-THEFT] Skipping old/dismissed anti-theft status alert');
-      }
-    }
-  });
   
   // Listen for theft alert events (from logTheftToFirebase)
   const theftAlertsRef = dbRef(database, `helmet_public/${userId.value}/theft_alerts`);
   const seenTheftKeys = new Set();
   let initialTheftLoadDone = false;
-  setTimeout(() => { initialTheftLoadDone = true; }, 3000);
+
+  // Pre-index existing keys using get() so historical alerts never fire as new
+  get(theftAlertsRef).then((snapshot) => {
+    if (snapshot.exists()) {
+      snapshot.forEach((child) => {
+        seenTheftKeys.add(child.key);
+      });
+    }
+    initialTheftLoadDone = true;
+    console.log('[ANTI-THEFT] Pre-existing theft alerts indexed:', seenTheftKeys.size);
+  }).catch((err) => {
+    console.warn('[ANTI-THEFT] Error pre-indexing theft alerts:', err);
+    initialTheftLoadDone = true;
+  });
 
   onChildAdded(theftAlertsRef, (snapshot) => {
     const key = snapshot.key;
     const alert = snapshot.val();
     if (!alert) return;
 
+    // Skip all pre-existing records from before dashboard opened
     if (!initialTheftLoadDone) {
       seenTheftKeys.add(key);
       return;
@@ -2775,11 +2740,19 @@ const setupAntiTheftListener = () => {
     if (seenTheftKeys.has(key)) return;
     seenTheftKeys.add(key);
 
-    console.log('[ANTI-THEFT] 🚨 New theft alert event:', alert);
+    // Only process if motorcycle is online or alert timestamp is fresh (<60s)
+    const alertTime = alert.timestamp || alert.alertTime || 0;
+    const isRecent = (alertTime > 0 && Math.abs(Date.now() - alertTime) < 60000);
+    if (!motorcyclePaired.value && !isRecent) {
+      console.log('[ANTI-THEFT] Skipping stale theft alert from offline bike');
+      return;
+    }
+
+    console.log('[ANTI-THEFT] 🚨 Real-time theft alert received:', alert);
 
     antiTheftAlert.value = {
       active: true,
-      message: alert.message || 'Unauthorized movement detected!',
+      message: alert.message || alert.details || 'Unauthorized movement detected!',
       time: new Date().toLocaleTimeString(),
       level: alert.alertLevel || 1,
       severity: alert.severity || 'high',
@@ -2799,9 +2772,10 @@ const setupAntiTheftListener = () => {
   });
 };
 
-// ✅ NEW: Dismiss anti-theft alert
+// ✅ Dismiss anti-theft alert
 const dismissAntiTheftAlert = () => {
   antiTheftAlert.value.active = false;
+  stopSound();
   console.log('[ANTI-THEFT] Alert dismissed by user');
 };
 

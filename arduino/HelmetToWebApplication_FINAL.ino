@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VigiLERT Helmet Module - FINAL PRODUCTION VERSION
@@ -16,7 +17,7 @@ const char* password = "12345678900";
 
 // Firebase Configuration
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
-const String userUID = "MnzBjTBslZNijOkq732PE91hHa23";
+const String userUID = "sAMQqMSJyINqxy5jDbOktViJ8oH3";
 const String firebaseAuth = "";
 
 // Hardware Pins
@@ -115,15 +116,27 @@ void connectToWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n[WIFI] ✓ Connected!");
     Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    Serial.println("[TIME] ✓ NTP clock sync initialized");
   } else {
     Serial.println("\n[WIFI] ✗ Failed!");
   }
 }
 
+uint64_t getEpochTimestamp() {
+  time_t now;
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 50)) {
+    time(&now);
+    return ((uint64_t)now) * 1000ULL + (millis() % 1000);
+  }
+  return 1794927000000ULL + (uint64_t)millis();
+}
+
 void sendHelmetHeartbeat(bool isActive) {
   if (WiFi.status() != WL_CONNECTED) return;
   
-  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
+  uint64_t timestamp = getEpochTimestamp();
   
   StaticJsonDocument<128> doc;
   doc["status"] = isActive ? "On" : "Off";
@@ -153,7 +166,7 @@ void sendHelmetHeartbeat(bool isActive) {
 void sendAlcoholToFirebase(int alcoholVal, bool alcoholStatus) {
   if (WiFi.status() != WL_CONNECTED) return;
   
-  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
+  uint64_t timestamp = getEpochTimestamp();
   String statusText = alcoholStatus ? "Danger" : "Safe";
   
   // Main path - Dashboard reads from here

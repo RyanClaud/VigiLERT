@@ -6,6 +6,7 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VigiLERT Motorcycle Module - FINAL PRODUCTION VERSION (FIXED)
@@ -36,7 +37,7 @@ const char* password = "123456789000";
 
 // Firebase Configuration
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
-const String userUID = "MnzBjTBslZNijOkq732PE91hHa23";
+const String userUID = "sAMQqMSJyINqxy5jDbOktViJ8oH3";
 const String firebaseAuth = "";
 
 // ✅ Emergency contacts are fetched from Firebase (users/{uid}/emergencyContacts)
@@ -83,7 +84,10 @@ const float ACCEL_THRESHOLD = 15.0;
 
 // Current sensor readings
 float currentRoll = 0.0;
+float currentPitch = 0.0;
+float currentLeanAngle = 0.0;
 float currentTotalAccel = 0.0;
+uint64_t getEpochTimestamp();
 
 // GPS speed
 float currentSpeed = 0.0;
@@ -123,7 +127,7 @@ bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
 const unsigned long HELMET_CHECK_INTERVAL = 1000;  // Check every 1s for faster detection
 uint64_t lastHelmetHeartbeat = 0;
-const unsigned long HELMET_TIMEOUT = 5000;   // 5s � engine cuts within ~6s of helmet disconnect
+const unsigned long HELMET_TIMEOUT = 5000;   // 5s � engine cuts within ~6s of helmet disconnect
 const unsigned long HELMET_FORCE_OFF_TIMEOUT = 20000;
 unsigned long lastHelmetUpdateTime = 0;
 bool helmetStatusForcedOff = false;
@@ -669,19 +673,32 @@ void loop() {
     }
   }
 
-  // ✅ OPTIMIZED: Read MPU6050 continuously (no delay) for instant crash detection
+  // ✅ OPTIMIZED: Read MPU6050 continuously (no delay) for instant crash and tilt detection
+  float leanAngle = 0.0;
   if (MPU6050_ENABLED) {
     mpu.getEvent(&accel, &gyro, &temp);
     currentTotalAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
                              accel.acceleration.y * accel.acceleration.y +
                              accel.acceleration.z * accel.acceleration.z);
+    // Roll: rotation around X axis (left/right lean)
     currentRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+    // Pitch: rotation around Y axis (forward/backward pitch)
+    currentPitch = atan2(-accel.acceleration.x, sqrt(accel.acceleration.y * accel.acceleration.y + accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
+    // 3D deviation from vertical (upright Z axis with gravity ~9.8 m/s²)
+    float safeAccel = currentTotalAccel > 0.1 ? currentTotalAccel : 9.8;
+    float normalizedZ = constrain(abs(accel.acceleration.z) / safeAccel, 0.0, 1.0);
+    float tiltFromVertical = acos(normalizedZ) * 180.0 / PI;
+    // Comprehensive lean angle catches tilting in ANY direction (roll, pitch, or diagonal)
+    leanAngle = max(abs(currentRoll), tiltFromVertical);
+    currentLeanAngle = leanAngle;
   } else {
     // ✅ TESTING: Simulate normal values when MPU6050 is not connected
     currentTotalAccel = 9.8;  // Normal gravity
     currentRoll = 0.0;        // Level position
+    currentPitch = 0.0;
+    currentLeanAngle = 0.0;
+    leanAngle = 0.0;
   }
-  float leanAngle = abs(currentRoll);
 
   // -- Vibration sensor / anti-theft -----------------------------------------
   // SW-420 with INPUT_PULLUP: normal=HIGH, vibration=LOW (brief pulse)
@@ -773,14 +790,35 @@ void loop() {
     }
   }
 
-  // ✅ OPTIMIZED: Crash detection with continuous monitoring (only if MPU6050 enabled)
-  if (MPU6050_ENABLED && engineRunning && (currentTotalAccel >= ACCEL_THRESHOLD || leanAngle > 40) && !crashDetected) {
+  // ✅ REAL-TIME MPU6050 SERIAL TELEMETRY (Every 1 second)
+  static unsigned long lastMPULogTime = 0;
+  if (millis() - lastMPULogTime >= 1000) {
+    if (MPU6050_ENABLED) {
+      Serial.printf("[MPU6050] Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Accel: %.2fg | Engine: %s | State: %s\n",
+                    leanAngle, currentRoll, currentPitch, currentTotalAccel / 9.80665,
+                    engineRunning ? "RUNNING" : "STOPPED",
+                    crashDetected ? "CRASH ALERT" : "NORMAL");
+    }
+    lastMPULogTime = millis();
+  }
+
+  // ✅ OPTIMIZED: Crash & Tilt detection with continuous monitoring
+  // 1. High impact spike (currentTotalAccel >= ACCEL_THRESHOLD or >= 3.0g)
+  // 2. Severe tilt / tip-over (leanAngle >= 45.0 degrees) - works even during bench testing or parked tip-over!
+  // 3. Riding lean limit (engineRunning && leanAngle >= 40.0 degrees)
+  float totalG = currentTotalAccel / 9.80665;
+  bool isImpactCrash = (currentTotalAccel >= ACCEL_THRESHOLD || totalG >= 3.0);
+  bool isSevereTilt  = (leanAngle >= 45.0);
+  bool isRidingCrash = (engineRunning && leanAngle >= 40.0);
+
+  if (MPU6050_ENABLED && (isImpactCrash || isSevereTilt || isRidingCrash) && !crashDetected) {
     unsigned long timeSinceLastCrash = millis() - lastCrashTime;
     if (timeSinceLastCrash >= CRASH_COOLDOWN) {
-      Serial.printf("[CRASH] Detected! Accel: %.2f g, Lean: %.1f°\n", currentTotalAccel, leanAngle);
-      triggerCrashShutdown(currentTotalAccel, currentRoll);
+      Serial.printf("\n[CRASH] 🚨 DETECTED! Accel: %.2fg (%.1f m/s²), Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Engine: %s\n",
+                    totalG, currentTotalAccel, leanAngle, currentRoll, currentPitch,
+                    engineRunning ? "RUNNING" : "STOPPED");
+      triggerCrashShutdown(totalG, leanAngle);
     } else {
-      // Still in cooldown period
       static unsigned long lastCooldownMsg = 0;
       if (millis() - lastCooldownMsg > 1000) {
         Serial.printf("[CRASH] In cooldown (%lu ms remaining)\n", CRASH_COOLDOWN - timeSinceLastCrash);
@@ -790,11 +828,12 @@ void loop() {
   }
 
   if (crashDetected && MPU6050_ENABLED) {
-    bool isUpright = (leanAngle < 30);
-    bool isStable = (currentTotalAccel < ACCEL_THRESHOLD - 2.0);
+    bool isUpright = (leanAngle < 25.0);
+    bool isStable = (currentTotalAccel < ACCEL_THRESHOLD - 2.0 && totalG < 2.0);
     if (isUpright && isStable) {
       crashDetected = false;
-      Serial.println("[INFO] ✓ Crash cleared");
+      Serial.println("[INFO] ✓ Vehicle restored upright — Crash cleared");
+      sendLiveToFirebase();
     }
   }
 
@@ -867,10 +906,20 @@ void loop() {
   yield();  // Allow WiFi/system tasks to run
 }
 
+uint64_t getEpochTimestamp() {
+  time_t now;
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 50)) {
+    time(&now);
+    return ((uint64_t)now) * 1000ULL + (millis() % 1000);
+  }
+  return 1794927000000ULL + (uint64_t)millis();
+}
+
 bool sendMotorcycleHeartbeat(bool isActive) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
-  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
+  uint64_t timestamp = getEpochTimestamp();
 
   StaticJsonDocument<128> doc;
   doc["status"] = isActive ? "On" : "Off";
@@ -1259,9 +1308,7 @@ void sendSMSToAllContacts(String message, String alertType) {
 void logTheftToFirebase(String location) {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // ✅ FIX: Use 2025-era base epoch so dashboard timestamp checks pass
-  // 1746057600000 = May 1 2025 00:00:00 UTC in ms
-  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
+  uint64_t timestamp = getEpochTimestamp();
 
   StaticJsonDocument<256> doc;
   doc["timestamp"] = timestamp;
@@ -1313,18 +1360,18 @@ void logTheftToFirebase(String location) {
 
 void triggerCrashShutdown(float impact, float roll) {
   Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
-  Serial.printf("Impact: %.2f g | Roll: %.1f°\n", impact, roll);
+  Serial.printf("Impact: %.2f g | Lean/Roll: %.1f°\n", impact, roll);
   
   // ✅ FIX: HIGH = OFF for ACTIVE-LOW relay
   digitalWrite(relayPin, HIGH);
   engineRunning = false;
+  crashDetected = true;
+  lastCrashTime = millis();
   
   Serial.printf("🚨 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
   
   sendCrashToFirebase(impact, roll);
-  
-  crashDetected = true;
-  lastCrashTime = millis();
+  sendLiveToFirebase(); // Send real-time state immediately so dashboard alerts instantly
   
   // ✅ SMS alert to all emergency contacts
   String location = "Location unavailable";
@@ -1462,9 +1509,7 @@ void checkStarterTimeout() {
 void sendCrashToFirebase(float impact, float roll) {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // ✅ FIX: Use a 2025-era base epoch so dashboard timestamp checks pass
-  // 1746057600000 = May 1 2025 00:00:00 UTC in milliseconds
-  uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
+  uint64_t timestamp = getEpochTimestamp();
   
   String locationStr = "No GPS";
   if (gps.location.isValid()) {
@@ -1474,11 +1519,12 @@ void sendCrashToFirebase(float impact, float roll) {
   StaticJsonDocument<256> doc;
   doc["timestamp"] = timestamp;
   doc["impactStrength"] = impact;
-  doc["roll"] = roll;
+  doc["roll"] = currentRoll;
+  doc["pitch"] = currentPitch;
   doc["leanAngle"] = abs(roll);
   doc["hasGPS"] = gps.location.isValid();
   doc["type"] = "crash";
-  doc["severity"] = impact > 20.0 ? "severe" : "moderate";
+  doc["severity"] = impact > 3.0 ? "severe" : "moderate";
   
   if (gps.location.isValid()) {
     doc["lat"] = gps.location.lat();
@@ -1492,6 +1538,7 @@ void sendCrashToFirebase(float impact, float roll) {
   
   // Write to crashes path (for map display)
   HTTPClient http;
+  http.setTimeout(2500);
   http.begin(firebaseHost + crashPath);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(payload);
@@ -1509,12 +1556,13 @@ void sendCrashToFirebase(float impact, float roll) {
   alertDoc["message"] = "🚨 CRASH DETECTED!";
   alertDoc["details"] = "Impact: " + String(impact, 1) + "g | Lean: " + String(abs(roll), 1) + "deg | " + locationStr;
   alertDoc["time"] = String(millis() / 1000) + "s uptime";
-  alertDoc["severity"] = impact > 20.0 ? "severe" : "moderate";
+  alertDoc["severity"] = impact > 3.0 ? "severe" : "moderate";
 
   String alertPayload;
   serializeJson(alertDoc, alertPayload);
 
   HTTPClient http2;
+  http2.setTimeout(2500);
   String alertsPath = "/helmet_public/" + userUID + "/alerts.json?auth=" + firebaseAuth;
   http2.begin(firebaseHost + alertsPath);
   http2.addHeader("Content-Type", "application/json");
@@ -1530,8 +1578,11 @@ void sendCrashToFirebase(float impact, float roll) {
 void sendLiveToFirebase() {
   if (WiFi.status() != WL_CONNECTED) return;
 
+  uint64_t timestamp = getEpochTimestamp();
+
   StaticJsonDocument<512> doc;
   doc["engineRunning"] = engineRunning;
+  doc["timestamp"]     = timestamp;
 
   if (MPU6050_ENABLED) {
     doc["mpu6050"]["accelX"]     = accel.acceleration.x;
@@ -1539,6 +1590,8 @@ void sendLiveToFirebase() {
     doc["mpu6050"]["accelZ"]     = accel.acceleration.z;
     doc["mpu6050"]["totalAccel"] = currentTotalAccel;
     doc["mpu6050"]["roll"]       = currentRoll;
+    doc["mpu6050"]["pitch"]      = currentPitch;
+    doc["mpu6050"]["leanAngle"]  = currentLeanAngle;
     doc["mpu6050"]["enabled"]    = true;
   } else {
     doc["mpu6050"]["accelX"]     = 0.0;
@@ -1546,6 +1599,8 @@ void sendLiveToFirebase() {
     doc["mpu6050"]["accelZ"]     = 9.8;
     doc["mpu6050"]["totalAccel"] = currentTotalAccel;
     doc["mpu6050"]["roll"]       = currentRoll;
+    doc["mpu6050"]["pitch"]      = 0.0;
+    doc["mpu6050"]["leanAngle"]  = 0.0;
     doc["mpu6050"]["enabled"]    = false;
   }
 
@@ -1569,7 +1624,6 @@ void sendLiveToFirebase() {
   // Always send satellite count and chars processed for diagnostics
   doc["gpsSatellites"]   = gps.satellites.isValid() ? (int)gps.satellites.value() : 0;
   doc["gpsCharsProcessed"] = (int)gps.charsProcessed();
-  doc["timestamp"] = millis();
 
   String payload;
   serializeJson(doc, payload);
@@ -1584,7 +1638,7 @@ void sendLiveToFirebase() {
   // Update engineControl path (lightweight — just engine state)
   StaticJsonDocument<64> engineDoc;
   engineDoc["engineRunning"] = engineRunning;
-  engineDoc["timestamp"]     = millis();
+  engineDoc["timestamp"]     = timestamp;
   String enginePayload;
   serializeJson(engineDoc, enginePayload);
 
@@ -1620,6 +1674,9 @@ void connectToWiFi() {
     Serial.println("\n[WIFI] ✅ Connected!");
     Serial.printf("[WIFI] IP: %s | RSSI: %d dBm\n",
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    // Synchronize real-time clock via NTP
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    Serial.println("[TIME] ✓ NTP clock sync initialized");
     lastWiFiConnected  = millis();
     lastWiFiConnection = millis();
     lastFirebaseSuccess = millis();
@@ -1882,7 +1939,7 @@ void checkComprehensiveSecurity() {
                                   : 0;
   bool wifiTimeout = (lastWiFiConnected > 0) && (timeSinceWiFi > WIFI_TIMEOUT);
 
-  // 2. Helmet check � use helmetConnected boolean directly.
+  // 2. Helmet check � use helmetConnected boolean directly.
   //    checkHelmetConnection() sets this to false when helmet is off.
   //    Only skip on boot (lastHelmetUpdateTime==0 AND never connected).
   //    Once we have seen the helmet, !helmetConnected = violation.
@@ -1894,7 +1951,7 @@ void checkComprehensiveSecurity() {
   if (SECURITY_SHUTDOWNS_ENABLED && securityViolation && engineRunning) {
     Serial.println("\n?????? SECURITY VIOLATION � AUTO SHUTDOWN! ??????");
     if (wifiTimeout)   Serial.printf("?? WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
-    if (helmetTimeout) Serial.println("[SECURITY] HELMET DISCONNECTED � shutdown triggered");
+    if (helmetTimeout) Serial.println("[SECURITY] HELMET DISCONNECTED � shutdown triggered");
     triggerSecurityShutdown("Security Violation");
   }
 
