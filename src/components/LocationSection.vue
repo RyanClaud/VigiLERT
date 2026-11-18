@@ -88,25 +88,19 @@
           </div>
         </div>
         
-        <!-- Action Buttons -->
+        <!-- Action / Status Badge -->
         <div class="flex flex-col sm:flex-row md:flex-col gap-2 w-full md:w-auto">
-          <button
-            @click="getUserLocation"
-            :disabled="isGettingLocation"
-            class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold rounded-xl hover:from-green-600 hover:to-green-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            <span class="material-icons text-lg" :class="{ 'animate-spin': isGettingLocation }">
-              {{ isGettingLocation ? 'refresh' : 'gps_fixed' }}
-            </span>
-            <span>{{ isGettingLocation ? 'Getting...' : 'Get My Location' }}</span>
-          </button>
+          <div class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl shadow-sm whitespace-nowrap">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Auto-Location Active</span>
+          </div>
           <a 
             v-if="location.lat && location.lng"
             :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" 
             target="_blank"
-            class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-sm font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 whitespace-nowrap"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#7091E6] to-[#5571c6] text-white text-xs font-semibold rounded-xl hover:from-[#3D52A0] hover:to-[#2a3a70] transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 whitespace-nowrap"
           >
-            <span class="material-icons text-lg">open_in_new</span>
+            <span class="material-icons text-base">open_in_new</span>
             <span>Open in Maps</span>
           </a>
         </div>
@@ -326,10 +320,10 @@ const updateLocationBySource = async () => {
   }
 };
 
-// Function to get user's current location
-const getUserLocation = () => {
+// Function to get user's current location (silent mode avoids disruptive alerts)
+const getUserLocation = (silent = true) => {
   if (!navigator.geolocation) {
-    alert('Geolocation is not supported by your browser');
+    if (!silent) alert('Geolocation is not supported by your browser');
     return;
   }
 
@@ -344,47 +338,50 @@ const getUserLocation = () => {
       phoneLocation.value = { lat, lng };
       
       // Emit the new location to parent component
-      emit('update-location', { lat, lng, source: 'phone' });
+      emit('update-location', { 
+        lat, 
+        lng, 
+        source: (gpsSource.value === 'phone' ? 'phone' : 'phone_auto_fallback') 
+      });
       
       // Update location based on current source
       updateLocationBySource();
       
       // Update map immediately
       if (mapInstance && marker) {
-        const displayLat = gpsSource.value === 'module' ? props.location.lat : lat;
-        const displayLng = gpsSource.value === 'module' ? props.location.lng : lng;
+        const displayLat = (gpsSource.value === 'module' && hasModuleFix.value) ? props.location.lat : lat;
+        const displayLng = (gpsSource.value === 'module' && hasModuleFix.value) ? props.location.lng : lng;
         mapInstance.setView([displayLat, displayLng], 15);
         marker.setLatLng([displayLat, displayLng]);
-        marker.bindPopup(`<b>Your Current Location</b><br>Lat: ${displayLat.toFixed(6)}<br>Lng: ${displayLng.toFixed(6)}<br>Source: ${gpsSource.value}`).openPopup();
       }
       
       isGettingLocation.value = false;
     },
     (error) => {
-      console.error('Error getting location:', error);
-      let errorMessage = 'Unable to get your location. ';
-      
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMessage += 'Please allow location access in your browser settings.';
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMessage += 'Location information is unavailable.';
-          break;
-        case error.TIMEOUT:
-          errorMessage += 'Location request timed out.';
-          break;
-        default:
-          errorMessage += 'An unknown error occurred.';
+      console.warn('[LocationSection] Geolocation notice:', error.message);
+      if (!silent) {
+        let errorMessage = 'Unable to get your location. ';
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += 'Please allow location access in your browser settings.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage += 'Location request timed out.';
+            break;
+          default:
+            errorMessage += 'An unknown error occurred.';
+        }
+        alert(errorMessage);
       }
-      
-      alert(errorMessage);
       isGettingLocation.value = false;
     },
     {
       enableHighAccuracy: true,
       timeout: 10000,
-      maximumAge: 0
+      maximumAge: 5000
     }
   );
 };
@@ -589,6 +586,9 @@ const initMap = async () => {
 
 onMounted(() => {
   initMap();
+  // Automatically start phone GPS tracking and auto-acquire location without clicking button
+  startPhoneLocationWatch();
+  getUserLocation(true);
 });
 
 // Watch for location changes from module
@@ -623,6 +623,12 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  // Clear continuous phone geolocation watch
+  if (phoneWatchId !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(phoneWatchId);
+    phoneWatchId = null;
+  }
+
   // Clear crash markers
   crashMarkers.forEach(m => {
     try {

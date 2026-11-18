@@ -197,26 +197,94 @@
 
             <!-- Action Buttons -->
             <div class="flex sm:flex-col gap-2 w-full sm:w-auto flex-shrink-0">
-              <!-- Navigate Button -->
+              <!-- View FROM & TO Map Button -->
+              <button
+                @click="toggleTripMap(trip)"
+                class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00B85C] to-[#087A45] hover:from-[#00c965] hover:to-[#0a8c4f] text-white text-xs font-bold rounded-xl shadow-md shadow-[#00B85C]/20 transition-all hover:scale-105"
+              >
+                <span class="material-icons text-sm">{{ selectedTripId === trip.id ? 'expand_less' : 'map' }}</span>
+                <span>{{ selectedTripId === trip.id ? 'Hide Pins & Map' : 'View FROM & TO Pins' }}</span>
+              </button>
+
+              <!-- Open In Maps Button -->
               <a
                 v-if="hasValidCoords(trip)"
                 :href="getGoogleMapsLink(trip)"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00B85C] to-[#087A45] hover:from-[#00c965] hover:to-[#0a8c4f] text-white text-xs font-bold rounded-xl shadow-md shadow-[#00B85C]/20 transition-all hover:scale-105"
+                class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#061B2B] hover:bg-[#0B2540] text-slate-300 hover:text-white border border-white/10 rounded-xl text-xs font-semibold transition-all"
               >
-                <span class="material-icons text-sm">open_in_new</span>
-                <span>View Route</span>
+                <span class="material-icons text-xs text-[#00B85C]">open_in_new</span>
+                <span>Open in Maps</span>
               </a>
 
               <!-- Delete Button -->
               <button
                 @click="deleteTrip(trip.id)"
-                class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/25 rounded-xl text-xs font-bold transition-all"
+                class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/25 rounded-xl text-xs font-bold transition-all"
               >
-                <span class="material-icons text-sm">delete</span>
+                <span class="material-icons text-xs">delete</span>
                 <span>Delete</span>
               </button>
+            </div>
+
+          </div>
+
+          <!-- ============================================================== -->
+          <!-- EXPANDED INTERACTIVE MAP WITH FROM AND TO PIN MARKERS           -->
+          <!-- ============================================================== -->
+          <div v-if="selectedTripId === trip.id" class="mt-4 pt-4 border-t border-white/10 space-y-3">
+            
+            <!-- Header Status Boxes: FROM & TO Breakdown -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <!-- FROM Origin Box -->
+              <div class="bg-[#061B2B]/95 border border-[#00B85C]/40 rounded-xl p-3.5 flex items-start gap-3 shadow-md">
+                <div class="w-8 h-8 rounded-lg bg-[#00B85C]/20 border border-[#00B85C]/50 flex items-center justify-center text-[#00B85C] font-black text-xs flex-shrink-0">
+                  FROM
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-[10px] font-bold text-[#00B85C] uppercase tracking-wider">Start Origin Location</p>
+                    <span class="text-[10px] font-mono text-slate-400">{{ formatTimeOnly(trip.startTime) }}</span>
+                  </div>
+                  <p class="text-xs text-white font-semibold mt-0.5 break-words">
+                    {{ trip.startLocationName || formatCoords(trip.startLat || trip.from?.lat, trip.startLng || trip.from?.lng) }}
+                  </p>
+                  <p class="text-[10px] font-mono text-slate-400 mt-1">
+                    📍 Coordinates: {{ formatLatLngExact(trip.startLat || trip.from?.lat, trip.startLng || trip.from?.lng) }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- TO Destination Box -->
+              <div class="bg-[#061B2B]/95 border border-red-500/40 rounded-xl p-3.5 flex items-start gap-3 shadow-md">
+                <div class="w-8 h-8 rounded-lg bg-red-500/20 border border-red-500/50 flex items-center justify-center text-red-400 font-black text-xs flex-shrink-0">
+                  TO
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-[10px] font-bold text-red-400 uppercase tracking-wider">Last Recorded / Destination</p>
+                    <span class="text-[10px] font-mono text-slate-400">{{ formatTimeOnly(trip.endTime || trip.timestamp) }}</span>
+                  </div>
+                  <p class="text-xs text-white font-semibold mt-0.5 break-words">
+                    {{ trip.endLocationName || formatCoords(trip.endLat || trip.to?.lat, trip.endLng || trip.to?.lng) }}
+                  </p>
+                  <p class="text-[10px] font-mono text-slate-400 mt-1">
+                    🏁 Coordinates: {{ formatLatLngExact(trip.endLat || trip.to?.lat, trip.endLng || trip.to?.lng) }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Leaflet Interactive Map Container -->
+            <div class="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden border border-[#00B85C]/30 shadow-2xl bg-[#061B2B]">
+              <div :id="'map-trip-' + trip.id" class="w-full h-full"></div>
+
+              <!-- Top Left Overlay Badge -->
+              <div class="absolute top-3 left-3 z-[1000] bg-[#061B2B]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-lg flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#00B85C] animate-pulse"></span>
+                <span class="text-xs font-bold text-white">Interactive Trip Route & Markers</span>
+              </div>
             </div>
 
           </div>
@@ -254,15 +322,21 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
 import { ref as dbRef, onValue, remove } from 'firebase/database';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const authStore = useAuthStore();
 const allTrips = ref([]);
 let tripsUnsubscribe = null;
 let altTripsUnsubscribe = null;
+
+// Selected Trip for Map Inspection (FROM & TO Pins)
+const selectedTripId = ref(null);
+let activeMapInstance = null;
 
 // Date filtering states
 const selectedFilter = ref('all'); // 'all', 'today', 'yesterday', 'week', 'month', 'custom'
@@ -383,6 +457,215 @@ const formatCoords = (lat, lng) => {
   return 'Base Station / No GPS Fix';
 };
 
+const formatTimeOnly = (rawTime) => {
+  if (!rawTime) return 'N/A';
+  const d = new Date(Number(rawTime));
+  return isNaN(d.getTime()) ? 'N/A' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
+const formatLatLngExact = (lat, lng) => {
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+  if (!isNaN(numLat) && !isNaN(numLng) && (numLat !== 0 || numLng !== 0)) {
+    return `${numLat.toFixed(6)}, ${numLng.toFixed(6)}`;
+  }
+  return 'No GPS Coordinates';
+};
+
+// Custom Leaflet Icons for FROM (Start/Origin) and TO (Destination/Last Location)
+const createFromIcon = () => {
+  return L.divIcon({
+    html: `
+      <div style="position:relative; display:flex; flex-direction:column; align-items:center; filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5)); cursor:pointer;">
+        <div style="background:#00B85C; color:#ffffff; font-size:10px; font-weight:900; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.5px; border:2px solid #ffffff; white-space:nowrap; margin-bottom:-4px; z-index:3; box-shadow:0 2px 6px rgba(0,0,0,0.35);">
+          FROM
+        </div>
+        <div style="width:34px; height:34px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:#00B85C; border:2.5px solid #ffffff; display:flex; align-items:center; justify-content:center; z-index:2;">
+          <span style="transform:rotate(45deg); color:#ffffff; font-size:16px; font-weight:bold; line-height:1;">A</span>
+        </div>
+        <div style="width:12px; height:5px; background:rgba(0,0,0,0.3); border-radius:50%; margin-top:2px;"></div>
+      </div>
+    `,
+    className: 'trip-from-marker',
+    iconSize: [46, 52],
+    iconAnchor: [23, 50],
+    popupAnchor: [0, -50]
+  });
+};
+
+const createToIcon = () => {
+  return L.divIcon({
+    html: `
+      <div style="position:relative; display:flex; flex-direction:column; align-items:center; filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5)); cursor:pointer;">
+        <div style="background:#DC2626; color:#ffffff; font-size:10px; font-weight:900; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.5px; border:2px solid #ffffff; white-space:nowrap; margin-bottom:-4px; z-index:3; box-shadow:0 2px 6px rgba(0,0,0,0.35);">
+          TO
+        </div>
+        <div style="width:34px; height:34px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:#DC2626; border:2.5px solid #ffffff; display:flex; align-items:center; justify-content:center; z-index:2;">
+          <span style="transform:rotate(45deg); color:#ffffff; font-size:16px; font-weight:bold; line-height:1;">B</span>
+        </div>
+        <div style="width:12px; height:5px; background:rgba(0,0,0,0.3); border-radius:50%; margin-top:2px;"></div>
+      </div>
+    `,
+    className: 'trip-to-marker',
+    iconSize: [46, 52],
+    iconAnchor: [23, 50],
+    popupAnchor: [0, -50]
+  });
+};
+
+// Toggle Interactive Leaflet Map for a specific selected trip
+const toggleTripMap = async (trip) => {
+  if (selectedTripId.value === trip.id) {
+    if (activeMapInstance) {
+      activeMapInstance.remove();
+      activeMapInstance = null;
+    }
+    selectedTripId.value = null;
+    return;
+  }
+
+  if (activeMapInstance) {
+    activeMapInstance.remove();
+    activeMapInstance = null;
+  }
+
+  selectedTripId.value = trip.id;
+  await nextTick();
+
+  setTimeout(() => {
+    initTripMap(trip);
+  }, 100);
+};
+
+// Initialize Leaflet Map with FROM and TO Pin Markers
+const initTripMap = (trip) => {
+  const containerId = 'map-trip-' + trip.id;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const startLat = parseFloat(trip.startLat || trip.from?.lat || 0);
+  const startLng = parseFloat(trip.startLng || trip.from?.lng || 0);
+  const endLat = parseFloat(trip.endLat || trip.to?.lat || startLat);
+  const endLng = parseFloat(trip.endLng || trip.to?.lng || startLng);
+
+  const hasStart = !isNaN(startLat) && !isNaN(startLng) && (startLat !== 0 || startLng !== 0);
+  const hasEnd = !isNaN(endLat) && !isNaN(endLng) && (endLat !== 0 || endLng !== 0);
+
+  const defaultCenter = [12.774763, 121.471025];
+  const centerLat = hasStart ? startLat : (hasEnd ? endLat : defaultCenter[0]);
+  const centerLng = hasStart ? startLng : (hasEnd ? endLng : defaultCenter[1]);
+
+  const map = L.map(containerId, {
+    center: [centerLat, centerLng],
+    zoom: 14,
+    zoomControl: true,
+    attributionControl: true
+  });
+  activeMapInstance = map;
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19
+  }).addTo(map);
+
+  const bounds = [];
+
+  // 🟢 FROM Pin Marker
+  if (hasStart) {
+    const fromMarker = L.marker([startLat, startLng], { icon: createFromIcon() }).addTo(map);
+    fromMarker.bindPopup(`
+      <div style="font-family:Inter,sans-serif; min-width:210px;">
+        <h4 style="margin:0 0 6px 0; color:#00B85C; font-weight:800; font-size:13px; display:flex; align-items:center; gap:6px;">
+          <span>🟢</span> <span>FROM (Trip Origin)</span>
+        </h4>
+        <p style="margin:3px 0; font-size:12px; color:#1e293b;"><strong>Address:</strong><br>${trip.startLocationName || 'Start Position'}</p>
+        <p style="margin:3px 0; font-size:11px; color:#64748b;"><strong>Coordinates:</strong> ${startLat.toFixed(6)}, ${startLng.toFixed(6)}</p>
+        <p style="margin:3px 0; font-size:11px; color:#64748b;"><strong>Start Time:</strong> ${formatTimeOnly(trip.startTime)}</p>
+      </div>
+    `);
+    bounds.push([startLat, startLng]);
+  }
+
+  // 🔴 TO Pin Marker
+  if (hasEnd) {
+    const toMarker = L.marker([endLat, endLng], { icon: createToIcon() }).addTo(map);
+    toMarker.bindPopup(`
+      <div style="font-family:Inter,sans-serif; min-width:210px;">
+        <h4 style="margin:0 0 6px 0; color:#DC2626; font-weight:800; font-size:13px; display:flex; align-items:center; gap:6px;">
+          <span>🔴</span> <span>TO (Last Location)</span>
+        </h4>
+        <p style="margin:3px 0; font-size:12px; color:#1e293b;"><strong>Address:</strong><br>${trip.endLocationName || 'Last Location'}</p>
+        <p style="margin:3px 0; font-size:11px; color:#64748b;"><strong>Coordinates:</strong> ${endLat.toFixed(6)}, ${endLng.toFixed(6)}</p>
+        <p style="margin:3px 0; font-size:11px; color:#64748b;"><strong>Recorded At:</strong> ${formatTimeOnly(trip.endTime || trip.timestamp)}</p>
+      </div>
+    `);
+    bounds.push([endLat, endLng]);
+  }
+
+  // Draw Route Polyline
+  if (trip.routeCoords && Array.isArray(trip.routeCoords) && trip.routeCoords.length > 1) {
+    const polylineCoords = trip.routeCoords.map(pt => [pt.lat || pt[0], pt.lng || pt[1]]);
+    L.polyline(polylineCoords, {
+      color: '#00B85C',
+      weight: 5,
+      opacity: 0.85
+    }).addTo(map);
+    polylineCoords.forEach(c => bounds.push(c));
+  } else if (hasStart && hasEnd && (startLat !== endLat || startLng !== endLng)) {
+    // Draw direct styled connection line between FROM and TO
+    L.polyline([[startLat, startLng], [endLat, endLng]], {
+      color: '#00B85C',
+      weight: 4,
+      dashArray: '6, 8',
+      opacity: 0.85
+    }).addTo(map);
+  }
+
+  // Adjust camera to fit markers
+  if (bounds.length > 1 && (startLat !== endLat || startLng !== endLng)) {
+    map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50], maxZoom: 16 });
+  } else {
+    map.setView([centerLat, centerLng], 15);
+  }
+
+  // Invalidate map size to prevent tile clipping
+  setTimeout(() => {
+    map.invalidateSize();
+  }, 250);
+};
+
+// Reverse Geocode Helper for dynamic address resolution
+const addressMap = ref({});
+const resolveAddressForTrip = async (lat, lng, callback) => {
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+  if (isNaN(numLat) || isNaN(numLng) || (numLat === 0 && numLng === 0)) return;
+  const key = `${numLat.toFixed(4)},${numLng.toFixed(4)}`;
+  if (addressMap.value[key]) {
+    callback(addressMap.value[key]);
+    return;
+  }
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${numLat}&lon=${numLng}&format=json&addressdetails=1`, {
+      headers: { 'User-Agent': 'VigiLERT Motorcycle Safety System' }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const addr = data.address || {};
+    let parts = [];
+    if (addr.road) parts.push(addr.road);
+    if (addr.suburb) parts.push(addr.suburb);
+    if (addr.city) parts.push(addr.city);
+    else if (addr.town) parts.push(addr.town);
+    else if (addr.municipality) parts.push(addr.municipality);
+    const formatted = parts.join(', ') || data.display_name?.split(',').slice(0, 3).join(',') || `${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+    addressMap.value[key] = formatted;
+    callback(formatted);
+  } catch (e) {
+    // fallback
+  }
+};
+
 const hasValidCoords = (trip) => {
   const lat = parseFloat(trip.startLat || trip.from?.lat || 0);
   const lng = parseFloat(trip.startLng || trip.from?.lng || 0);
@@ -444,6 +727,24 @@ const mergeAndSortTrips = () => {
     return bTime - aTime;
   });
   allTrips.value = list;
+
+  // Background address resolution for trips with missing/raw coordinate labels
+  list.forEach(t => {
+    const sLat = t.startLat || t.from?.lat;
+    const sLng = t.startLng || t.from?.lng;
+    if (sLat && sLng && (!t.startLocationName || t.startLocationName.includes(',') || t.startLocationName === 'Stationary Base')) {
+      resolveAddressForTrip(sLat, sLng, (name) => {
+        t.startLocationName = name;
+      });
+    }
+    const eLat = t.endLat || t.to?.lat;
+    const eLng = t.endLng || t.to?.lng;
+    if (eLat && eLng && (!t.endLocationName || t.endLocationName.includes(',') || t.endLocationName === 'Stationary Base')) {
+      resolveAddressForTrip(eLat, eLng, (name) => {
+        t.endLocationName = name;
+      });
+    }
+  });
 };
 
 // Setup trips listeners (listens to both `helmet_public/${uid}/trips` and `${uid}/trips`)
@@ -501,6 +802,10 @@ watch(currentUid, (newUid) => {
 }, { immediate: true });
 
 onBeforeUnmount(() => {
+  if (activeMapInstance) {
+    activeMapInstance.remove();
+    activeMapInstance = null;
+  }
   if (tripsUnsubscribe) tripsUnsubscribe();
   if (altTripsUnsubscribe) altTripsUnsubscribe();
 });

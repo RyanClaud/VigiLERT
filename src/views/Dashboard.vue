@@ -1472,10 +1472,12 @@ const setupFirebaseListeners = () => {
     const data = snapshot.val();
     if (data?.live) {
       const liveData = data.live;
-      location.value = {
-        lat: Number(liveData.locationLat),
-        lng: Number(liveData.locationLng)
-      };
+      const rawLat = Number(liveData.locationLat);
+      const rawLng = Number(liveData.locationLng);
+      if (!isNaN(rawLat) && !isNaN(rawLng) && (rawLat !== 0 || rawLng !== 0)) {
+        location.value = { lat: rawLat, lng: rawLng };
+        recordTripPoint(rawLat, rawLng, currentSpeed.value, 'module');
+      }
       const rawSpeed = parseFloat(liveData.speed) || 0;
       currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
       speedHistory.value.push(currentSpeed.value);
@@ -2036,6 +2038,38 @@ const updateTripStatistics = (speed) => {
 // 🏍️ REAL-TIME TRIP SESSION RECORDER
 // ==========================================
 const activeTripSession = ref(null);
+let tripSaveTimeout = null;
+
+// Reverse geocode cache to reduce network calls
+const geocodeCache = new Map();
+const reverseGeocodeCoord = async (lat, lng) => {
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+  if (isNaN(numLat) || isNaN(numLng) || (numLat === 0 && numLng === 0)) return null;
+  const key = `${numLat.toFixed(4)},${numLng.toFixed(4)}`;
+  if (geocodeCache.has(key)) return geocodeCache.get(key);
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${numLat}&lon=${numLng}&format=json&addressdetails=1`, {
+      headers: { 'User-Agent': 'VigiLERT Motorcycle Safety System' }
+    });
+    if (!res.ok) throw new Error('Geocoding failed');
+    const data = await res.json();
+    const addr = data.address || {};
+    let parts = [];
+    if (addr.road) parts.push(addr.road);
+    if (addr.suburb) parts.push(addr.suburb);
+    if (addr.city) parts.push(addr.city);
+    else if (addr.town) parts.push(addr.town);
+    else if (addr.municipality) parts.push(addr.municipality);
+    let formatted = parts.join(', ');
+    if (!formatted) formatted = data.display_name?.split(',').slice(0, 3).join(',') || `${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+    geocodeCache.set(key, formatted);
+    return formatted;
+  } catch (e) {
+    return `${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+  }
+};
 
 // Haversine formula to compute distance in km
 const computeDistanceKm = (lat1, lon1, lat2, lon2) => {
@@ -2050,94 +2084,15 @@ const computeDistanceKm = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-// Start a new trip session
-const startTripSession = (trigger = 'engine') => {
-  if (activeTripSession.value) return; // Already recording
-  const startLat = Number(location.value?.lat) || 0;
-  const startLng = Number(location.value?.lng) || 0;
-  const hasGps = (startLat !== 0 && startLng !== 0);
+// Persist trip to Firebase (both primary and backup paths)
+const saveTripSessionToFirebase = async (session) => {
+  if (!session) return;
+  const uid = userId.value || authStore.user?.uid || localStorage.getItem('vigilert_user_uid') || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
+  if (!uid) return;
 
-  activeTripSession.value = {
-    id: Date.now().toString(),
-    startTime: Date.now(),
-    trigger,
-    startLat,
-    startLng,
-    endLat: startLat,
-    endLng: startLng,
-    startLocationName: hasGps ? `${startLat.toFixed(4)}, ${startLng.toFixed(4)}` : 'Stationary Base',
-    endLocationName: hasGps ? `${startLat.toFixed(4)}, ${startLng.toFixed(4)}` : 'Stationary Base',
-    maxSpeed: Number(currentSpeed.value) || 0,
-    speedSamples: [Number(currentSpeed.value) || 0],
-    totalDistanceKm: 0,
-    lastCoord: hasGps ? { lat: startLat, lng: startLng } : null,
-    hasGPS: hasGps,
-    source: gpsSpeedSource.value || 'phone'
-  };
-  console.log('[TRIP RECORDER] 🚀 Trip session started:', activeTripSession.value.id);
-};
-
-// Record continuous breadcrumbs / distance during the trip
-const recordTripPoint = (lat, lng, speed = 0) => {
-  const numSpeed = parseFloat(speed) || 0;
-  updateTripStatistics(numSpeed);
-
-  // Auto-start trip if moving > 5 km/h and no active session
-  if (!activeTripSession.value && numSpeed >= 5) {
-    startTripSession('motion');
-  }
-
-  if (!activeTripSession.value) return;
-  const session = activeTripSession.value;
-
-  if (numSpeed > session.maxSpeed) {
-    session.maxSpeed = Math.round(numSpeed * 10) / 10;
-  }
-  if (numSpeed > 0) {
-    session.speedSamples.push(numSpeed);
-  }
-
-  const numLat = parseFloat(lat);
-  const numLng = parseFloat(lng);
-  if (!isNaN(numLat) && !isNaN(numLng) && (numLat !== 0 || numLng !== 0)) {
-    session.hasGPS = true;
-    if (!session.startLat || session.startLat === 0) {
-      session.startLat = numLat;
-      session.startLng = numLng;
-      session.startLocationName = `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`;
-    }
-
-    if (session.lastCoord) {
-      const d = computeDistanceKm(session.lastCoord.lat, session.lastCoord.lng, numLat, numLng);
-      // Filter jitter (< 5m) and teleport glitches (> 5km in 1 tick)
-      if (d >= 0.005 && d <= 5.0) {
-        session.totalDistanceKm += d;
-      }
-    }
-    session.lastCoord = { lat: numLat, lng: numLng };
-    session.endLat = numLat;
-    session.endLng = numLng;
-    session.endLocationName = `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`;
-  }
-};
-
-// Conclude and push trip to Firebase
-const endTripSessionAndSave = async () => {
-  if (!activeTripSession.value) return;
-  const session = activeTripSession.value;
-  activeTripSession.value = null; // Clear state
-
-  const endTime = Date.now();
-  const durationMs = Math.max(1000, endTime - session.startTime);
-
-  // Ignore accidental clicks under 6 seconds if stationary
-  if (durationMs < 6000 && session.totalDistanceKm < 0.01) {
-    console.log('[TRIP RECORDER] Trip too short (<6s and <10m), skipped save.');
-    return;
-  }
-
+  const durationMs = Math.max(1000, (session.endTime || Date.now()) - session.startTime);
   let avgSpeed = 0;
-  if (session.speedSamples.length > 0) {
+  if (session.speedSamples && session.speedSamples.length > 0) {
     const sum = session.speedSamples.reduce((a, b) => a + b, 0);
     avgSpeed = Math.round((sum / session.speedSamples.length) * 10) / 10;
   } else if (session.totalDistanceKm > 0 && durationMs > 0) {
@@ -2147,8 +2102,8 @@ const endTripSessionAndSave = async () => {
   const tripRecord = {
     id: session.id,
     startTime: session.startTime,
-    endTime: endTime,
-    timestamp: endTime,
+    endTime: session.endTime || Date.now(),
+    timestamp: session.endTime || session.timestamp || Date.now(),
     duration: durationMs,
     distance: Math.round(session.totalDistanceKm * 100) / 100,
     maxSpeed: session.maxSpeed || 0,
@@ -2157,40 +2112,195 @@ const endTripSessionAndSave = async () => {
     startLng: session.startLng || 0,
     endLat: session.endLat || session.startLat || 0,
     endLng: session.endLng || session.startLng || 0,
-    startLocationName: session.startLocationName || 'Stationary Base',
-    endLocationName: session.endLocationName || 'Stationary Base',
-    hasGPS: session.hasGPS,
+    startLocationName: session.startLocationName || `${Number(session.startLat || 0).toFixed(5)}, ${Number(session.startLng || 0).toFixed(5)}`,
+    endLocationName: session.endLocationName || `${Number(session.endLat || session.startLat || 0).toFixed(5)}, ${Number(session.endLng || session.startLng || 0).toFixed(5)}`,
+    routeCoords: session.routeCoords || [],
+    hasGPS: session.hasGPS ?? true,
     source: session.source || 'phone_gps',
-    createdAt: endTime
+    createdAt: session.startTime,
+    status: session.status || 'active'
   };
-
-  console.log('[TRIP RECORDER] 💾 Saving trip to Firebase:', tripRecord);
-  const uid = userId.value || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
 
   try {
     await set(dbRef(database, `helmet_public/${uid}/trips/${session.id}`), tripRecord);
     await set(dbRef(database, `${uid}/trips/${session.id}`), tripRecord).catch(() => {});
 
-    recentTrips.value.unshift(tripRecord);
-    if (recentTrips.value.length > 5) recentTrips.value.pop();
-
-    alerts.value.unshift({
-      type: 'success',
-      message: 'Trip Saved to History',
-      details: `${tripRecord.distance} km • ${Math.round(durationMs / 60000)} min ride logged`,
-      time: new Date().toLocaleTimeString()
-    });
-    if (alerts.value.length > 5) alerts.value.pop();
+    // Update in-memory recent trips
+    const existingIndex = recentTrips.value.findIndex(t => t.id === session.id);
+    if (existingIndex >= 0) {
+      recentTrips.value[existingIndex] = tripRecord;
+    } else {
+      recentTrips.value.unshift(tripRecord);
+      if (recentTrips.value.length > 5) recentTrips.value.pop();
+    }
   } catch (err) {
-    console.error('[TRIP RECORDER] Failed to save trip:', err);
+    console.error('[TRIP RECORDER] Failed saving trip to Firebase:', err);
   }
+};
+
+// Debounce continuous trip saves
+const debouncedSaveActiveTrip = () => {
+  if (tripSaveTimeout) clearTimeout(tripSaveTimeout);
+  tripSaveTimeout = setTimeout(() => {
+    if (activeTripSession.value) {
+      saveTripSessionToFirebase(activeTripSession.value);
+    }
+  }, 3000);
+};
+
+// Start a new trip session (immediately records FROM point)
+const startTripSession = async (trigger = 'auto_location', initLat = null, initLng = null, source = 'gps') => {
+  if (activeTripSession.value) return; // Already recording
+
+  const startLat = initLat !== null ? Number(initLat) : (Number(location.value?.lat) || 0);
+  const startLng = initLng !== null ? Number(initLng) : (Number(location.value?.lng) || 0);
+  const hasGps = (startLat !== 0 && startLng !== 0);
+
+  const sessionId = 'trip_' + Date.now();
+  const startTime = Date.now();
+  const initialCoordName = hasGps ? `${startLat.toFixed(5)}, ${startLng.toFixed(5)}` : 'Stationary Base';
+
+  activeTripSession.value = {
+    id: sessionId,
+    startTime: startTime,
+    endTime: startTime,
+    timestamp: startTime,
+    trigger,
+    startLat,
+    startLng,
+    endLat: startLat,
+    endLng: startLng,
+    startLocationName: initialCoordName,
+    endLocationName: initialCoordName,
+    maxSpeed: Number(currentSpeed.value) || 0,
+    speedSamples: [Number(currentSpeed.value) || 0],
+    totalDistanceKm: 0,
+    lastCoord: hasGps ? { lat: startLat, lng: startLng } : null,
+    routeCoords: hasGps ? [{ lat: startLat, lng: startLng, time: startTime }] : [],
+    hasGPS: hasGps,
+    source: source || gpsSpeedSource.value || 'phone_gps',
+    status: 'active'
+  };
+
+  console.log('[TRIP RECORDER] 🚀 Trip session started:', sessionId, { startLat, startLng, trigger });
+
+  // Save immediately so trip appears right away in Trip History
+  await saveTripSessionToFirebase(activeTripSession.value);
+
+  // Reverse geocode start location asynchronously
+  if (hasGps) {
+    reverseGeocodeCoord(startLat, startLng).then(addr => {
+      if (addr && activeTripSession.value && activeTripSession.value.id === sessionId) {
+        activeTripSession.value.startLocationName = addr;
+        if (activeTripSession.value.endLocationName === initialCoordName) {
+          activeTripSession.value.endLocationName = addr;
+        }
+        saveTripSessionToFirebase(activeTripSession.value);
+      }
+    });
+  }
+};
+
+// Record continuous coordinates / distance during the trip (FROM & TO tracking)
+const recordTripPoint = (lat, lng, speed = 0, source = 'gps') => {
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+  if (isNaN(numLat) || isNaN(numLng) || (numLat === 0 && numLng === 0)) return;
+
+  const numSpeed = parseFloat(speed) || 0;
+  updateTripStatistics(numSpeed);
+
+  // Auto-start trip session immediately on first valid location fix if none exists!
+  if (!activeTripSession.value) {
+    startTripSession(numSpeed >= 5 ? 'motion' : 'auto_location', numLat, numLng, source);
+    return;
+  }
+
+  const session = activeTripSession.value;
+
+  if (numSpeed > session.maxSpeed) {
+    session.maxSpeed = Math.round(numSpeed * 10) / 10;
+  }
+  if (numSpeed > 0) {
+    session.speedSamples.push(numSpeed);
+  }
+
+  session.hasGPS = true;
+  session.endTime = Date.now();
+  session.timestamp = Date.now();
+
+  // If start coordinate was unset, establish it as FROM
+  if (!session.startLat || session.startLat === 0) {
+    session.startLat = numLat;
+    session.startLng = numLng;
+    session.startLocationName = `${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+    reverseGeocodeCoord(numLat, numLng).then(addr => {
+      if (addr && activeTripSession.value) {
+        activeTripSession.value.startLocationName = addr;
+        saveTripSessionToFirebase(activeTripSession.value);
+      }
+    });
+  }
+
+  // Calculate distance moved from previous point
+  if (session.lastCoord) {
+    const d = computeDistanceKm(session.lastCoord.lat, session.lastCoord.lng, numLat, numLng);
+    // Real movement between 3m and 5km per tick
+    if (d >= 0.003 && d <= 5.0) {
+      session.totalDistanceKm += d;
+      session.lastCoord = { lat: numLat, lng: numLng };
+      session.endLat = numLat;
+      session.endLng = numLng;
+      session.routeCoords.push({ lat: numLat, lng: numLng, time: Date.now() });
+      if (session.routeCoords.length > 500) {
+        session.routeCoords.splice(1, 1);
+      }
+      // Reverse geocode latest TO position asynchronously
+      reverseGeocodeCoord(numLat, numLng).then(addr => {
+        if (addr && activeTripSession.value) {
+          activeTripSession.value.endLocationName = addr;
+        }
+      });
+    }
+  } else {
+    session.lastCoord = { lat: numLat, lng: numLng };
+    session.endLat = numLat;
+    session.endLng = numLng;
+  }
+
+  // Continuously persist latest TO position & route
+  debouncedSaveActiveTrip();
+};
+
+// Conclude and push finalized trip to Firebase (never discarded)
+const endTripSessionAndSave = async () => {
+  if (!activeTripSession.value) return;
+  const session = activeTripSession.value;
+  activeTripSession.value = null; // Clear state
+
+  const endTime = Date.now();
+  session.endTime = endTime;
+  session.timestamp = endTime;
+  session.status = 'completed';
+
+  console.log('[TRIP RECORDER] 💾 Finalizing trip to Firebase:', session.id);
+  await saveTripSessionToFirebase(session);
+
+  const durationMs = Math.max(1000, endTime - session.startTime);
+  alerts.value.unshift({
+    type: 'success',
+    message: 'Trip Saved to History',
+    details: `${session.totalDistanceKm.toFixed(2)} km • ${Math.round(durationMs / 60000)} min journey logged`,
+    time: new Date().toLocaleTimeString()
+  });
+  if (alerts.value.length > 5) alerts.value.pop();
 };
 
 // Handle location update from GPS (non-destructive update)
 const handleLocationUpdate = async (newLocation) => {
   if (newLocation.lat && newLocation.lng) {
     location.value = { lat: newLocation.lat, lng: newLocation.lng };
-    recordTripPoint(newLocation.lat, newLocation.lng, currentSpeed.value);
+    recordTripPoint(newLocation.lat, newLocation.lng, currentSpeed.value, newLocation.source || 'phone');
   }
   
   // Non-destructive update in Firebase so engineRunning, mpu6050, antiTheftArmed are preserved
@@ -2486,6 +2596,9 @@ onMounted(() => {
   // ✅ Setup mobile navigation scroll detection
   window.addEventListener('scroll', handleScroll);
   handleScroll(); // Set initial active section
+
+  // ✅ Auto-save active trip on page refresh or browser exit
+  window.addEventListener('beforeunload', handleBeforeUnload);
 });
 
 // ✅ NEW: Engine Control Methods
@@ -3212,8 +3325,16 @@ const getWeatherAlerts = () => {
   return alerts;
 };
 
+// Handle browser close or page unload
+const handleBeforeUnload = () => {
+  if (activeTripSession.value) {
+    endTripSessionAndSave();
+  }
+};
+
 // Cleanup on component unmount
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload);
   // ✅ NEW: Cleanup audio and keyboard event listener
   if (currentAudio) {
     currentAudio.pause();
