@@ -737,20 +737,15 @@ void loop() {
       currentLeanAngle = 0.0;
     }
 
-    // ── Crash & Tilt Detection Logic ─────────────────────────────────────────
+    // ── Crash & Tilt Detection Logic (Instantaneous & Accurate) ─────────────
+    // Parked/bench tilt: >= 45.0° | Running lean limit: >= 40.0° (Street & Sport limit) | Impact: >= 3.0g
     float totalG = currentTotalAccel / 9.80665;
-    bool isImpactCrash = (currentTotalAccel >= ACCEL_THRESHOLD || totalG >= 3.5);
-    bool isSevereTilt  = (currentLeanAngle >= 45.0 && currentTotalAccel >= 4.0);
-    bool isRidingCrash = (engineRunning && currentLeanAngle >= 40.0 && currentTotalAccel >= 4.0);
+    bool isImpactCrash = (currentTotalAccel >= ACCEL_THRESHOLD || totalG >= 3.0);
+    bool isSevereTilt  = (currentLeanAngle >= 45.0 && currentTotalAccel >= 3.5);
+    bool isRidingCrash = (engineRunning && currentLeanAngle >= 40.0 && currentTotalAccel >= 3.5);
 
-    // Require sustained tilt for 3 consecutive samples (150ms) to filter out table taps / sensor noise
-    if (isSevereTilt || isRidingCrash) {
-      consecutiveTiltCrashCount++;
-    } else {
-      consecutiveTiltCrashCount = 0;
-    }
-
-    bool shouldTriggerCrash = isImpactCrash || (consecutiveTiltCrashCount >= 3);
+    // Instant detection — triggers immediately when tilted past motorcycle safety limits
+    bool shouldTriggerCrash = isImpactCrash || isSevereTilt || isRidingCrash;
 
     if (MPU6050_ENABLED && shouldTriggerCrash && !crashDetected) {
       unsigned long timeSinceLastCrash = millis() - lastCrashTime;
@@ -1867,10 +1862,10 @@ void handleDashboardButton() {
 void checkDashboardButton() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // Reliable HTTPS GET with 1500ms timeout
   HTTPClient http;
-  http.setTimeout(1500);
-  http.begin(firebaseHost + buttonPath);
+  http.setTimeout(1200);
+  String engineControlPath = "/" + userUID + "/engineControl.json?auth=" + firebaseAuth;
+  http.begin(firebaseHost + engineControlPath);
 
   int httpCode = http.GET();
 
@@ -1878,61 +1873,55 @@ void checkDashboardButton() {
     String response = http.getString();
     http.end();
 
-    bool currentButtonState = (response.indexOf("true") != -1);
+    // Check for explicit commands or button states
+    bool hasStartCmd = (response.indexOf("\"command\":\"START\"") != -1) ||
+                       (response.indexOf("\"startButton\":true") != -1 && !engineRunning);
+    bool hasStopCmd  = (response.indexOf("\"command\":\"STOP\"") != -1) ||
+                       (response.indexOf("\"stopButton\":true") != -1) ||
+                       (response.indexOf("\"startButton\":true") != -1 && engineRunning);
 
-    if (currentButtonState) {
-      Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED — Processing Engine Command!");
+    if (hasStopCmd && engineRunning) {
+      Serial.println("\n🛑 [DASHBOARD] STOP ENGINE COMMAND RECEIVED!");
+      stopEngine();
+      clearDashboardButton();
+    }
+    else if (hasStartCmd && !engineRunning) {
+      Serial.println("\n⚡ [DASHBOARD] START ENGINE COMMAND RECEIVED!");
 
-      // 1. Auto-clear crash alert if vehicle is currently sitting upright
+      // Auto-clear crash alert if vehicle is currently sitting upright
       if (crashDetected && currentLeanAngle < 30.0 && currentTotalAccel < 15.0) {
         crashDetected = false;
         Serial.println("[ENGINE] ✓ Vehicle is upright — auto-cleared previous crash alert!");
       }
 
-      // 2. Toggle or set engine state
-      if (!engineRunning) {
-        // Safety check before running
-        if (alcoholDetected) {
-          Serial.println("[ENGINE] ❌ Blocked: Alcohol detected!");
-          playWarningBeep(3);
-          clearDashboardButton();
-          return;
-        }
-        if (crashDetected) {
-          Serial.println("[ENGINE] ❌ Blocked: Crash alert active!");
-          playWarningBeep(4);
-          clearDashboardButton();
-          return;
-        }
-
-        // START ENGINE: Relay GPIO LOW = ON for active-low relay
-        digitalWrite(relayPin, LOW);
-        engineRunning = true;
-        engineStartRequested = false;
-        starterActive = false;
-        if (antiTheftArmed) {
-          antiTheftArmed = false;
-          antiTheftEnabled = false;
-          theftDetectionCount = 0;
-          stopSiren();
-        }
-        playConfirmBeep();
-        Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\n", relayPin);
-      } else {
-        // STOP ENGINE: Relay GPIO HIGH = OFF
-        digitalWrite(relayPin, HIGH);
-        engineRunning = false;
-        engineOffTime = millis();
-        antiTheftEnabled = true;
-        antiTheftArmed = false;
-        playWarningBeep(1);
-        Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — engine cut\n", relayPin);
+      // Safety checks
+      if (alcoholDetected) {
+        Serial.println("[ENGINE] ❌ Start blocked: Alcohol detected!");
+        playWarningBeep(3);
+        clearDashboardButton();
+        return;
+      }
+      if (crashDetected) {
+        Serial.println("[ENGINE] ❌ Start blocked: Crash alert active!");
+        playWarningBeep(4);
+        clearDashboardButton();
+        return;
       }
 
-      // 3. Immediately reset button to false in Firebase
+      // START ENGINE: Relay GPIO LOW = ON for active-low relay
+      digitalWrite(relayPin, LOW);
+      engineRunning = true;
+      engineStartRequested = false;
+      starterActive = false;
+      if (antiTheftArmed) {
+        antiTheftArmed = false;
+        antiTheftEnabled = false;
+        theftDetectionCount = 0;
+        stopSiren();
+      }
+      playConfirmBeep();
+      Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\n", relayPin);
       clearDashboardButton();
-
-      // 4. Fast live update to Firebase
       sendLiveToFirebase();
     }
   } else {
@@ -1963,18 +1952,18 @@ void checkAutoMode() {
 
 void clearDashboardButton() {
   HTTPClient http;
-  http.setTimeout(1500);  // Reliable timeout for Firebase PUT
-  http.begin(firebaseHost + buttonPath);
+  http.setTimeout(1200);
+  String engineControlPath = "/" + userUID + "/engineControl.json?auth=" + firebaseAuth;
+  http.begin(firebaseHost + engineControlPath);
   http.addHeader("Content-Type", "application/json");
-  
-  int code = http.PUT("false");
-  
+
+  // Reset command and button flags in Firebase so they don't re-trigger
+  int code = http.PATCH("{\"command\":\"NONE\",\"startButton\":false,\"stopButton\":false}");
   if (code == HTTP_CODE_OK) {
-    Serial.println("[DASHBOARD] ✓ Button reset to false in Firebase");
+    Serial.println("[DASHBOARD] ✓ Engine command cleared in Firebase");
   } else {
     Serial.printf("[DASHBOARD] ⚠️ clearDashboardButton HTTP %d\n", code);
   }
-  
   http.end();
   lastDashboardButtonState = false;
 }

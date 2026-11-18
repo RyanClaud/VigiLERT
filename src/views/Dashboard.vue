@@ -2709,7 +2709,9 @@ const toggleEngine = async () => {
   try {
     // 4. Update Firebase instantly across all nodes simultaneously
     const updates = [
-      set(dbRef(database, `${uid}/engineControl/startButton`), true),
+      set(dbRef(database, `${uid}/engineControl/command`), nextState ? 'START' : 'STOP'),
+      set(dbRef(database, `${uid}/engineControl/startButton`), nextState),
+      set(dbRef(database, `${uid}/engineControl/stopButton`), !nextState),
       set(dbRef(database, `${uid}/engineControl/engineRunning`), nextState),
       set(dbRef(database, `helmet_public/${uid}/live/engineRunning`), nextState),
       set(dbRef(database, `helmet_public/${uid}/devices/motorcycle/engineRunning`), nextState)
@@ -2721,11 +2723,10 @@ const toggleEngine = async () => {
     await Promise.all(updates);
     console.log(`[ENGINE] ⚡ Instant toggle command sent -> ${nextState ? 'START' : 'STOP'}`);
 
-    // Auto-prime startButton back to false after 1.5s so Firebase is ready for subsequent clicks
+    // Auto-clear pending state after 3s (or earlier when Firebase confirms)
     setTimeout(() => {
-      set(dbRef(database, `${uid}/engineControl/startButton`), false).catch(() => {});
       enginePending.value = false;
-    }, 1500);
+    }, 3000);
   } catch (error) {
     console.error('[ENGINE] Failed to toggle engine in Firebase:', error);
     // Revert state if Firebase rejected
