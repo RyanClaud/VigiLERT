@@ -973,6 +973,7 @@ const motorcycleRawConnected = ref(false);
 const deviceBattery = ref(85);
 const gsmConnected = ref(true);
 const gpsConnected = ref(true);
+const hasHardwareGpsFix = ref(false);
 
 // ✅ Debouncing timers
 
@@ -1474,18 +1475,26 @@ const setupFirebaseListeners = () => {
       const liveData = data.live;
       const rawLat = Number(liveData.locationLat);
       const rawLng = Number(liveData.locationLng);
-      if (!isNaN(rawLat) && !isNaN(rawLng) && (rawLat !== 0 || rawLng !== 0)) {
+      const isGpsValid = Boolean(liveData.gpsValid);
+      const hasHardwareFix = Boolean(isGpsValid && !isNaN(rawLat) && !isNaN(rawLng) && rawLat !== 0 && rawLng !== 0);
+      hasHardwareGpsFix.value = hasHardwareFix;
+
+      // Only take location & speed from motorcycle module if it has a locked 3D satellite fix!
+      if (hasHardwareFix) {
         location.value = { lat: rawLat, lng: rawLng };
+        const rawSpeed = parseFloat(liveData.speed) || 0;
+        currentSpeed.value = rawSpeed < 0.2 ? 0 : rawSpeed;
+        speedHistory.value.push(currentSpeed.value);
+        if (speedHistory.value.length > 10) speedHistory.value.shift();
+        isOverSpeed.value = currentSpeed.value > speedLimit.value;
         recordTripPoint(rawLat, rawLng, currentSpeed.value, 'module');
+        updateTripStatistics(currentSpeed.value);
+        gpsConnected.value = true;
+      } else {
+        // Hardware module has NO lock (indoors / searching).
+        // The system automatically falls back to Phone GPS for location and speed accuracy!
+        gpsConnected.value = false;
       }
-      const rawSpeed = parseFloat(liveData.speed) || 0;
-      currentSpeed.value = rawSpeed < 0.1 ? 0 : rawSpeed;
-      speedHistory.value.push(currentSpeed.value);
-      if (speedHistory.value.length > 10) speedHistory.value.shift();
-      isOverSpeed.value = currentSpeed.value > speedLimit.value;
-      
-      // Update trip statistics
-      updateTripStatistics(currentSpeed.value);
       
       // ✅ Update MPU6050 sensor data
       if (liveData.mpu6050) {
@@ -1870,10 +1879,13 @@ const deleteCrashEvent = async (index) => {
   }
 };
 
-// Start continuous GPS speed monitoring
-const startGPSSpeedMonitoring = () => {
+let lastPhoneSpeedPos = null;
+let lastPhoneSpeedTime = null;
+
+// Start continuous GPS speed monitoring (with delta-distance accuracy & auto-fallback)
+const startGPSSpeedMonitoring = (silent = true) => {
   if (!navigator.geolocation) {
-    alert('Geolocation is not supported by your browser');
+    if (!silent) alert('Geolocation is not supported by your browser');
     return;
   }
 
@@ -1889,16 +1901,29 @@ const startGPSSpeedMonitoring = () => {
     (position) => {
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
-      const speed = position.coords.speed; // Speed in meters per second
+      const rawSpeed = position.coords.speed; // Speed in meters per second
       
-      // Update location
-      location.value = { lat, lng };
-      
-      // Convert speed from m/s to km/h
-      if (speed !== null && speed !== undefined) {
-        const speedKmh = speed * 3.6; // Convert m/s to km/h
-        const finalSpeed = speedKmh < 0.5 ? 0 : speedKmh; // Filter out very small values
-        
+      let finalSpeed = 0;
+      // 1. Check hardware chip speed (m/s -> km/h)
+      if (rawSpeed !== null && !isNaN(rawSpeed) && rawSpeed > 0) {
+        finalSpeed = Math.round(rawSpeed * 3.6 * 10) / 10;
+      } else if (lastPhoneSpeedPos && lastPhoneSpeedTime) {
+        // 2. Accurate Haversine delta calculation (handles devices that report null speed during motion)
+        const dtSeconds = (position.timestamp - lastPhoneSpeedTime) / 1000;
+        if (dtSeconds >= 0.4 && dtSeconds <= 12) {
+          const dM = computeDistanceKm(lastPhoneSpeedPos.lat, lastPhoneSpeedPos.lng, lat, lng) * 1000;
+          if (dM >= 1.5) {
+            const calcKmh = (dM / dtSeconds) * 3.6;
+            if (calcKmh <= 160) finalSpeed = Math.round(calcKmh * 10) / 10;
+          }
+        }
+      }
+      lastPhoneSpeedPos = { lat, lng };
+      lastPhoneSpeedTime = position.timestamp || Date.now();
+
+      // Only take Phone GPS location & speed if hardware GPS module has NO 3D lock
+      if (!hasHardwareGpsFix.value) {
+        location.value = { lat, lng };
         currentSpeed.value = finalSpeed;
         speedHistory.value.push(finalSpeed);
         if (speedHistory.value.length > 10) speedHistory.value.shift();
@@ -1910,62 +1935,29 @@ const startGPSSpeedMonitoring = () => {
         } else if (finalSpeed <= speedLimit.value) {
           isOverSpeed.value = false;
         }
-      }
-      
-      // Record breadcrumb and telemetry point for active trip session
-      recordTripPoint(lat, lng, currentSpeed.value);
 
-      // Non-destructive update in Firebase so engineRunning, mpu6050, antiTheftArmed are preserved
-      const locationRef = dbRef(database, `helmet_public/${userId.value}/live`);
-      update(locationRef, {
-        locationLat: lat,
-        locationLng: lng,
-        speed: currentSpeed.value,
-        timestamp: Date.now(),
-        gpsSource: 'phone_gps'
-      }).catch(error => {
-        console.error('Failed to update location:', error);
-      });
+        updateTripStatistics(finalSpeed);
+        recordTripPoint(lat, lng, finalSpeed, 'phone_auto_fallback');
+
+        // Non-destructive update in Firebase live
+        if (userId.value) {
+          const locationRef = dbRef(database, `helmet_public/${userId.value}/live`);
+          update(locationRef, {
+            locationLat: lat,
+            locationLng: lng,
+            speed: finalSpeed,
+            timestamp: Date.now(),
+            gpsSource: 'phone_auto_fallback'
+          }).catch(() => {});
+        }
+      }
     },
     (error) => {
-      console.error('GPS monitoring error:', error);
-      stopGPSSpeedMonitoring();
-      
-      let errorMessage = 'GPS monitoring failed. ';
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMessage += 'Please allow location access.';
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMessage += 'Location unavailable.';
-          break;
-        case error.TIMEOUT:
-          errorMessage += 'Request timed out.';
-          break;
-      }
-      
-      alerts.value.unshift({
-        type: 'warning',
-        message: 'GPS Monitoring Stopped',
-        details: errorMessage,
-        time: new Date().toLocaleTimeString()
-      });
-      if (alerts.value.length > 5) alerts.value.pop();
+      console.warn('[DASHBOARD] GPS speed monitoring notice:', error.message);
+      if (!silent) stopGPSSpeedMonitoring();
     },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
   );
-
-  alerts.value.unshift({
-    type: 'success',
-    message: 'GPS Speed Monitoring Active',
-    details: 'Real-time speed tracking from phone GPS',
-    time: new Date().toLocaleTimeString()
-  });
-  if (alerts.value.length > 5) alerts.value.pop();
 };
 
 // Stop GPS speed monitoring
@@ -2296,10 +2288,21 @@ const endTripSessionAndSave = async () => {
   if (alerts.value.length > 5) alerts.value.pop();
 };
 
-// Handle location update from GPS (non-destructive update)
+// Handle location update from GPS (with automatic fallback for location & speed)
 const handleLocationUpdate = async (newLocation) => {
   if (newLocation.lat && newLocation.lng) {
-    location.value = { lat: newLocation.lat, lng: newLocation.lng };
+    // If hardware GPS module has NO 3D satellite fix, automatically use Phone GPS for location and speed!
+    if (!hasHardwareGpsFix.value || newLocation.source === 'phone') {
+      location.value = { lat: newLocation.lat, lng: newLocation.lng };
+      if (typeof newLocation.speed !== 'undefined') {
+        const phoneSpd = Math.max(0, Number(newLocation.speed) || 0);
+        currentSpeed.value = phoneSpd;
+        speedHistory.value.push(phoneSpd);
+        if (speedHistory.value.length > 10) speedHistory.value.shift();
+        isOverSpeed.value = phoneSpd > speedLimit.value;
+        updateTripStatistics(phoneSpd);
+      }
+    }
     recordTripPoint(newLocation.lat, newLocation.lng, currentSpeed.value, newLocation.source || 'phone');
   }
   
@@ -2599,47 +2602,67 @@ onMounted(() => {
 
   // ✅ Auto-save active trip on page refresh or browser exit
   window.addEventListener('beforeunload', handleBeforeUnload);
+
+  // ✅ Auto-start high-accuracy Phone GPS speed monitoring on mount
+  startGPSSpeedMonitoring(true);
 });
 
-// ✅ NEW: Engine Control Methods
+// ✅ INSTANT RESPONSIVE Engine Control Methods
 const toggleEngine = async () => {
-  try {
-    if (alcoholDetected.value && !engineRunning.value) {
-      alert('⚠️ Cannot start engine: Alcohol detected!\n\nPlease wait for alcohol to clear before starting the engine.');
-      return;
-    }
+  if (alcoholDetected.value && !engineRunning.value) {
+    alert('⚠️ Cannot start engine: Alcohol detected!\n\nPlease wait for alcohol to clear before starting the engine.');
+    return;
+  }
 
-    // Toggle the button state in Firebase
-    const buttonRef = dbRef(database, `${userId.value}/engineControl/startButton`);
-    await set(buttonRef, true);
-    
-    console.log('[ENGINE] Button press sent to Firebase');
-    
-    // Provide immediate feedback
-    if (engineRunning.value) {
-      console.log('[ENGINE] Stopping engine...');
-    } else {
-      console.log('[ENGINE] Starting engine...');
-    }
-    
+  const nextState = !engineRunning.value;
+
+  // 1. Instant 0ms optimistic UI update (eliminates perceptible button lag)
+  engineRunning.value = nextState;
+  enginePending.value = false;
+
+  // 2. Play tactile/audio confirmation cue
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = nextState ? 880 : 440;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  } catch (e) {}
+
+  const uid = userId.value || authStore.user?.uid || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
+
+  // 3. Trip lifecycle trigger
+  if (nextState) {
+    startTripSession('engine');
+  } else {
+    endTripSessionAndSave();
+  }
+
+  try {
+    // 4. Update Firebase instantly across all nodes simultaneously
+    await Promise.all([
+      set(dbRef(database, `${uid}/engineControl/startButton`), true),
+      set(dbRef(database, `${uid}/engineControl/engineRunning`), nextState),
+      set(dbRef(database, `helmet_public/${uid}/live/engineRunning`), nextState),
+      set(dbRef(database, `helmet_public/${uid}/devices/motorcycle/engineRunning`), nextState)
+    ]);
+    console.log(`[ENGINE] ⚡ Instant toggle completed -> ${nextState ? 'RUNNING' : 'STOPPED'}`);
   } catch (error) {
-    console.error('[ENGINE] Failed to toggle engine:', error);
-    alert('Failed to control engine. Please try again.');
+    console.error('[ENGINE] Failed to toggle engine in Firebase:', error);
+    // Revert state if Firebase rejected
+    engineRunning.value = !nextState;
+    alert('Failed to control engine. Please check internet connection.');
   }
 };
 
-// ✅ NEW: handleEngineToggle — wraps toggleEngine with optimistic pending state
-// This eliminates the confusion of the button appearing to do nothing during the Firebase round-trip
+// handleEngineToggle — fast pass-through to toggleEngine
 const handleEngineToggle = async () => {
-  if (enginePending.value) return;
-  enginePending.value = true;
-  try {
-    await toggleEngine();
-    // Auto-clear pending after 8 seconds max (in case Firebase doesn't respond)
-    setTimeout(() => { enginePending.value = false; }, 8000);
-  } catch {
-    enginePending.value = false;
-  }
+  await toggleEngine();
 };
 
 const toggleAutoControl = async () => {

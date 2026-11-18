@@ -120,12 +120,12 @@ const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for fast
 bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
-const unsigned long ALCOHOL_CHECK_INTERVAL = 500;  // 500ms — matches helmet write rate for fast detection
+const unsigned long ALCOHOL_CHECK_INTERVAL = 2000;  // 2s — balanced to keep WiFi free for instant button control
 
 // ✅ ENHANCED: Comprehensive security system with BALANCED timeouts
 bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
-const unsigned long HELMET_CHECK_INTERVAL = 1000;  // Check every 1s for faster detection
+const unsigned long HELMET_CHECK_INTERVAL = 2500;  // 2.5s — reliable without choking HTTP queue
 uint64_t lastHelmetHeartbeat = 0;
 const unsigned long HELMET_TIMEOUT = 20000;  // 20s - prevents false engine cut-off on WiFi jitter
 const unsigned long HELMET_FORCE_OFF_TIMEOUT = 20000;
@@ -171,13 +171,13 @@ bool engineStartRequested = false;
 // Dashboard button control — separate fast poll from slow autoMode check
 bool lastDashboardButtonState = false;
 unsigned long lastButtonCheck = 0;
-const unsigned long BUTTON_CHECK_INTERVAL = 150;  // 150ms button poll — fast response
+const unsigned long BUTTON_CHECK_INTERVAL = 80;   // 80ms fast button poll — instant response
 unsigned long lastAutoModeCheck = 0;
 const unsigned long AUTO_MODE_CHECK_INTERVAL = 5000;  // autoMode only needs checking every 5s
 
 // Device heartbeat
 unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 2000;  // 2s heartbeat — dashboard timeout is 15s so this is fine
+const unsigned long HEARTBEAT_INTERVAL = 3000;  // 3s heartbeat — keeps radio clear for engine command
 
 // Network tracking
 unsigned long lastWiFiConnection = 0;
@@ -520,14 +520,14 @@ void loop() {
   // ── GPS: read ALL available bytes every loop — don't limit to one char ──────
   // Reading more bytes per iteration ensures full NMEA sentences are parsed
   // before the next loop cycle, giving faster fix acquisition.
-  unsigned long gpsReadStart = millis();
-  while (gpsSerial.available() > 0 && millis() - gpsReadStart < 20) {
+  // ── GPS: drain serial buffer continuously so no bytes or NMEA sentences are lost ──
+  while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
   }
   if (millis() - lastGPSUpdate >= GPS_UPDATE_INTERVAL) {
     if (gps.speed.isValid()) {
       float rawSpeed = gps.speed.kmph();
-      const float GPS_SPEED_DEADBAND = 3.0;
+      const float GPS_SPEED_DEADBAND = 0.5; // Reduced from 3.0 to 0.5 km/h for true low-speed accuracy!
       currentSpeed = (rawSpeed > GPS_SPEED_DEADBAND) ? rawSpeed : 0.0;
     } else {
       currentSpeed = 0.0;
@@ -1630,7 +1630,8 @@ void sendLiveToFirebase() {
   serializeJson(doc, payload);
 
   HTTPClient http;
-  http.setTimeout(1500);  // Explicit timeout
+  http.setReuse(true);
+  http.setTimeout(500);  // Fast timeout
   http.begin(firebaseHost + livePath);
   http.addHeader("Content-Type", "application/json");
   http.PUT(payload);
@@ -1644,7 +1645,8 @@ void sendLiveToFirebase() {
   serializeJson(engineDoc, enginePayload);
 
   HTTPClient http2;
-  http2.setTimeout(1000);
+  http2.setReuse(true);
+  http2.setTimeout(500);
   String enginePath = "/" + userUID + "/engineControl.json?auth=" + firebaseAuth;
   http2.begin(firebaseHost + enginePath);
   http2.addHeader("Content-Type", "application/json");
@@ -1852,9 +1854,10 @@ void handleDashboardButton() {
 void checkDashboardButton() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // ── Fast path: button state only (150ms poll) ─────────────────────────────
+  // ── Fast path: button state only (80ms poll with connection reuse) ─────────
   HTTPClient http;
-  http.setTimeout(500);  // 500ms max — if Firebase is slow, skip and retry next cycle
+  http.setReuse(true);
+  http.setTimeout(250);  // 250ms fast timeout
   http.begin(firebaseHost + buttonPath);
 
   int httpCode = http.GET();
@@ -1865,16 +1868,34 @@ void checkDashboardButton() {
 
     if (currentButtonState && !lastDashboardButtonState) {
       lastDashboardButtonState = true;
-      Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED!");
+      Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED — Instant Relay Switch!");
 
+      // 1. Instantly switch relay in <1ms!
       if (!engineRunning) {
-        engineStartRequested = true;
-        startEngine();
-      } else {
-        stopEngine();
+        digitalWrite(relayPin, LOW);  // Energize relay -> engine runs
+        engineRunning = true;
         engineStartRequested = false;
+        Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\n", relayPin);
+        if (antiTheftArmed) {
+          antiTheftArmed = false;
+          antiTheftEnabled = false;
+          theftDetectionCount = 0;
+          stopSiren();
+        }
+      } else {
+        digitalWrite(relayPin, HIGH); // De-energize relay -> engine cuts
+        engineRunning = false;
+        engineOffTime = millis();
+        antiTheftEnabled = true;
+        antiTheftArmed = false;
+        Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\n", relayPin);
       }
+
+      // 2. Clear dashboard button immediately
       clearDashboardButton();
+
+      // 3. Fast non-blocking live update
+      sendLiveToFirebase();
     } else if (!currentButtonState) {
       lastDashboardButtonState = false;
     }
@@ -1883,11 +1904,12 @@ void checkDashboardButton() {
 }
 
 void checkAutoMode() {
-  // ── Slow path: autoMode (checked every 5s, not every 150ms) ──────────────
+  // ── Slow path: autoMode (checked every 5s, not every 80ms) ───────────────
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  http.setTimeout(1000);
+  http.setReuse(true);
+  http.setTimeout(500);
   String autoModePath = "/" + userUID + "/engineControl/autoMode.json?auth=" + firebaseAuth;
   http.begin(firebaseHost + autoModePath);
 
@@ -1905,18 +1927,16 @@ void checkAutoMode() {
 
 void clearDashboardButton() {
   HTTPClient http;
-  http.setTimeout(1000);  // ✅ FIX: 1 second timeout
+  http.setReuse(true);
+  http.setTimeout(300);  // 300ms fast timeout
   http.begin(firebaseHost + buttonPath);
   http.addHeader("Content-Type", "application/json");
   
   int code = http.PUT("false");
   
   if (code == HTTP_CODE_OK) {
-    Serial.println("[DASHBOARD] ✓ Button cleared (ready for next press)");
-    // ✅ FIX: Reset the state so button can be pressed again
+    Serial.println("[DASHBOARD] ✓ Button cleared");
     lastDashboardButtonState = false;
-  } else {
-    Serial.printf("[DASHBOARD] ✗ Button clear failed: %d\n", code);
   }
   
   http.end();

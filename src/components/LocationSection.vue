@@ -238,6 +238,51 @@ const activeLocationLabel = computed(() => {
   return '🔄 Phone GPS (Auto-Fallback Active)';
 });
 
+// Distance helper in meters for accurate delta-speed computation
+function computeMetersBetween(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Track previous phone position and timestamp for high-accuracy speed
+let lastPhoneWatchPos = null;
+let lastPhoneWatchTime = null;
+
+function computeAccuratePhoneSpeed(coords, timestamp) {
+  // Method A: Check hardware GPS chip speed directly (m/s -> km/h)
+  if (coords.speed !== null && !isNaN(coords.speed) && coords.speed > 0) {
+    const kmh = coords.speed * 3.6;
+    return Math.round(kmh * 10) / 10;
+  }
+
+  // Method B: Accurate Haversine delta distance over delta time
+  const now = timestamp || Date.now();
+  if (lastPhoneWatchPos && lastPhoneWatchTime) {
+    const dtSeconds = (now - lastPhoneWatchTime) / 1000;
+    // Between 0.4s and 12s
+    if (dtSeconds >= 0.4 && dtSeconds <= 12) {
+      const distM = computeMetersBetween(
+        lastPhoneWatchPos.lat, lastPhoneWatchPos.lng,
+        coords.latitude, coords.longitude
+      );
+      // Filter out micro stationary GPS drift (< 1.5 meters)
+      if (distM >= 1.5) {
+        const calculatedKmh = (distM / dtSeconds) * 3.6;
+        if (calculatedKmh <= 160) {
+          return Math.round(calculatedKmh * 10) / 10;
+        }
+      }
+    }
+  }
+  return 0.0;
+}
+
 // Start continuous phone location watch (powers automatic fallback)
 const startPhoneLocationWatch = () => {
   if (!navigator.geolocation || phoneWatchId !== null) return;
@@ -246,13 +291,18 @@ const startPhoneLocationWatch = () => {
     (position) => {
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
+      const speedKmh = computeAccuratePhoneSpeed(position.coords, position.timestamp);
+      
+      lastPhoneWatchPos = { lat, lng };
+      lastPhoneWatchTime = position.timestamp || Date.now();
       phoneLocation.value = { lat, lng };
       
-      // Auto-fallback: if motorcycle GPS module has no fix, use phone location!
+      // Auto-fallback: if motorcycle GPS module has no fix, use phone location and speed!
       if (!hasModuleFix.value || gpsSource.value === 'phone') {
         emit('update-location', { 
           lat, 
           lng, 
+          speed: speedKmh,
           source: (gpsSource.value === 'phone' ? 'phone' : 'phone_auto_fallback') 
         });
         updateLocationBySource();
@@ -261,7 +311,7 @@ const startPhoneLocationWatch = () => {
     (err) => {
       console.warn('[LocationSection] Geolocation watch error:', err);
     },
-    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
   );
 };
 
@@ -333,14 +383,17 @@ const getUserLocation = (silent = true) => {
     (position) => {
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
+      const speedKmh = computeAccuratePhoneSpeed(position.coords, position.timestamp);
       
-      // Store phone location
+      lastPhoneWatchPos = { lat, lng };
+      lastPhoneWatchTime = position.timestamp || Date.now();
       phoneLocation.value = { lat, lng };
       
-      // Emit the new location to parent component
+      // Emit the new location and speed to parent component
       emit('update-location', { 
         lat, 
         lng, 
+        speed: speedKmh,
         source: (gpsSource.value === 'phone' ? 'phone' : 'phone_auto_fallback') 
       });
       
