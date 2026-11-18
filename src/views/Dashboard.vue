@@ -2097,7 +2097,7 @@ const computeDistanceKm = (lat1, lon1, lat2, lon2) => {
 // Persist trip to Firebase (both primary and backup paths)
 const saveTripSessionToFirebase = async (session) => {
   if (!session) return;
-  const uid = userId.value || authStore.user?.uid || localStorage.getItem('vigilert_user_uid') || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
+  const uid = userId.value || authStore.user?.uid || localStorage.getItem('vigilert_user_uid') || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
   if (!uid) return;
 
   const durationMs = Math.max(1000, (session.endTime || Date.now()) - session.startTime);
@@ -2670,9 +2670,9 @@ const toggleEngine = async () => {
 
   const nextState = !engineRunning.value;
 
-  // 1. Instant 0ms optimistic UI update (eliminates perceptible button lag)
+  // 1. Set pending state so the button shows visual loading feedback ("Starting Engine..." / "Stopping Engine...")
+  enginePending.value = true;
   engineRunning.value = nextState;
-  enginePending.value = false;
 
   // 2. Play tactile/audio confirmation cue
   try {
@@ -2688,7 +2688,7 @@ const toggleEngine = async () => {
     osc.stop(ctx.currentTime + 0.15);
   } catch (e) {}
 
-  const uid = userId.value || authStore.user?.uid || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
+  const uid = userId.value || authStore.user?.uid || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
 
   // 3. Trip lifecycle trigger & safety state clearing
   if (nextState) {
@@ -2719,11 +2719,18 @@ const toggleEngine = async () => {
       updates.push(set(dbRef(database, `${uid}/engineControl/crashDetected`), false));
     }
     await Promise.all(updates);
-    console.log(`[ENGINE] ⚡ Instant toggle completed -> ${nextState ? 'RUNNING' : 'STOPPED'}`);
+    console.log(`[ENGINE] ⚡ Instant toggle command sent -> ${nextState ? 'START' : 'STOP'}`);
+
+    // Auto-prime startButton back to false after 1.5s so Firebase is ready for subsequent clicks
+    setTimeout(() => {
+      set(dbRef(database, `${uid}/engineControl/startButton`), false).catch(() => {});
+      enginePending.value = false;
+    }, 1500);
   } catch (error) {
     console.error('[ENGINE] Failed to toggle engine in Firebase:', error);
     // Revert state if Firebase rejected
     engineRunning.value = !nextState;
+    enginePending.value = false;
     alert('Failed to control engine. Please check internet connection.');
   }
 };

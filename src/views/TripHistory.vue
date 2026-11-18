@@ -383,7 +383,7 @@ const activeFilterLabel = computed(() => {
 
 // Resolve user UID with robust fallbacks
 const currentUid = computed(() => {
-  return authStore.user?.uid || localStorage.getItem('vigilert_user_uid') || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
+  return authStore.user?.uid || localStorage.getItem('vigilert_user_uid') || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
 });
 
 // Filtered trips computation

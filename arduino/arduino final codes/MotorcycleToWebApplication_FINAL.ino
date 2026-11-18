@@ -171,7 +171,7 @@ bool engineStartRequested = false;
 // Dashboard button control — separate fast poll from slow autoMode check
 bool lastDashboardButtonState = false;
 unsigned long lastButtonCheck = 0;
-const unsigned long BUTTON_CHECK_INTERVAL = 80;   // 80ms fast button poll — instant response
+const unsigned long BUTTON_CHECK_INTERVAL = 250;  // 250ms fast button poll — responsive without choking WiFi
 unsigned long lastAutoModeCheck = 0;
 const unsigned long AUTO_MODE_CHECK_INTERVAL = 5000;  // autoMode only needs checking every 5s
 
@@ -1867,62 +1867,85 @@ void handleDashboardButton() {
 void checkDashboardButton() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // ── Fast path: button state only (80ms poll with connection reuse) ─────────
+  // Reliable HTTPS GET with 1500ms timeout
   HTTPClient http;
-  http.setReuse(true);
-  http.setTimeout(250);  // 250ms fast timeout
+  http.setTimeout(1500);
   http.begin(firebaseHost + buttonPath);
 
   int httpCode = http.GET();
 
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
+    http.end();
+
     bool currentButtonState = (response.indexOf("true") != -1);
 
-    if (currentButtonState && !lastDashboardButtonState) {
-      lastDashboardButtonState = true;
-      Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED — Instant Relay Switch!");
+    if (currentButtonState) {
+      Serial.println("\n🖥️ DASHBOARD BUTTON PRESSED — Processing Engine Command!");
 
-      // 1. Instantly switch relay in <1ms!
+      // 1. Auto-clear crash alert if vehicle is currently sitting upright
+      if (crashDetected && currentLeanAngle < 30.0 && currentTotalAccel < 15.0) {
+        crashDetected = false;
+        Serial.println("[ENGINE] ✓ Vehicle is upright — auto-cleared previous crash alert!");
+      }
+
+      // 2. Toggle or set engine state
       if (!engineRunning) {
-        digitalWrite(relayPin, LOW);  // Energize relay -> engine runs
+        // Safety check before running
+        if (alcoholDetected) {
+          Serial.println("[ENGINE] ❌ Blocked: Alcohol detected!");
+          playWarningBeep(3);
+          clearDashboardButton();
+          return;
+        }
+        if (crashDetected) {
+          Serial.println("[ENGINE] ❌ Blocked: Crash alert active!");
+          playWarningBeep(4);
+          clearDashboardButton();
+          return;
+        }
+
+        // START ENGINE: Relay GPIO LOW = ON for active-low relay
+        digitalWrite(relayPin, LOW);
         engineRunning = true;
         engineStartRequested = false;
-        Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\n", relayPin);
+        starterActive = false;
         if (antiTheftArmed) {
           antiTheftArmed = false;
           antiTheftEnabled = false;
           theftDetectionCount = 0;
           stopSiren();
         }
+        playConfirmBeep();
+        Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\n", relayPin);
       } else {
-        digitalWrite(relayPin, HIGH); // De-energize relay -> engine cuts
+        // STOP ENGINE: Relay GPIO HIGH = OFF
+        digitalWrite(relayPin, HIGH);
         engineRunning = false;
         engineOffTime = millis();
         antiTheftEnabled = true;
         antiTheftArmed = false;
-        Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\n", relayPin);
+        playWarningBeep(1);
+        Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — engine cut\n", relayPin);
       }
 
-      // 2. Clear dashboard button immediately
+      // 3. Immediately reset button to false in Firebase
       clearDashboardButton();
 
-      // 3. Fast non-blocking live update
+      // 4. Fast live update to Firebase
       sendLiveToFirebase();
-    } else if (!currentButtonState) {
-      lastDashboardButtonState = false;
     }
+  } else {
+    http.end();
   }
-  http.end();
 }
 
 void checkAutoMode() {
-  // ── Slow path: autoMode (checked every 5s, not every 80ms) ───────────────
+  // ── Slow path: autoMode (checked every 5s, not every poll) ───────────────
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  http.setReuse(true);
-  http.setTimeout(500);
+  http.setTimeout(1000);
   String autoModePath = "/" + userUID + "/engineControl/autoMode.json?auth=" + firebaseAuth;
   http.begin(firebaseHost + autoModePath);
 
@@ -1940,19 +1963,20 @@ void checkAutoMode() {
 
 void clearDashboardButton() {
   HTTPClient http;
-  http.setReuse(true);
-  http.setTimeout(300);  // 300ms fast timeout
+  http.setTimeout(1500);  // Reliable timeout for Firebase PUT
   http.begin(firebaseHost + buttonPath);
   http.addHeader("Content-Type", "application/json");
   
   int code = http.PUT("false");
   
   if (code == HTTP_CODE_OK) {
-    Serial.println("[DASHBOARD] ✓ Button cleared");
-    lastDashboardButtonState = false;
+    Serial.println("[DASHBOARD] ✓ Button reset to false in Firebase");
+  } else {
+    Serial.printf("[DASHBOARD] ⚠️ clearDashboardButton HTTP %d\n", code);
   }
   
   http.end();
+  lastDashboardButtonState = false;
 }
 
 // ✅ MODIFIED: Monitor physical key switch with security override
