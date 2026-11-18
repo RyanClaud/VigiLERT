@@ -391,7 +391,7 @@ const getUserLocation = () => {
 
 // ✅ NEW: Dynamic marker icon based on GPS source and User Profile Picture
 function createLocationMarkerIcon() {
-  const userPhoto = authStore.user?.photoURL || props.user?.photoURL;
+  const userPhoto = authStore.photoURL || authStore.user?.photoURL || props.user?.photoURL;
   const isModule = (gpsSource.value === 'module');
   const themeColor = isModule ? '#2563eb' : '#00B85C';
   const badgeEmoji = isModule ? '🏍️' : '📱';
@@ -435,7 +435,7 @@ function createLocationMarkerIcon() {
 
 // Watch for profile photo updates to refresh marker icon dynamically
 watch(
-  () => authStore.user?.photoURL || props.user?.photoURL,
+  () => authStore.photoURL || authStore.user?.photoURL || props.user?.photoURL,
   () => {
     if (marker && isMapReady.value) {
       marker.setIcon(createLocationMarkerIcon());

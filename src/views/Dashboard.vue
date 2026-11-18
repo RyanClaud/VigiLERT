@@ -949,7 +949,7 @@ const location = ref({ lat: null, lng: null });
 const user = computed(() => ({
   name: authStore.user?.displayName || authStore.user?.email?.split('@')[0] || 'Rider',
   email: authStore.user?.email || '',
-  photoURL: authStore.user?.photoURL || ''
+  photoURL: authStore.photoURL || authStore.user?.photoURL || ''
 }));
 const recentTrips = ref([]);
 const crashEvents = ref([]);

@@ -109,8 +109,8 @@
               <!-- Avatar -->
               <div class="relative w-8 h-8 rounded-full overflow-hidden border border-emerald-400/40 group-hover:border-[#00B85C] bg-gradient-to-tr from-[#00B85C] to-[#0B2540] flex items-center justify-center flex-shrink-0 transition-all">
                 <img 
-                  v-if="authStore.user?.photoURL" 
-                  :src="authStore.user.photoURL" 
+                  v-if="authStore.photoURL" 
+                  :src="authStore.photoURL" 
                   alt="User Avatar"
                   class="w-full h-full object-cover" 
                 />
@@ -170,8 +170,8 @@
             <router-link to="/profile" @click="closeMobileMenu" class="flex items-center gap-3 px-3 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 mb-3 transition-all group">
               <div class="w-10 h-10 rounded-full overflow-hidden border border-[#00B85C] bg-[#00B85C]/20 flex items-center justify-center font-bold text-white text-sm flex-shrink-0">
                 <img 
-                  v-if="authStore.user?.photoURL" 
-                  :src="authStore.user.photoURL" 
+                  v-if="authStore.photoURL" 
+                  :src="authStore.photoURL" 
                   alt="Avatar"
                   class="w-full h-full object-cover" 
                 />

@@ -540,7 +540,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { auth, database } from '../firebase/config';
 import { 
@@ -590,7 +590,14 @@ const hasPasswordProvider = computed(() => {
 onMounted(() => {
   if (currentUser.value) {
     displayName.value = currentUser.value.displayName || '';
-    profilePhotoUrl.value = currentUser.value.photoURL || '';
+    profilePhotoUrl.value = authStore.photoURL || currentUser.value.photoURL || '';
+  }
+});
+
+// Watch for photo updates in authStore
+watch(() => authStore.photoURL, (newPhoto) => {
+  if (newPhoto) {
+    profilePhotoUrl.value = newPhoto;
   }
 });
 
@@ -614,7 +621,7 @@ const compressImage = (file) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 256;
+        const maxDim = 200; // 200x200 is optimal for high DPI round avatar & map marker
         let width = img.width;
         let height = img.height;
 
@@ -634,8 +641,8 @@ const compressImage = (file) => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        // Export as JPEG at 0.82 quality
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        // Export as JPEG at 0.78 quality (~10-15KB)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
         resolve(dataUrl);
       };
       img.onerror = reject;
@@ -646,13 +653,13 @@ const compressImage = (file) => {
   });
 };
 
-// Handle Photo Upload
+// Handle Photo Upload (Guaranteed safe from Firebase Auth 2048-char URL limit)
 const handlePhotoUpload = async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  if (file.size > 5 * 1024 * 1024) {
-    showMessage('error', 'Image size must be less than 5MB.');
+  if (file.size > 10 * 1024 * 1024) {
+    showMessage('error', 'Image size must be less than 10MB.');
     return;
   }
 
@@ -661,12 +668,12 @@ const handlePhotoUpload = async (event) => {
     const compressedDataUrl = await compressImage(file);
     profilePhotoUrl.value = compressedDataUrl;
 
-    if (auth.currentUser) {
-      // 1. Update Firebase Auth Profile
-      await updateProfile(auth.currentUser, { photoURL: compressedDataUrl });
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      // 1. Update Pinia Store & LocalStorage immediately for instant UI responsiveness
+      authStore.setPhotoURL(compressedDataUrl);
 
-      // 2. Update Firebase Realtime Database
-      const uid = auth.currentUser.uid;
+      // 2. Update Firebase Realtime Database (no 2048-character limit)
       await update(dbRef(database, `users/${uid}`), {
         photoURL: compressedDataUrl,
         updatedAt: Date.now()
@@ -676,9 +683,13 @@ const handlePhotoUpload = async (event) => {
         updatedAt: Date.now()
       }).catch(() => {});
 
-      // 3. Update local Pinia auth state
-      if (authStore.user) {
-        authStore.user.photoURL = compressedDataUrl;
+      // 3. Only call updateProfile if URL is within Firebase Auth's 2048-char limit
+      if (compressedDataUrl.length < 2048) {
+        try {
+          await updateProfile(auth.currentUser, { photoURL: compressedDataUrl });
+        } catch (authErr) {
+          console.debug('[AUTH] Profile photo URL skipped in Firebase Auth:', authErr);
+        }
       }
     }
 
@@ -698,12 +709,16 @@ const removePhoto = async () => {
   isUploadingPhoto.value = true;
   try {
     profilePhotoUrl.value = '';
-    if (auth.currentUser) {
-      await updateProfile(auth.currentUser, { photoURL: '' });
-      const uid = auth.currentUser.uid;
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      authStore.setPhotoURL('');
       await update(dbRef(database, `users/${uid}`), { photoURL: '' });
       await update(dbRef(database, `helmet_public/${uid}/profile`), { photoURL: '' }).catch(() => {});
-      if (authStore.user) authStore.user.photoURL = '';
+      try {
+        await updateProfile(auth.currentUser, { photoURL: '' });
+      } catch (authErr) {
+        console.debug('[AUTH] Profile photo removal from Auth:', authErr);
+      }
     }
     showMessage('success', 'Profile photo removed.');
   } catch (err) {
