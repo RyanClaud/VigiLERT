@@ -229,7 +229,7 @@
     </header>
 
     <!-- Main Application Views Outlet -->
-    <main class="relative z-10 flex-1 w-full max-w-7xl mx-auto py-5 sm:py-7 px-3 sm:px-6 lg:px-8">
+    <main class="relative z-10 flex-1 w-full max-w-7xl mx-auto py-5 sm:py-7 px-3 sm:px-6 lg:px-8 pb-28 sm:pb-7">
       <router-view v-if="!authStore.loading" v-slot="{ Component }">
         <transition name="page-fade" mode="out-in">
           <component :is="Component" />
@@ -293,8 +293,8 @@
       </router-link>
     </nav>
 
-    <!-- Bottom Footer Status Bar -->
-    <footer class="relative z-10 w-full border-t border-white/5 bg-[#061B2B]/90 backdrop-blur-md py-3 px-4 sm:px-6 lg:px-8 text-xs text-slate-400 mt-auto pb-16 sm:pb-3">
+    <!-- Bottom Footer Status Bar (Desktop/Tablet Only — hidden on mobile to eliminate clutter above mobile navigation) -->
+    <footer class="hidden sm:block relative z-10 w-full border-t border-white/5 bg-[#061B2B]/90 backdrop-blur-md py-3 px-4 sm:px-6 lg:px-8 text-xs text-slate-400 mt-auto pb-3">
       <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
         <div class="flex items-center flex-wrap justify-center sm:justify-start gap-x-2 gap-y-1 font-medium">
           <span class="text-white font-semibold">VigiLERT</span>

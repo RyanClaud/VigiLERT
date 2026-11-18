@@ -123,14 +123,22 @@ void connectToWiFi() {
   }
 }
 
+static uint64_t lastSyncedEpoch = 0;
+static unsigned long lastSyncedMillis = 0;
+
 uint64_t getEpochTimestamp() {
   time_t now;
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 50)) {
     time(&now);
-    return ((uint64_t)now) * 1000ULL + (millis() % 1000);
+    lastSyncedEpoch = ((uint64_t)now) * 1000ULL;
+    lastSyncedMillis = millis();
+    return lastSyncedEpoch + (millis() % 1000);
   }
-  return 1794927000000ULL + (uint64_t)millis();
+  if (lastSyncedEpoch > 0) {
+    return lastSyncedEpoch + (millis() - lastSyncedMillis);
+  }
+  return 0;
 }
 
 void sendHelmetHeartbeat(bool isActive) {

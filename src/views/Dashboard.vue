@@ -8,7 +8,7 @@
       <!-- Panoramic Mountain Rider Background -->
       <div class="absolute inset-0 z-0">
         <img 
-          src="/images/dashboard-banner.jpg" 
+          src="/images/dashboard-banner.png" 
           alt="VigiLERT Rider Banner" 
           class="w-full h-full object-cover object-left md:object-center opacity-85 group-hover:scale-[1.01] transition-transform duration-700" 
         />
@@ -185,34 +185,34 @@
 
     <!-- 🚨 ANTI-THEFT ALERT BANNER -->
     <div v-if="antiTheftAlert.active" 
-         class="mx-4 md:mx-8 mb-6 relative overflow-hidden bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl shadow-2xl border-4 border-orange-300 animate-pulse">
+         class="mx-3 sm:mx-4 md:mx-8 mb-6 relative overflow-hidden bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl shadow-2xl border-4 border-orange-300 animate-pulse">
       <div class="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-orange-600/20 animate-pulse"></div>
-      <div class="relative p-6 flex items-center gap-4">
-        <div class="bg-white/20 p-4 rounded-full animate-bounce">
-          <span class="material-icons text-5xl text-white">security</span>
+      <div class="relative p-4 sm:p-6 flex flex-col sm:flex-row items-center sm:items-start md:items-center gap-3 sm:gap-4 text-center sm:text-left">
+        <div class="bg-white/20 p-3 sm:p-4 rounded-full flex-shrink-0 animate-bounce">
+          <span class="material-icons text-4xl sm:text-5xl text-white">security</span>
         </div>
-        <div class="flex-1">
-          <h3 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+        <div class="flex-1 min-w-0">
+          <h3 class="text-xl sm:text-2xl font-bold text-white mb-1 flex items-center justify-center sm:justify-start gap-2">
             <span class="animate-pulse">🚨</span>
             ANTI-THEFT ALERT
             <span class="animate-pulse">🚨</span>
           </h3>
-          <p class="text-white/90 text-lg font-semibold">
+          <p class="text-white/95 text-base sm:text-lg font-semibold break-words">
             {{ antiTheftAlert.message }}
           </p>
-          <p class="text-white/70 text-sm mt-2">
+          <p class="text-white/80 text-xs sm:text-sm mt-1 font-medium">
             Time: {{ antiTheftAlert.time }} • Alert Level: {{ antiTheftAlert.level }}
           </p>
         </div>
-        <div class="flex flex-col gap-2">
-          <div :class="['px-4 py-2 rounded-xl', antiTheftAlert.severity === 'high' ? 'bg-red-500/30' : antiTheftAlert.severity === 'medium' ? 'bg-orange-500/30' : 'bg-yellow-500/30']">
-            <p class="text-white text-sm font-bold">Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
+        <div class="flex sm:flex-col flex-wrap justify-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 flex-shrink-0">
+          <div :class="['px-3 py-1.5 rounded-xl text-center', antiTheftAlert.severity === 'high' ? 'bg-red-500/30' : antiTheftAlert.severity === 'medium' ? 'bg-orange-500/30' : 'bg-yellow-500/30']">
+            <p class="text-white text-xs sm:text-sm font-bold">Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
           </div>
-          <button v-if="showStopSoundButton" @click="stopSound" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-lg">
+          <button v-if="showStopSoundButton" @click="stopSound" class="bg-red-600 hover:bg-red-700 px-3.5 py-2 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-lg">
             <span class="material-icons text-base">volume_off</span>
             Mute Alarm
           </button>
-          <button @click="dismissAntiTheftAlert" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all">
+          <button @click="dismissAntiTheftAlert" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-xs sm:text-sm font-bold transition-all">
             Dismiss
           </button>
         </div>
@@ -809,84 +809,35 @@
       </section>
     </main>
 
-    <!-- Footer -->
-    <footer class="relative bg-[#0a0f1e] text-center py-5 text-white border-t border-white/5">
-      <p class="font-semibold text-sm text-white/40 tracking-wide">© 2025 VIGILERT. All rights reserved.</p>
-      <p class="text-xs text-white/20 mt-1">Smart Motorcycle Safety System</p>
-    </footer>
-
-    <!-- 🚀 FLOATING ACTION BUTTON (Mobile Only) -->
-    <div class="fixed bottom-28 right-6 z-40 md:hidden">
+    <!-- 🚀 FLOATING ENGINE ACTION BUTTON (Mobile Only — positioned comfortably above bottom nav) -->
+    <div class="fixed bottom-20 right-4 z-40 md:hidden">
       <button @click="handleEngineToggle" 
               :disabled="enginePending || (alcoholDetected && !engineRunning) || !helmetPaired || !motorcyclePaired"
               :class="[
-                'w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 border',
+                'w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 active:scale-95 border-2',
                 enginePending
-                  ? 'bg-yellow-500/20 border-yellow-400/30 text-yellow-400 cursor-wait'
+                  ? 'bg-yellow-500/20 border-yellow-400/40 text-yellow-400 cursor-wait'
                   : engineRunning 
-                    ? 'bg-red-500/20 border-red-400/30 text-red-400 animate-pulse' 
+                    ? 'bg-red-500/20 border-red-400/50 text-red-400 animate-pulse' 
                     : (alcoholDetected || !helmetPaired || !motorcyclePaired)
                       ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-                      : 'bg-green-500/20 border-green-400/30 text-green-400'
-              ]">
+                      : 'bg-green-500/20 border-green-400/50 text-green-400'
+              ]"
+              title="Quick Toggle Engine Power">
         <span :class="['material-icons text-2xl', enginePending ? 'animate-spin' : '']">
           {{ enginePending ? 'refresh' : 'power_settings_new' }}
         </span>
       </button>
     </div>
 
-    <!-- 📱 MOBILE BOTTOM NAVIGATION -->
-    <div class="fixed bottom-0 left-0 right-0 bg-[#0a0f1e]/95 backdrop-blur-lg border-t border-white/5 shadow-2xl z-50 md:hidden">
-      <div class="grid grid-cols-6 gap-1 px-2 py-2">
-        <button @click="scrollToSection('status')" 
-                :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'status' ? 'bg-[#3D52A0]/50 text-[#7091E6]' : 'text-white/30 hover:text-white/60']">
-          <span class="material-icons text-lg">dashboard</span>
-          <span class="text-xs font-medium mt-1">Status</span>
-        </button>
-        <button @click="scrollToSection('engine')" 
-                :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'engine' ? 'bg-green-500/20 text-green-400' : 'text-white/30 hover:text-white/60']">
-          <span class="material-icons text-lg">power_settings_new</span>
-          <span class="text-xs font-medium mt-1">Engine</span>
-        </button>
-        <button @click="scrollToSection('map')" 
-                :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'map' ? 'bg-purple-500/20 text-purple-400' : 'text-white/30 hover:text-white/60']">
-          <span class="material-icons text-lg">map</span>
-          <span class="text-xs font-medium mt-1">Map</span>
-        </button>
-        <button @click="scrollToSection('trips')" 
-                :class="['flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'trips' ? 'bg-orange-500/20 text-orange-400' : 'text-white/30 hover:text-white/60']">
-          <span class="material-icons text-lg">route</span>
-          <span class="text-xs font-medium mt-1">Trips</span>
-        </button>
-        <button @click="scrollToSection('alerts')" 
-                :class="['relative flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300', 
-                         activeSection === 'alerts' ? 'bg-red-500/20 text-red-400' : 'text-white/30 hover:text-white/60']">
-          <span class="material-icons text-lg">warning</span>
-          <span class="text-xs font-medium mt-1">Alerts</span>
-          <div v-if="alerts.length > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-            {{ alerts.length }}
-          </div>
-        </button>
-        <button @click="$router.push('/device-setup')" 
-                class="flex flex-col items-center py-2 px-1 rounded-xl transition-all duration-300 text-white/30 hover:text-white/60">
-          <span class="material-icons text-lg">devices</span>
-          <span class="text-xs font-medium mt-1">Devices</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- ✅ Floating Stop Sound Button (Bottom Right) -->
+    <!-- ✅ Floating Stop Sound Button (Bottom Right — stacks above mobile quick button) -->
     <div v-if="showStopSoundButton" 
-         class="fixed bottom-24 right-4 sm:bottom-8 sm:right-8 z-[9999]">
+         class="fixed bottom-36 right-4 sm:bottom-8 sm:right-8 z-50">
       <button @click="stopSound"
-              class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-5 py-3 rounded-full shadow-2xl hover:from-orange-600 hover:to-red-600 transition-all duration-300 transform hover:scale-105 active:scale-95 animate-pulse border-2 border-white/80 backdrop-blur-md">
-        <div class="flex items-center gap-2">
-          <span class="material-icons text-xl">volume_off</span>
-          <span class="font-bold text-sm sm:text-base">Stop Alert Sound</span>
+              class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-2.5 sm:px-5 sm:py-3 rounded-full shadow-2xl hover:from-orange-600 hover:to-red-600 transition-all duration-300 transform hover:scale-105 active:scale-95 animate-pulse border-2 border-white/80 backdrop-blur-md">
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <span class="material-icons text-lg sm:text-xl">volume_off</span>
+          <span class="font-bold text-xs sm:text-sm">Stop Alert Sound</span>
         </div>
       </button>
     </div>
@@ -1119,21 +1070,43 @@ const getGoogleMapsLink = (tripOrLat, lng = undefined) => {
   return `https://www.google.com/maps/dir/?api=1&origin=${startLat},${startLng}&destination=${endLat},${endLng}&zoom=${zoomLevel}`;
 };
 
-// ✅ ENHANCED: Audio control with stop functionality
+// ✅ ENHANCED: Audio control with persistent stop & mute functionality
 let currentAudio = null;
+const isAudioMuted = ref(false);
+const lastUserMuteTime = ref(0);
+const lastPlayedAlertType = ref('');
+const lastPlayedAlertTime = ref(0);
 
-const playSound = () => {
+const playSound = (alertType = 'general') => {
   try {
+    const now = Date.now();
+    // If user clicked Stop Sound or Dismissed alert within the last 30s, suppress repeated alarms
+    if (isAudioMuted.value && (now - lastUserMuteTime.value < 30000)) {
+      console.log(`[AUDIO] Audio muted by user, suppressing ${alertType} sound`);
+      return;
+    }
+
+    // Debounce repeated sound triggers within 3 seconds
+    if (lastPlayedAlertType.value === alertType && (now - lastPlayedAlertTime.value < 3000)) {
+      return;
+    }
+
     // Stop any currently playing audio
     if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
+      try {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      } catch (e) { /* ignore */ }
+      currentAudio = null;
     }
     
+    lastPlayedAlertType.value = alertType;
+    lastPlayedAlertTime.value = now;
+
     // Create and play new audio
     currentAudio = new Audio('/sounds/alert.mp3');
     currentAudio.play().catch(err => {
-      console.warn("Audio playback failed:", err);
+      console.warn("Audio playback failed (browser policy or file missing):", err);
     });
     
     // Show stop button when audio starts
@@ -1150,32 +1123,40 @@ const playSound = () => {
   }
 };
 
-// ✅ NEW: Stop sound function
+// ✅ Stop sound function with mute persistence
 const stopSound = () => {
   if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (e) { /* ignore */ }
     currentAudio = null;
   }
   showStopSoundButton.value = false;
-  console.log('[AUDIO] Sound stopped by user');
+  isAudioMuted.value = true;
+  lastUserMuteTime.value = Date.now();
+
+  // Also halt flashing crash interval if running
+  if (crashInterval) {
+    clearInterval(crashInterval);
+    crashInterval = null;
+  }
+  flashCount = 0;
+  console.log('[AUDIO] Sound stopped & muted by user');
 };
 
-// Flash Crash Message
+// Flash Crash Message (visual flash only — sound is triggered once by the state change)
 const flashCrashMessage = () => {
   console.log('[FLASH CRASH] 🚨🚨🚨 Starting crash alert animation...');
-  clearInterval(crashInterval);
+  if (crashInterval) {
+    clearInterval(crashInterval);
+    crashInterval = null;
+  }
   flashCount = 0;
   
   // Set crash status immediately
   crashDisplayStatus.value = 'Alerting';
   crashDisplayMessage.value = 'Crash Detected';
-  
-  console.log('[FLASH CRASH] ✓ Status set to:', crashDisplayStatus.value);
-  console.log('[FLASH CRASH] ✓ Message set to:', crashDisplayMessage.value);
-  console.log('[FLASH CRASH] ✓ Card should now be RED and pulsing!');
-  
-  playSound();
   
   // Add alert to list (only if not dismissed)
   const alertTime = Date.now();
@@ -1194,10 +1175,9 @@ const flashCrashMessage = () => {
   
   // Flash animation - stays visible longer (10 flashes = 20 seconds)
   crashInterval = setInterval(() => {
-    console.log('[FLASH CRASH] Flash count:', flashCount, '/ 10');
-    
     if (flashCount >= 10) {  // Flash 10 times (20 seconds total)
       clearInterval(crashInterval);
+      crashInterval = null;
       crashDisplayStatus.value = 'Stable';
       crashDisplayMessage.value = 'Vehicle Stable';
       stopSound();
@@ -1573,12 +1553,16 @@ const setupFirebaseListeners = () => {
           });
           if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
           flashCrashMessage();
-          playSound();
+          playSound('crash');
         } else if (!liveData.crashDetected && (wasCrash || crashDisplayStatus.value === 'Alerting')) {
-          clearInterval(crashInterval);
+          if (crashInterval) {
+            clearInterval(crashInterval);
+            crashInterval = null;
+          }
           crashDisplayStatus.value = 'Stable';
           crashDisplayMessage.value = 'Vehicle Stable';
           stopSound();
+          isAudioMuted.value = false;
         }
       }
       
@@ -1822,7 +1806,7 @@ const addAlert = (type, message, details = '') => {
   return true;
 };
 
-// ✅ NEW: Clear all alerts from the alerts list
+// ✅ NEW: Clear all alerts from the alerts list & stop all alarms
 const clearAllAlerts = () => {
   console.log('[ALERTS] Clearing all alerts');
   
@@ -1833,6 +1817,10 @@ const clearAllAlerts = () => {
   
   // Clear alerts array
   alerts.value = [];
+  
+  // Stop sound and mute alarms
+  stopSound();
+  antiTheftAlert.value.active = false;
   
   // Also stop crash animation if running
   if (crashInterval) {
@@ -2462,7 +2450,7 @@ const setupDeviceListeners = () => {
   if (!userId.value) return;
   console.log('[DEVICE LISTENERS] Setting up real-time device status monitoring...');
   
-  // ✅ Helmet real-time listener
+  // ✅ Helmet real-time listener (verifies active freshness to prevent offline false-positives)
   const helmetRef = dbRef(database, `helmet_public/${userId.value}/devices/helmet`);
   onValue(helmetRef, (snapshot) => {
     const data = snapshot.val();
@@ -2477,8 +2465,22 @@ const setupDeviceListeners = () => {
       return;
     }
 
-    // Active helmet device heartbeat received
-    lastHelmetUpdate.value = Date.now();
+    // Check if heartbeat timestamp is actually fresh (< 25s)
+    const hbTime = Number(data.timestamp || data.lastHeartbeat || 0);
+    const now = Date.now();
+    const isStale = (hbTime > 0 && Math.abs(now - hbTime) > 25000);
+
+    if (isStale) {
+      console.log(`[HELMET] Persisted heartbeat is stale (${((now - hbTime)/1000).toFixed(1)}s old) — device is OFFLINE`);
+      if (helmetPaired.value) {
+        helmetPaired.value = false;
+        helmetRawConnected.value = false;
+      }
+      return;
+    }
+
+    // Live heartbeat confirmed
+    lastHelmetUpdate.value = now;
     if (!helmetPaired.value) {
       helmetPaired.value = true;
       helmetRawConnected.value = true;
@@ -2486,7 +2488,7 @@ const setupDeviceListeners = () => {
     }
   });
   
-  // ✅ Motorcycle real-time listener
+  // ✅ Motorcycle real-time listener (verifies active freshness to prevent offline false-positives)
   const motorcycleRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
   onValue(motorcycleRef, (snapshot) => {
     const data = snapshot.val();
@@ -2501,8 +2503,22 @@ const setupDeviceListeners = () => {
       return;
     }
 
-    // Active motorcycle device heartbeat received
-    lastMotorcycleUpdate.value = Date.now();
+    // Check if heartbeat timestamp is actually fresh (< 25s)
+    const hbTime = Number(data.timestamp || data.lastHeartbeat || 0);
+    const now = Date.now();
+    const isStale = (hbTime > 0 && Math.abs(now - hbTime) > 25000);
+
+    if (isStale) {
+      console.log(`[MOTORCYCLE] Persisted heartbeat is stale (${((now - hbTime)/1000).toFixed(1)}s old) — device is OFFLINE`);
+      if (motorcyclePaired.value) {
+        motorcyclePaired.value = false;
+        motorcycleRawConnected.value = false;
+      }
+      return;
+    }
+
+    // Live heartbeat confirmed
+    lastMotorcycleUpdate.value = now;
     if (!motorcyclePaired.value) {
       motorcyclePaired.value = true;
       motorcycleRawConnected.value = true;
@@ -2520,15 +2536,15 @@ const checkDeviceTimeouts = () => {
   const timeSinceHelmetUpdate = lastHelmetUpdate.value > 0 ? now - lastHelmetUpdate.value : Infinity;
   const timeSinceMotorcycleUpdate = lastMotorcycleUpdate.value > 0 ? now - lastMotorcycleUpdate.value : Infinity;
   
-  // Helmet timeout check (25 seconds - tolerates network latency & Wi-Fi retries)
-  if (helmetPaired.value && timeSinceHelmetUpdate > 25000) {
+  // Helmet timeout check (20 seconds)
+  if (helmetPaired.value && timeSinceHelmetUpdate > 20000) {
     console.log(`[HELMET] ⚠️ No heartbeat for ${(timeSinceHelmetUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     helmetPaired.value = false;
     helmetRawConnected.value = false;
   }
   
-  // Motorcycle timeout check (25 seconds - tolerates network latency & Wi-Fi retries)
-  if (motorcyclePaired.value && timeSinceMotorcycleUpdate > 25000) {
+  // Motorcycle timeout check (20 seconds)
+  if (motorcyclePaired.value && timeSinceMotorcycleUpdate > 20000) {
     console.log(`[MOTORCYCLE] ⚠️ No heartbeat for ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     motorcyclePaired.value = false;
     motorcycleRawConnected.value = false;
@@ -2762,130 +2778,25 @@ const syncEngineStatus = async () => {
   console.log('[ENGINE] 🔄 Manual sync complete');
 };
 
-// ✅ FIXED: Monitor engine status from Firebase - Unified path
+// ✅ FIXED: Monitor engine status from Firebase - Dedicated relay listener
 const setupEngineStatusListener = () => {
   console.log('[ENGINE] Setting up engine status listeners...');
   
-  // ✅ PRIMARY: Listen to live data from motorcycle module
-  const liveRef = dbRef(database, `helmet_public/${userId.value}/live`);
-  onValue(liveRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data && typeof data.engineRunning !== 'undefined') {
-      const newEngineState = data.engineRunning;
-      if (engineRunning.value !== newEngineState) {
-        engineRunning.value = newEngineState;
-        enginePending.value = false; // Firebase confirmed — clear pending state
-        console.log(`[ENGINE] Status updated from live data:`, newEngineState ? 'RUNNING' : 'STOPPED');
-        
-        // Update sensor data from live feed
-        if (data.mpu6050) {
-          sensorData.value.mpu6050 = {
-            accelX: data.mpu6050.accelX || 0,
-            accelY: data.mpu6050.accelY || 0,
-            accelZ: data.mpu6050.accelZ || 0,
-            totalAccel: data.mpu6050.totalAccel || 0,
-            roll: data.mpu6050.roll || 0,
-            pitch: data.mpu6050.pitch || 0,
-            lastUpdate: Date.now()
-          };
-        }
-        
-        // Update GPS data
-        if (data.gpsValid && data.locationLat && data.locationLng) {
-          location.value = {
-            lat: data.locationLat,
-            lng: data.locationLng
-          };
-          currentSpeed.value = data.speed || 0;
-          gpsConnected.value = data.gpsValid;
-        }
-        
-        // ✅ CRITICAL: Update crash detection status with alert triggering
-        if (typeof data.crashDetected !== 'undefined') {
-          const wasCrashDetected = sensorData.value.crashDetected;
-          sensorData.value.crashDetected = data.crashDetected;
-          
-          console.log(`[CRASH] Status updated: ${data.crashDetected ? 'DETECTED' : 'CLEAR'}`);
-          
-          // ✅ Trigger crash alert only when crash NEWLY detected (not on initial page load)
-          // wasCrashDetected must be explicitly false (not undefined) to avoid false triggers on load
-          if (data.crashDetected && wasCrashDetected === false) {
-            console.log('[CRASH] 🚨 NEW CRASH DETECTED from live data!');
-            
-            // Add crash alert immediately
-            const crashAlert = {
-              type: 'crash',
-              message: '🚨 CRASH DETECTED!',
-              details: `Impact: ${data.mpu6050?.totalAccel?.toFixed(2) || 'N/A'} g | Roll: ${data.mpu6050?.roll?.toFixed(1) || 'N/A'}°`,
-              time: new Date().toLocaleTimeString(),
-              timestamp: Date.now()
-            };
-            
-            alerts.value.unshift(crashAlert);
-            if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
-            
-            // Trigger crash animation and sound
-            flashCrashMessage();
-            playSound();
-            
-            console.log('[CRASH] ✅ Crash alert added to dashboard');
-          } else if (!data.crashDetected && (wasCrashDetected === true || crashDisplayStatus.value === 'Alerting')) {
-            console.log('[CRASH] ✓ Vehicle restored upright — clearing crash alert and stopping sound');
-            clearInterval(crashInterval);
-            crashDisplayStatus.value = 'Stable';
-            crashDisplayMessage.value = 'Vehicle Stable';
-            stopSound();
-          }
-        }
+  // Listen to engine running state from live
+  const engineRelayRef = dbRef(database, `helmet_public/${userId.value}/live/engineRunning`);
+  onValue(engineRelayRef, (snapshot) => {
+    const val = snapshot.val();
+    if (val !== null && typeof val !== 'undefined') {
+      const isRunning = Boolean(val);
+      if (engineRunning.value !== isRunning) {
+        engineRunning.value = isRunning;
+        enginePending.value = false;
+        sensorData.value.engineRunning = isRunning;
+        console.log(`[ENGINE] Status updated:`, isRunning ? 'RUNNING' : 'STOPPED');
       }
     }
   });
-  
-  // ✅ Listen to device heartbeat for engine & sensor telemetry
-  const deviceRef = dbRef(database, `helmet_public/${userId.value}/devices/motorcycle`);
-  onValue(deviceRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      
-      // Update engine status from heartbeat if available
-      if (typeof data.engineRunning !== 'undefined' && data.engineRunning !== engineRunning.value) {
-        engineRunning.value = data.engineRunning;
-        console.log(`[ENGINE] Status updated from device heartbeat:`, data.engineRunning ? 'RUNNING' : 'STOPPED');
-      }
-      
-      // Update sensor data from heartbeat
-      if (data.mpu6050) {
-        sensorData.value.mpu6050 = {
-          accelX: data.mpu6050.accelX || 0,
-          accelY: data.mpu6050.accelY || 0,
-          accelZ: data.mpu6050.accelZ || 0,
-          totalAccel: data.mpu6050.totalAccel || 0,
-          roll: data.mpu6050.roll || 0,
-          pitch: data.mpu6050.pitch || 0,
-          lastUpdate: Date.now()
-        };
-      }
-      
-      // Update other sensor data
-      if (data.gps) {
-        sensorData.value.gps = {
-          accuracy: data.gps.valid ? '5m' : 'No Fix',
-          satellites: data.gps.satellites || 0
-        };
-        gpsConnected.value = data.gps.valid || false;
-      }
-      
-      if (data.antiTheftArmed !== undefined) {
-        sensorData.value.antiTheftArmed = data.antiTheftArmed;
-      }
-      
-      if (data.vibrationSensor !== undefined) {
-        // Update vibration sensor reading
-        console.log('[VIBRATION] Sensor reading:', data.vibrationSensor);
-      }
-    }
-  });
-  
+
   // Monitor auto control setting
   const autoRef = dbRef(database, `${userId.value}/engineControl/autoMode`);
   onValue(autoRef, (snapshot) => {
@@ -2959,10 +2870,20 @@ const setupArduinoAlertsListener = () => {
     initialAlertLoadDone = true;
   });
 
+  const sessionStartTime = Date.now();
+
   onChildAdded(arduinoAlertsRef, (snapshot) => {
     const key = snapshot.key;
     const data = snapshot.val();
     if (!data) return;
+
+    const alertTimestamp = Number(data.timestamp || 0);
+
+    // Skip pre-existing records from before dashboard opened
+    if (alertTimestamp > 0 && alertTimestamp < sessionStartTime - 10000) {
+      seenAlertKeys.add(key);
+      return;
+    }
 
     // Mark pre-existing alerts as seen during initial load
     if (!initialAlertLoadDone) {
@@ -2973,7 +2894,6 @@ const setupArduinoAlertsListener = () => {
     if (seenAlertKeys.has(key)) return;
     seenAlertKeys.add(key);
 
-    const alertTimestamp = data.timestamp || Date.now();
     const type = data.type || 'info';
 
     console.log('[ALERTS] ✅ New Arduino alert received:', data.message, '| Type:', type);
@@ -2984,7 +2904,7 @@ const setupArduinoAlertsListener = () => {
       message: data.message || 'System Alert',
       details: data.details || '',
       time: new Date().toLocaleTimeString(),
-      timestamp: alertTimestamp
+      timestamp: alertTimestamp || Date.now()
     });
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
 
@@ -2996,7 +2916,7 @@ const setupArduinoAlertsListener = () => {
 
     // Play sound for actionable alerts
     if (['danger', 'warning', 'crash', 'alcohol', 'theft'].includes(type)) {
-      playSound();
+      playSound(type);
     }
   });
 
@@ -3004,6 +2924,8 @@ const setupArduinoAlertsListener = () => {
 };
 
 // ✅ NEW: Setup anti-theft alert listener
+const lastDismissedTheftTime = ref(0);
+
 const setupAntiTheftListener = () => {
   if (!userId.value) return;
   console.log('[ANTI-THEFT] Setting up alert listener...');
@@ -3011,44 +2933,37 @@ const setupAntiTheftListener = () => {
   // Listen for theft alert events (from logTheftToFirebase)
   const theftAlertsRef = dbRef(database, `helmet_public/${userId.value}/theft_alerts`);
   const seenTheftKeys = new Set();
-  let initialTheftLoadDone = false;
-
-  // Pre-index existing keys using get() so historical alerts never fire as new
-  get(theftAlertsRef).then((snapshot) => {
-    if (snapshot.exists()) {
-      snapshot.forEach((child) => {
-        seenTheftKeys.add(child.key);
-      });
-    }
-    initialTheftLoadDone = true;
-    console.log('[ANTI-THEFT] Pre-existing theft alerts indexed:', seenTheftKeys.size);
-  }).catch((err) => {
-    console.warn('[ANTI-THEFT] Error pre-indexing theft alerts:', err);
-    initialTheftLoadDone = true;
-  });
+  const sessionStartTime = Date.now();
 
   onChildAdded(theftAlertsRef, (snapshot) => {
     const key = snapshot.key;
     const alert = snapshot.val();
     if (!alert) return;
 
-    // Skip all pre-existing records from before dashboard opened
-    if (!initialTheftLoadDone) {
+    const alertTime = Number(alert.timestamp || alert.alertTime || 0);
+
+    // CRITICAL 1: Skip all historical theft alerts stored prior to this page session
+    if (alertTime > 0 && alertTime < sessionStartTime - 10000) {
       seenTheftKeys.add(key);
       return;
     }
+
     if (seenTheftKeys.has(key)) return;
     seenTheftKeys.add(key);
 
-    // Only process if motorcycle is online or alert timestamp is fresh (<60s)
-    const alertTime = alert.timestamp || alert.alertTime || 0;
-    const isRecent = (alertTime > 0 && Math.abs(Date.now() - alertTime) < 60000);
-    if (!motorcyclePaired.value && !isRecent) {
-      console.log('[ANTI-THEFT] Skipping stale theft alert from offline bike');
+    // CRITICAL 2: Only trigger if motorcycle hardware is ACTIVELY paired & online!
+    // If the hardware is powered off, never show a false anti-theft alert
+    if (!motorcyclePaired.value) {
+      console.log('[ANTI-THEFT] Skipping theft alert: motorcycle hardware is offline');
       return;
     }
 
-    console.log('[ANTI-THEFT] 🚨 Real-time theft alert received:', alert);
+    // CRITICAL 3: Skip if user has already dismissed this alert incident
+    if (alertTime > 0 && alertTime <= lastDismissedTheftTime.value) {
+      return;
+    }
+
+    console.log('[ANTI-THEFT] 🚨 Real-time theft alert received from active bike:', alert);
 
     antiTheftAlert.value = {
       active: true,
@@ -3056,7 +2971,7 @@ const setupAntiTheftListener = () => {
       time: new Date().toLocaleTimeString(),
       level: alert.alertLevel || 1,
       severity: alert.severity || 'high',
-      timestamp: Date.now()
+      timestamp: alertTime || Date.now()
     };
 
     alerts.value.unshift({
@@ -3064,19 +2979,20 @@ const setupAntiTheftListener = () => {
       message: '🚨 Anti-Theft Alert',
       details: antiTheftAlert.value.message,
       time: antiTheftAlert.value.time,
-      timestamp: Date.now()
+      timestamp: alertTime || Date.now()
     });
 
-    playSound();
+    playSound('theft');
     if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
   });
 };
 
-// ✅ Dismiss anti-theft alert
+// ✅ Dismiss anti-theft alert & permanently mute current theft alarm
 const dismissAntiTheftAlert = () => {
   antiTheftAlert.value.active = false;
+  lastDismissedTheftTime.value = Date.now();
   stopSound();
-  console.log('[ANTI-THEFT] Alert dismissed by user');
+  console.log('[ANTI-THEFT] Alert dismissed & muted by user');
 };
 
 // ✅ NEW: Weather Functions
