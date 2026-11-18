@@ -14,44 +14,47 @@
           </div>
         </div>
         
-        <!-- Buttons - Responsive Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <!-- Buttons - Responsive Grid (2 Sources: Module vs Phone) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             @click="setGPSSource('module')"
             :class="[
               'px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2',
               gpsSource === 'module' 
-                ? 'bg-blue-500 text-white shadow-lg' 
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
                 : 'bg-white text-gray-600 hover:bg-gray-100'
             ]"
           >
             <span class="material-icons text-lg">router</span>
-            <span>GPS Module</span>
+            <span>🏍️ GPS Module</span>
           </button>
           <button
             @click="setGPSSource('phone')"
             :class="[
               'px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2',
               gpsSource === 'phone' 
-                ? 'bg-green-500 text-white shadow-lg' 
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
                 : 'bg-white text-gray-600 hover:bg-gray-100'
             ]"
           >
             <span class="material-icons text-lg">smartphone</span>
-            <span>Phone GPS</span>
+            <span>📱 Phone GPS</span>
           </button>
-          <button
-            @click="setGPSSource('both')"
-            :class="[
-              'px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2',
-              gpsSource === 'both' 
-                ? 'bg-purple-500 text-white shadow-lg' 
-                : 'bg-white text-gray-600 hover:bg-gray-100'
-            ]"
-          >
-            <span class="material-icons text-lg">merge_type</span>
-            <span>Both (Avg)</span>
-          </button>
+        </div>
+
+        <!-- Hardware GPS Fix Status Banner (when GPS Module is active) -->
+        <div v-if="gpsSource === 'module'" class="text-xs rounded-xl p-3.5 border transition-all shadow-md"
+          :class="hasModuleFix ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-amber-500/15 border-amber-500/40 text-amber-300'"
+        >
+          <div class="flex items-center gap-2 font-bold">
+            <span class="material-icons text-base">{{ hasModuleFix ? 'satellite_alt' : 'sync' }}</span>
+            <span>{{ hasModuleFix ? 'Hardware GPS: 3D Satellite Fix Active' : 'Auto-Fallback: Tracking via Phone GPS (Hardware GPS Searching)' }}</span>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-200">
+            {{ hasModuleFix 
+                ? 'Receiving high-accuracy satellite coordinates directly from the motorcycle module.' 
+                : 'Motorcycle GPS has no satellite lock (indoors or bench test). The system automatically uses Phone GPS so your real-time position and trips are never lost.' }}
+          </p>
         </div>
       </div>
     </div>
@@ -76,9 +79,10 @@
               <span class="font-mono">{{ formatLatLng(location.lat, location.lng) }}</span>
             </div>
             <div class="flex items-center gap-2 mt-2">
-              <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></span>
-              <span class="text-xs text-gray-500">
-                Source: {{ gpsSource === 'module' ? '🏍️ GPS Module' : gpsSource === 'phone' ? '👤 Phone GPS' : '📍 Both (Averaged)' }}
+              <span class="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                :class="activeLocationSource === 'module' ? 'bg-blue-500' : 'bg-emerald-500'"></span>
+              <span class="text-xs text-gray-600 font-medium">
+                Source: {{ activeLocationLabel }}
               </span>
             </div>
           </div>
@@ -132,15 +136,22 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useAuthStore } from '../stores/auth';
+
+const authStore = useAuthStore();
 
 const props = defineProps({
   location: {
     type: Object,
     required: true,
     default: () => ({ lat: null, lng: null })
+  },
+  user: {
+    type: Object,
+    default: () => ({})
   },
   crashEvents: {
     type: Array,
@@ -209,17 +220,67 @@ let marker = null;
 let crashMarkers = [];
 const isMapReady = ref(false);
 const isGettingLocation = ref(false);
-const gpsSource = ref('module'); // 'module', 'phone', or 'both'
+const gpsSource = ref('module'); // 'module' or 'phone'
 let phoneLocation = ref({ lat: null, lng: null });
 let moduleLocation = ref({ lat: null, lng: null });
+let phoneWatchId = null;
+
+// Check if hardware GPS module currently has valid non-zero coordinates
+const hasModuleFix = computed(() => {
+  const lat = Number(props.location?.lat);
+  const lng = Number(props.location?.lng);
+  return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+});
+
+// Currently active tracking source
+const activeLocationSource = computed(() => {
+  if (gpsSource.value === 'phone') return 'phone';
+  return hasModuleFix.value ? 'module' : 'phone_auto_fallback';
+});
+
+const activeLocationLabel = computed(() => {
+  if (gpsSource.value === 'phone') return '📱 Phone GPS (Manual)';
+  if (hasModuleFix.value) return '🏍️ GPS Module (3D Lock)';
+  return '🔄 Phone GPS (Auto-Fallback Active)';
+});
+
+// Start continuous phone location watch (powers automatic fallback)
+const startPhoneLocationWatch = () => {
+  if (!navigator.geolocation || phoneWatchId !== null) return;
+  
+  phoneWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      phoneLocation.value = { lat, lng };
+      
+      // Auto-fallback: if motorcycle GPS module has no fix, use phone location!
+      if (!hasModuleFix.value || gpsSource.value === 'phone') {
+        emit('update-location', { 
+          lat, 
+          lng, 
+          source: (gpsSource.value === 'phone' ? 'phone' : 'phone_auto_fallback') 
+        });
+        updateLocationBySource();
+      }
+    },
+    (err) => {
+      console.warn('[LocationSection] Geolocation watch error:', err);
+    },
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+  );
+};
 
 // Set GPS source
 const setGPSSource = (source) => {
   gpsSource.value = source;
   console.log('[LocationSection] GPS source changed to:', source);
   
-  // Update location based on source
-  updateLocationBySource();
+  if (source === 'phone' && (!phoneLocation.value.lat || !phoneLocation.value.lng)) {
+    getUserLocation();
+  } else {
+    updateLocationBySource();
+  }
 };
 
 // ✅ ENHANCED: Update location with address and dynamic icon
@@ -227,26 +288,19 @@ const updateLocationBySource = async () => {
   let newLocation = { lat: null, lng: null };
   
   if (gpsSource.value === 'module') {
-    newLocation = { ...props.location };
-  } else if (gpsSource.value === 'phone') {
-    newLocation = { ...phoneLocation.value };
-  } else if (gpsSource.value === 'both') {
-    // Average both sources if both are available
-    if (props.location.lat && phoneLocation.value.lat) {
-      newLocation = {
-        lat: (props.location.lat + phoneLocation.value.lat) / 2,
-        lng: (props.location.lng + phoneLocation.value.lng) / 2
-      };
-    } else if (props.location.lat) {
-      newLocation = { ...props.location };
-    } else if (phoneLocation.value.lat) {
+    if (hasModuleFix.value) {
+      newLocation = { lat: Number(props.location.lat), lng: Number(props.location.lng) };
+    } else if (phoneLocation.value.lat && phoneLocation.value.lng) {
+      // Auto-switch: if hardware has no fix, seamlessly track via phone GPS
       newLocation = { ...phoneLocation.value };
     }
+  } else if (gpsSource.value === 'phone') {
+    newLocation = { ...phoneLocation.value };
   }
   
   // Update map if location changed
   if (mapInstance && marker && newLocation.lat && newLocation.lng) {
-    mapInstance.setView([newLocation.lat, newLocation.lng], 13);
+    mapInstance.setView([newLocation.lat, newLocation.lng], 15);
     marker.setLatLng([newLocation.lat, newLocation.lng]);
     
     // ✅ Update marker icon based on GPS source
@@ -259,9 +313,7 @@ const updateLocationBySource = async () => {
       currentAddress.value = address;
     }
     
-    const sourceLabel = gpsSource.value === 'module' ? '🏍️ GPS Module' : 
-                       gpsSource.value === 'phone' ? '👤 Phone GPS' : 
-                       '📍 Both (Averaged)';
+    const sourceLabel = activeLocationLabel.value;
     
     marker.bindPopup(`
       <div style="min-width: 200px;">
@@ -337,33 +389,59 @@ const getUserLocation = () => {
   );
 };
 
-// ✅ NEW: Dynamic marker icon based on GPS source
+// ✅ NEW: Dynamic marker icon based on GPS source and User Profile Picture
 function createLocationMarkerIcon() {
-  let iconHtml = '';
-  let bgColor = '';
-  
-  if (gpsSource.value === 'module') {
-    // Motorcycle icon for GPS module
-    iconHtml = '🏍️';
-    bgColor = '#3b82f6'; // Blue
-  } else if (gpsSource.value === 'phone') {
-    // Person icon for phone GPS
-    iconHtml = '👤';
-    bgColor = '#10b981'; // Green
-  } else {
-    // Both sources
-    iconHtml = '📍';
-    bgColor = '#8b5cf6'; // Purple
+  const userPhoto = authStore.user?.photoURL || props.user?.photoURL;
+  const isModule = (gpsSource.value === 'module');
+  const themeColor = isModule ? '#2563eb' : '#00B85C';
+  const badgeEmoji = isModule ? '🏍️' : '📱';
+
+  if (userPhoto) {
+    return L.divIcon({
+      html: `
+        <div style="position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center;">
+          <!-- Ambient pulse ring -->
+          <div style="position:absolute; width:46px; height:46px; border-radius:50%; background:${themeColor}; opacity:0.35; animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+          <!-- Pointed Pin Head -->
+          <div style="position:relative; width:40px; height:40px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:${themeColor}; border:2.5px solid #ffffff; box-shadow:0 4px 14px rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:2;">
+            <!-- Circular photo rotated back upright -->
+            <div style="transform:rotate(45deg); width:30px; height:30px; border-radius:50%; overflow:hidden; background:#061B2B; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.4);">
+              <img src="${userPhoto}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="Rider" />
+            </div>
+          </div>
+          <!-- Source mini badge -->
+          <div style="position:absolute; bottom:0px; right:0px; width:18px; height:18px; border-radius:50%; background:#061B2B; border:1.5px solid white; display:flex; align-items:center; justify-content:center; font-size:10px; z-index:3; box-shadow:0 2px 5px rgba(0,0,0,0.4);">
+            ${badgeEmoji}
+          </div>
+        </div>
+      `,
+      className: 'user-avatar-marker',
+      iconSize: [48, 48],
+      iconAnchor: [24, 46],
+      popupAnchor: [0, -46]
+    });
   }
-  
+
+  // Fallback if no photo is uploaded
+  const iconHtml = isModule ? '🏍️' : '📱';
   return L.divIcon({
-    html: `<div style="background-color: ${bgColor}; width: 40px; height: 40px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"><span style="transform: rotate(45deg); font-size: 24px;">${iconHtml}</span></div>`,
+    html: `<div style="background-color: ${themeColor}; width: 40px; height: 40px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"><span style="transform: rotate(45deg); font-size: 24px;">${iconHtml}</span></div>`,
     className: 'location-marker',
     iconSize: [40, 40],
     iconAnchor: [20, 40],
     popupAnchor: [0, -40]
   });
 }
+
+// Watch for profile photo updates to refresh marker icon dynamically
+watch(
+  () => authStore.user?.photoURL || props.user?.photoURL,
+  () => {
+    if (marker && isMapReady.value) {
+      marker.setIcon(createLocationMarkerIcon());
+    }
+  }
+);
 
 // Function to create crash marker icon
 function createCrashMarkerIcon() {
@@ -485,9 +563,9 @@ const initMap = async () => {
       reverseGeocode(lat, lng).then(address => {
         if (address) {
           currentAddress.value = address;
-          const sourceLabel = gpsSource.value === 'module' ? '🏍️ GPS Module' : 
-                             gpsSource.value === 'phone' ? '👤 Phone GPS' : 
-                             '📍 Both (Averaged)';
+          const sourceLabel = gpsSource.value === 'module' 
+            ? (hasModuleFix.value ? '🏍️ GPS Module' : '🏍️ GPS Module (Waiting for Fix)')
+            : '📱 Phone GPS';
           marker.setPopupContent(`
             <div style="min-width: 200px;">
               <h3 style="font-weight: bold; color: #3D52A0; margin-bottom: 8px;">📍 Current Location</h3>
@@ -523,7 +601,7 @@ watch(
         moduleLocation.value = { ...newLoc };
         
         // Update based on current source
-        if (gpsSource.value === 'module' || gpsSource.value === 'both') {
+        if (gpsSource.value === 'module') {
           updateLocationBySource();
         }
       } catch (error) {

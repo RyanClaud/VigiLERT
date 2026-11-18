@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="space-y-4">
 
     <!-- Info Bar -->
@@ -29,7 +29,12 @@
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex gap-2 flex-shrink-0">
+        <div class="flex flex-wrap gap-2 flex-shrink-0">
+          <button v-if="crashEvents.length > 0" @click="centerOnCrash"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-700 text-white text-sm font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-red-500/20 animate-pulse">
+            <span class="material-icons text-sm">warning</span>
+            Crash Site
+          </button>
           <button @click="centerOnRider" :disabled="!location.lat"
             class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#3D52A0] to-[#7091E6] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
             <span class="material-icons text-sm">gps_fixed</span>
@@ -91,9 +96,16 @@
 
       <!-- Live badge -->
       <div v-if="isMapReady && location.lat"
-        class="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-lg flex items-center gap-2">
+        class="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 z-[500]">
         <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
         <span class="text-xs font-bold text-gray-700">LIVE — GPS Module</span>
+      </div>
+
+      <!-- Crash alert badge on map -->
+      <div v-if="isMapReady && (crashDetected || crashEvents.length > 0)"
+        class="absolute top-4 right-4 bg-red-600 text-white px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-1.5 z-[500] border-2 border-white animate-pulse">
+        <span class="material-icons text-sm">warning</span>
+        <span class="text-xs font-black uppercase tracking-wider">Crash Site Pinned</span>
       </div>
 
       <!-- Last updated -->
@@ -112,11 +124,14 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 const props = defineProps({
-  location:    { type: Object, default: () => ({ lat: null, lng: null }) },
-  speed:       { type: Number, default: 0 },
-  speedLimit:  { type: Number, default: 60 },
-  satellites:  { type: Number, default: 0 },
-  isOverSpeed: { type: Boolean, default: false }
+  location:      { type: Object, default: () => ({ lat: null, lng: null }) },
+  speed:         { type: Number, default: 0 },
+  speedLimit:    { type: Number, default: 60 },
+  satellites:    { type: Number, default: 0 },
+  isOverSpeed:   { type: Boolean, default: false },
+  crashEvents:   { type: Array, default: () => [] },
+  crashDetected: { type: Boolean, default: false },
+  riderPhoto:    { type: String, default: '' }
 });
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -128,6 +143,7 @@ const addressCache   = new Map();
 let mapInstance  = null;
 let riderMarker  = null;
 let pathLine     = null;
+let crashMarkers = [];
 const pathCoords = [];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -157,6 +173,28 @@ async function reverseGeocode(lat, lng) {
 }
 
 function createRiderIcon() {
+  if (props.riderPhoto) {
+    return L.divIcon({
+      html: `
+        <div style="position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center;">
+          <div style="position:absolute; width:46px; height:46px; border-radius:50%; background:#3D52A0; opacity:0.35; animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+          <div style="position:relative; width:42px; height:42px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:linear-gradient(135deg,#3D52A0,#7091E6); border:2.5px solid white; box-shadow:0 4px 16px rgba(61,82,160,0.5); display:flex; align-items:center; justify-content:center; z-index:2;">
+            <div style="transform:rotate(45deg); width:32px; height:32px; border-radius:50%; overflow:hidden; background:#061B2B; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.5);">
+              <img src="${props.riderPhoto}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="Rider" />
+            </div>
+          </div>
+          <div style="position:absolute; bottom:0px; right:0px; width:18px; height:18px; border-radius:50%; background:#061B2B; border:1.5px solid white; display:flex; align-items:center; justify-content:center; font-size:10px; z-index:3; box-shadow:0 2px 5px rgba(0,0,0,0.4);">
+            🏍️
+          </div>
+        </div>
+      `,
+      className: '',
+      iconSize: [48, 48],
+      iconAnchor: [24, 46],
+      popupAnchor: [0, -46]
+    });
+  }
+
   return L.divIcon({
     html: `<div style="
       background: linear-gradient(135deg,#3D52A0,#7091E6);
@@ -171,6 +209,23 @@ function createRiderIcon() {
     iconSize: [44, 44],
     iconAnchor: [22, 44],
     popupAnchor: [0, -48]
+  });
+}
+
+function createCrashMarkerIcon() {
+  return L.divIcon({
+    html: `
+      <div style="position:relative;display:flex;align-items:center;justify-content:center;width:48px;height:48px;">
+        <div style="position:absolute;width:48px;height:48px;border-radius:50%;background:#ef4444;opacity:0.6;animation:ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+        <div style="width:38px;height:38px;border-radius:50%;background:#dc2626;border:3px solid white;box-shadow:0 4px 14px rgba(220,38,38,0.7);display:flex;align-items:center;justify-content:center;position:relative;z-index:2;">
+          <span style="font-size:20px;color:white;font-weight:bold;">⚠️</span>
+        </div>
+      </div>
+    `,
+    className: 'emergency-crash-marker',
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
+    popupAnchor: [0, -26]
   });
 }
 
@@ -195,21 +250,86 @@ function buildPopup(lat, lng, address, speed) {
     </div>`;
 }
 
+// ── Render Crash Markers ──────────────────────────────────────────────────
+async function updateCrashMarkers() {
+  if (!mapInstance || !isMapReady.value) return;
+
+  // Clear existing crash markers
+  crashMarkers.forEach(m => m.remove());
+  crashMarkers = [];
+
+  const validCrashes = (props.crashEvents || []).filter(c => {
+    const lat = Number(c.lat);
+    const lng = Number(c.lng);
+    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+  });
+
+  for (const crash of validCrashes) {
+    const lat = Number(crash.lat);
+    const lng = Number(crash.lng);
+
+    const marker = L.marker([lat, lng], {
+      icon: createCrashMarkerIcon()
+    }).addTo(mapInstance);
+
+    marker.bindPopup(`
+      <div style="min-width:240px;font-family:sans-serif;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;color:#dc2626;">
+          <span style="font-size:22px;">🚨</span>
+          <strong style="font-size:14px;text-transform:uppercase;">Crash Site Alert!</strong>
+        </div>
+        <div style="background:#fee2e2;padding:8px;border-radius:8px;margin-bottom:8px;border:1px solid #fca5a5;">
+          <p style="margin:0;font-size:11px;color:#991b1b;font-weight:bold;">📍 CRASH LOCATION</p>
+          <p id="crash-popup-addr-${crash.timestamp || lat}" style="margin:3px 0 0;font-size:12px;color:#7f1d1d;">Loading address...</p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#333;margin-bottom:8px;">
+          <p style="margin:2px 0;"><strong>💥 Impact:</strong> ${crash.impactStrength || 'Severe'} g</p>
+          <p style="margin:2px 0;"><strong>📐 Lean:</strong> ${crash.roll ? Math.abs(crash.roll).toFixed(1) + '°' : 'N/A'}</p>
+          <p style="margin:2px 0;grid-column:span 2;"><strong>🕒 Time:</strong> ${new Date(crash.timestamp || Date.now()).toLocaleTimeString()}</p>
+        </div>
+        <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank"
+          style="display:block;text-align:center;padding:7px 12px;background:#dc2626;color:white;
+                 text-decoration:none;border-radius:8px;font-size:12px;font-weight:bold;">
+          🚨 Navigate to Crash Site →
+        </a>
+      </div>
+    `);
+
+    // Fetch address for popup
+    reverseGeocode(lat, lng).then(addr => {
+      const el = document.getElementById(`crash-popup-addr-${crash.timestamp || lat}`);
+      if (el) el.innerText = addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    });
+
+    crashMarkers.push(marker);
+  }
+
+  // If a crash was detected, pan directly to the latest crash and open its popup
+  if (validCrashes.length > 0 && props.crashDetected) {
+    const latestCrash = validCrashes[0];
+    mapInstance.setView([Number(latestCrash.lat), Number(latestCrash.lng)], 16);
+    if (crashMarkers.length > 0) {
+      setTimeout(() => crashMarkers[0].openPopup(), 200);
+    }
+  }
+}
+
 // ── Map Init ───────────────────────────────────────────────────────────────
 const initMap = async () => {
   await nextTick();
   const el = document.getElementById('emergency-rider-map');
   if (!el) return;
 
-  // Default to Philippines center if no GPS yet
-  const lat = props.location.lat || 14.5995;
-  const lng = props.location.lng || 120.9842;
-  const zoom = props.location.lat ? 15 : 6;
+  // Default to crash location if present, else rider location, else PH
+  const firstCrash = (props.crashEvents || []).find(c => c.lat && c.lng && c.lat !== 0);
+  const initialLat = (props.crashDetected && firstCrash) ? firstCrash.lat : (props.location.lat || 14.5995);
+  const initialLng = (props.crashDetected && firstCrash) ? firstCrash.lng : (props.location.lng || 120.9842);
+  const initialZoom = (props.location.lat || firstCrash) ? 15 : 6;
 
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
 
   setTimeout(() => {
-    mapInstance = L.map(el, { center: [lat, lng], zoom, zoomControl: true });
+    mapInstance = L.map(el, { center: [initialLat, initialLng], zoom: initialZoom, zoomControl: true });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
@@ -217,8 +337,8 @@ const initMap = async () => {
     }).addTo(mapInstance);
 
     // Rider marker
-    riderMarker = L.marker([lat, lng], { icon: createRiderIcon() }).addTo(mapInstance);
-    riderMarker.bindPopup(buildPopup(lat, lng, 'Loading...', props.speed));
+    riderMarker = L.marker([initialLat, initialLng], { icon: createRiderIcon() }).addTo(mapInstance);
+    riderMarker.bindPopup(buildPopup(initialLat, initialLng, 'Loading...', props.speed));
 
     // Path polyline (trail)
     pathLine = L.polyline([], {
@@ -229,14 +349,17 @@ const initMap = async () => {
 
     // Fetch initial address
     if (props.location.lat) {
-      reverseGeocode(lat, lng).then(addr => {
-        currentAddress.value = addr || formatLatLng(lat, lng);
-        riderMarker.setPopupContent(buildPopup(lat, lng, addr, props.speed));
+      reverseGeocode(initialLat, initialLng).then(addr => {
+        currentAddress.value = addr || formatLatLng(initialLat, initialLng);
+        riderMarker.setPopupContent(buildPopup(initialLat, initialLng, addr, props.speed));
       });
       lastUpdated.value = new Date().toLocaleTimeString();
     } else {
       currentAddress.value = 'Waiting for GPS fix...';
     }
+
+    // Render crash markers
+    updateCrashMarkers();
   }, 100);
 };
 
@@ -247,6 +370,34 @@ const centerOnRider = () => {
     riderMarker?.openPopup();
   }
 };
+
+// ── Center on latest crash ────────────────────────────────────────────────
+const centerOnCrash = () => {
+  const firstCrash = (props.crashEvents || []).find(c => c.lat && c.lng && c.lat !== 0);
+  if (mapInstance && firstCrash) {
+    mapInstance.setView([Number(firstCrash.lat), Number(firstCrash.lng)], 16);
+    if (crashMarkers.length > 0) crashMarkers[0].openPopup();
+  }
+};
+
+// ── Watch crash events ────────────────────────────────────────────────────
+watch(
+  () => [props.crashEvents, props.crashDetected],
+  () => {
+    updateCrashMarkers();
+  },
+  { deep: true }
+);
+
+// ── Watch rider photo updates ─────────────────────────────────────────────
+watch(
+  () => props.riderPhoto,
+  () => {
+    if (riderMarker && isMapReady.value) {
+      riderMarker.setIcon(createRiderIcon());
+    }
+  }
+);
 
 // ── Watch location changes (real-time GPS updates) ─────────────────────────
 watch(
@@ -261,6 +412,10 @@ watch(
 
     // Pan map smoothly
     mapInstance.panTo([lat, lng], { animate: true, duration: 0.8 });
+    // Pan map smoothly if not in active crash view
+    if (!props.crashDetected) {
+      mapInstance.panTo([lat, lng], { animate: true, duration: 0.8 });
+    }
 
     // Add to path trail (keep last 100 points)
     pathCoords.push([lat, lng]);

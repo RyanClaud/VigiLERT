@@ -897,7 +897,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue, onChildAdded, remove, get } from 'firebase/database';
+import { ref as dbRef, set, update, onValue, onChildAdded, remove, get } from 'firebase/database';
 
 // Components
 import TabGroup from '../components/TabGroup.vue';
@@ -918,11 +918,39 @@ const alcoholSubtitle = ref('No alcohol detected');
 const currentSpeed = ref(0);
 const speedHistory = ref([]);
 const speedLimit = ref(80); // Default value
+
+const speedBarColor = computed(() => {
+  const pct = speedLimit.value / 120;
+  if (pct <= 0.25) return '#22c55e';
+  if (pct <= 0.5)  return '#eab308';
+  if (pct <= 0.75) return '#f97316';
+  return '#ef4444';
+});
+
+const speedZoneColor = computed(() => {
+  const pct = speedLimit.value / 120;
+  if (pct <= 0.25) return 'bg-green-400';
+  if (pct <= 0.5)  return 'bg-yellow-400';
+  if (pct <= 0.75) return 'bg-orange-400';
+  return 'bg-red-500';
+});
+
+const speedZoneLabel = computed(() => {
+  if (speedLimit.value <= 30) return 'School / Residential Zone';
+  if (speedLimit.value <= 60) return 'City / Urban Zone';
+  if (speedLimit.value <= 90) return 'Highway Zone';
+  return 'Expressway Zone';
+});
+
 const diagnostics = ref([]);
 const alerts = ref([]);
 const activeTab = ref('My Location');
 const location = ref({ lat: null, lng: null });
-const user = ref({ name: 'Loading...' });
+const user = computed(() => ({
+  name: authStore.user?.displayName || authStore.user?.email?.split('@')[0] || 'Rider',
+  email: authStore.user?.email || '',
+  photoURL: authStore.user?.photoURL || ''
+}));
 const recentTrips = ref([]);
 const crashEvents = ref([]);
 const isOverSpeed = ref(false);
@@ -1171,6 +1199,7 @@ const flashCrashMessage = () => {
       clearInterval(crashInterval);
       crashDisplayStatus.value = 'Stable';
       crashDisplayMessage.value = 'Vehicle Stable';
+      stopSound();
       console.log('[FLASH CRASH] ✓ Animation complete, returning to Stable');
       return;
     }
@@ -1534,9 +1563,11 @@ const setupFirebaseListeners = () => {
           if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
           flashCrashMessage();
           playSound();
-        } else if (!liveData.crashDetected && wasCrash) {
+        } else if (!liveData.crashDetected && (wasCrash || crashDisplayStatus.value === 'Alerting')) {
+          clearInterval(crashInterval);
           crashDisplayStatus.value = 'Stable';
           crashDisplayMessage.value = 'Vehicle Stable';
+          stopSound();
         }
       }
       
@@ -1879,14 +1910,17 @@ const startGPSSpeedMonitoring = () => {
         }
       }
       
-      // Update Firebase with GPS phone data
+      // Record breadcrumb and telemetry point for active trip session
+      recordTripPoint(lat, lng, currentSpeed.value);
+
+      // Non-destructive update in Firebase so engineRunning, mpu6050, antiTheftArmed are preserved
       const locationRef = dbRef(database, `helmet_public/${userId.value}/live`);
-      set(locationRef, {
+      update(locationRef, {
         locationLat: lat,
         locationLng: lng,
         speed: currentSpeed.value,
         timestamp: Date.now(),
-        source: 'phone_gps'
+        gpsSource: 'phone_gps'
       }).catch(error => {
         console.error('Failed to update location:', error);
       });
@@ -1998,19 +2032,176 @@ const updateTripStatistics = (speed) => {
   tripStats.value.safetyScore = Math.max(0, safetyScore);
 };
 
-// Handle location update from GPS (one-time update)
+// ==========================================
+// 🏍️ REAL-TIME TRIP SESSION RECORDER
+// ==========================================
+const activeTripSession = ref(null);
+
+// Haversine formula to compute distance in km
+const computeDistanceKm = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Start a new trip session
+const startTripSession = (trigger = 'engine') => {
+  if (activeTripSession.value) return; // Already recording
+  const startLat = Number(location.value?.lat) || 0;
+  const startLng = Number(location.value?.lng) || 0;
+  const hasGps = (startLat !== 0 && startLng !== 0);
+
+  activeTripSession.value = {
+    id: Date.now().toString(),
+    startTime: Date.now(),
+    trigger,
+    startLat,
+    startLng,
+    endLat: startLat,
+    endLng: startLng,
+    startLocationName: hasGps ? `${startLat.toFixed(4)}, ${startLng.toFixed(4)}` : 'Stationary Base',
+    endLocationName: hasGps ? `${startLat.toFixed(4)}, ${startLng.toFixed(4)}` : 'Stationary Base',
+    maxSpeed: Number(currentSpeed.value) || 0,
+    speedSamples: [Number(currentSpeed.value) || 0],
+    totalDistanceKm: 0,
+    lastCoord: hasGps ? { lat: startLat, lng: startLng } : null,
+    hasGPS: hasGps,
+    source: gpsSpeedSource.value || 'phone'
+  };
+  console.log('[TRIP RECORDER] 🚀 Trip session started:', activeTripSession.value.id);
+};
+
+// Record continuous breadcrumbs / distance during the trip
+const recordTripPoint = (lat, lng, speed = 0) => {
+  const numSpeed = parseFloat(speed) || 0;
+  updateTripStatistics(numSpeed);
+
+  // Auto-start trip if moving > 5 km/h and no active session
+  if (!activeTripSession.value && numSpeed >= 5) {
+    startTripSession('motion');
+  }
+
+  if (!activeTripSession.value) return;
+  const session = activeTripSession.value;
+
+  if (numSpeed > session.maxSpeed) {
+    session.maxSpeed = Math.round(numSpeed * 10) / 10;
+  }
+  if (numSpeed > 0) {
+    session.speedSamples.push(numSpeed);
+  }
+
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+  if (!isNaN(numLat) && !isNaN(numLng) && (numLat !== 0 || numLng !== 0)) {
+    session.hasGPS = true;
+    if (!session.startLat || session.startLat === 0) {
+      session.startLat = numLat;
+      session.startLng = numLng;
+      session.startLocationName = `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`;
+    }
+
+    if (session.lastCoord) {
+      const d = computeDistanceKm(session.lastCoord.lat, session.lastCoord.lng, numLat, numLng);
+      // Filter jitter (< 5m) and teleport glitches (> 5km in 1 tick)
+      if (d >= 0.005 && d <= 5.0) {
+        session.totalDistanceKm += d;
+      }
+    }
+    session.lastCoord = { lat: numLat, lng: numLng };
+    session.endLat = numLat;
+    session.endLng = numLng;
+    session.endLocationName = `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`;
+  }
+};
+
+// Conclude and push trip to Firebase
+const endTripSessionAndSave = async () => {
+  if (!activeTripSession.value) return;
+  const session = activeTripSession.value;
+  activeTripSession.value = null; // Clear state
+
+  const endTime = Date.now();
+  const durationMs = Math.max(1000, endTime - session.startTime);
+
+  // Ignore accidental clicks under 6 seconds if stationary
+  if (durationMs < 6000 && session.totalDistanceKm < 0.01) {
+    console.log('[TRIP RECORDER] Trip too short (<6s and <10m), skipped save.');
+    return;
+  }
+
+  let avgSpeed = 0;
+  if (session.speedSamples.length > 0) {
+    const sum = session.speedSamples.reduce((a, b) => a + b, 0);
+    avgSpeed = Math.round((sum / session.speedSamples.length) * 10) / 10;
+  } else if (session.totalDistanceKm > 0 && durationMs > 0) {
+    avgSpeed = Math.round((session.totalDistanceKm / (durationMs / 3600000)) * 10) / 10;
+  }
+
+  const tripRecord = {
+    id: session.id,
+    startTime: session.startTime,
+    endTime: endTime,
+    timestamp: endTime,
+    duration: durationMs,
+    distance: Math.round(session.totalDistanceKm * 100) / 100,
+    maxSpeed: session.maxSpeed || 0,
+    avgSpeed: avgSpeed || 0,
+    startLat: session.startLat || 0,
+    startLng: session.startLng || 0,
+    endLat: session.endLat || session.startLat || 0,
+    endLng: session.endLng || session.startLng || 0,
+    startLocationName: session.startLocationName || 'Stationary Base',
+    endLocationName: session.endLocationName || 'Stationary Base',
+    hasGPS: session.hasGPS,
+    source: session.source || 'phone_gps',
+    createdAt: endTime
+  };
+
+  console.log('[TRIP RECORDER] 💾 Saving trip to Firebase:', tripRecord);
+  const uid = userId.value || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
+
+  try {
+    await set(dbRef(database, `helmet_public/${uid}/trips/${session.id}`), tripRecord);
+    await set(dbRef(database, `${uid}/trips/${session.id}`), tripRecord).catch(() => {});
+
+    recentTrips.value.unshift(tripRecord);
+    if (recentTrips.value.length > 5) recentTrips.value.pop();
+
+    alerts.value.unshift({
+      type: 'success',
+      message: 'Trip Saved to History',
+      details: `${tripRecord.distance} km • ${Math.round(durationMs / 60000)} min ride logged`,
+      time: new Date().toLocaleTimeString()
+    });
+    if (alerts.value.length > 5) alerts.value.pop();
+  } catch (err) {
+    console.error('[TRIP RECORDER] Failed to save trip:', err);
+  }
+};
+
+// Handle location update from GPS (non-destructive update)
 const handleLocationUpdate = async (newLocation) => {
-  location.value = newLocation;
+  if (newLocation.lat && newLocation.lng) {
+    location.value = { lat: newLocation.lat, lng: newLocation.lng };
+    recordTripPoint(newLocation.lat, newLocation.lng, currentSpeed.value);
+  }
   
-  // Update location in Firebase
+  // Non-destructive update in Firebase so engineRunning, mpu6050, antiTheftArmed are preserved
   try {
     const locationRef = dbRef(database, `helmet_public/${userId.value}/live`);
-    await set(locationRef, {
+    await update(locationRef, {
       locationLat: newLocation.lat,
       locationLng: newLocation.lng,
-      speed: currentSpeed.value,
+      speed: currentSpeed.value || 0,
       timestamp: Date.now(),
-      source: 'phone_gps_manual'
+      gpsSource: newLocation.source || 'phone'
     });
     
     alerts.value.unshift({
@@ -2173,34 +2364,12 @@ const setupDeviceListeners = () => {
       return;
     }
 
-    const hb = data.lastHeartbeat || data.timestamp || 0;
-    const isTimestampFresh = (hb > 0 && Math.abs(Date.now() - hb) < 8000);
-
-    if (!helmetInitialLoadDone) {
-      helmetInitialLoadDone = true;
-      previousHelmetHeartbeat = hb;
-      if (isTimestampFresh) {
-        lastHelmetUpdate.value = Date.now();
-        helmetPaired.value = true;
-        helmetRawConnected.value = true;
-        console.log('[HELMET] Connected on startup (fresh heartbeat)');
-      } else {
-        helmetPaired.value = false;
-        helmetRawConnected.value = false;
-        console.log('[HELMET] Stale data on startup, marked as OFFLINE');
-      }
-      return;
-    }
-
-    // Live update received after startup
-    if (hb !== previousHelmetHeartbeat || isTimestampFresh) {
-      previousHelmetHeartbeat = hb;
-      lastHelmetUpdate.value = Date.now();
-      if (!helmetPaired.value) {
-        helmetPaired.value = true;
-        helmetRawConnected.value = true;
-        console.log('[HELMET] Live heartbeat active, marked as CONNECTED');
-      }
+    // Active helmet device heartbeat received
+    lastHelmetUpdate.value = Date.now();
+    if (!helmetPaired.value) {
+      helmetPaired.value = true;
+      helmetRawConnected.value = true;
+      console.log('[HELMET] Live heartbeat active, marked as CONNECTED');
     }
   });
   
@@ -2219,39 +2388,17 @@ const setupDeviceListeners = () => {
       return;
     }
 
-    const hb = data.lastHeartbeat || data.timestamp || 0;
-    const isTimestampFresh = (hb > 0 && Math.abs(Date.now() - hb) < 8000);
-
-    if (!motorcycleInitialLoadDone) {
-      motorcycleInitialLoadDone = true;
-      previousMotorcycleHeartbeat = hb;
-      if (isTimestampFresh) {
-        lastMotorcycleUpdate.value = Date.now();
-        motorcyclePaired.value = true;
-        motorcycleRawConnected.value = true;
-        console.log('[MOTORCYCLE] Connected on startup (fresh heartbeat)');
-      } else {
-        motorcyclePaired.value = false;
-        motorcycleRawConnected.value = false;
-        console.log('[MOTORCYCLE] Stale data on startup, marked as OFFLINE');
-      }
-      return;
-    }
-
-    // Live update received after startup
-    if (hb !== previousMotorcycleHeartbeat || isTimestampFresh) {
-      previousMotorcycleHeartbeat = hb;
-      lastMotorcycleUpdate.value = Date.now();
-      if (!motorcyclePaired.value) {
-        motorcyclePaired.value = true;
-        motorcycleRawConnected.value = true;
-        console.log('[MOTORCYCLE] Live heartbeat active, marked as CONNECTED');
-      }
+    // Active motorcycle device heartbeat received
+    lastMotorcycleUpdate.value = Date.now();
+    if (!motorcyclePaired.value) {
+      motorcyclePaired.value = true;
+      motorcycleRawConnected.value = true;
+      console.log('[MOTORCYCLE] Live heartbeat active, marked as CONNECTED');
     }
   });
 };
 
-// ✅ FIX: Timeout check based on when we last received live Firebase heartbeats
+// ✅ FIX: Timeout check based on local browser timestamp when Firebase heartbeat arrived
 let heartbeatCheckInterval = null;
 
 const checkDeviceTimeouts = () => {
@@ -2260,15 +2407,15 @@ const checkDeviceTimeouts = () => {
   const timeSinceHelmetUpdate = lastHelmetUpdate.value > 0 ? now - lastHelmetUpdate.value : Infinity;
   const timeSinceMotorcycleUpdate = lastMotorcycleUpdate.value > 0 ? now - lastMotorcycleUpdate.value : Infinity;
   
-  // Helmet timeout check (8 seconds)
-  if (helmetPaired.value && timeSinceHelmetUpdate > 8000) {
+  // Helmet timeout check (25 seconds - tolerates network latency & Wi-Fi retries)
+  if (helmetPaired.value && timeSinceHelmetUpdate > 25000) {
     console.log(`[HELMET] ⚠️ No heartbeat for ${(timeSinceHelmetUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     helmetPaired.value = false;
     helmetRawConnected.value = false;
   }
   
-  // Motorcycle timeout check (8 seconds)
-  if (motorcyclePaired.value && timeSinceMotorcycleUpdate > 8000) {
+  // Motorcycle timeout check (25 seconds - tolerates network latency & Wi-Fi retries)
+  if (motorcyclePaired.value && timeSinceMotorcycleUpdate > 25000) {
     console.log(`[MOTORCYCLE] ⚠️ No heartbeat for ${(timeSinceMotorcycleUpdate/1000).toFixed(1)}s - marking as DISCONNECTED`);
     motorcyclePaired.value = false;
     motorcycleRawConnected.value = false;
@@ -2312,6 +2459,17 @@ onMounted(() => {
       riderSubtitle.value = 'Not logged in';
     }
   }, { immediate: true });
+  
+  // ✅ Automatically start/end trip session when engine starts or stops
+  watch(engineRunning, (newRunning, oldRunning) => {
+    if (newRunning && !oldRunning) {
+      console.log('[ENGINE] Started -> Starting trip session');
+      startTripSession('engine');
+    } else if (!newRunning && oldRunning) {
+      console.log('[ENGINE] Stopped -> Ending and saving trip session');
+      endTripSessionAndSave();
+    }
+  });
   
   // ✅ Setup real-time device listeners (instant updates)
   setupDeviceListeners();
@@ -2535,6 +2693,12 @@ const setupEngineStatusListener = () => {
             playSound();
             
             console.log('[CRASH] ✅ Crash alert added to dashboard');
+          } else if (!data.crashDetected && (wasCrashDetected === true || crashDisplayStatus.value === 'Alerting')) {
+            console.log('[CRASH] ✓ Vehicle restored upright — clearing crash alert and stopping sound');
+            clearInterval(crashInterval);
+            crashDisplayStatus.value = 'Stable';
+            crashDisplayMessage.value = 'Vehicle Stable';
+            stopSound();
           }
         }
       }
@@ -3071,6 +3235,11 @@ onBeforeUnmount(() => {
   // Clear heartbeat check interval
   if (heartbeatCheckInterval) {
     clearInterval(heartbeatCheckInterval);
+  }
+  
+  // Save active trip session if in progress
+  if (activeTripSession.value) {
+    endTripSessionAndSave();
   }
   
   // ✅ NEW: Clean up scroll listener

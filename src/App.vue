@@ -86,6 +86,14 @@
                 </svg>
                 <span>Device Setup</span>
               </router-link>
+
+              <router-link to="/profile" class="app-nav-pill" prefetch>
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>Profile</span>
+              </router-link>
             </nav>
           </div>
 
@@ -93,9 +101,13 @@
           <div class="flex items-center gap-3">
             
             <!-- User Profile Chip (Desktop) -->
-            <div class="hidden sm:flex items-center gap-3 bg-[#061B2B]/60 border border-white/10 rounded-2xl py-1.5 px-3.5 backdrop-blur-sm">
+            <router-link 
+              to="/profile" 
+              class="hidden sm:flex items-center gap-3 bg-[#061B2B]/60 hover:bg-[#061B2B]/90 border border-white/10 hover:border-[#00B85C]/50 rounded-2xl py-1.5 px-3.5 backdrop-blur-sm transition-all group cursor-pointer"
+              title="View & Edit Profile Settings"
+            >
               <!-- Avatar -->
-              <div class="relative w-8 h-8 rounded-full overflow-hidden border border-emerald-400/40 bg-gradient-to-tr from-[#00B85C] to-[#0B2540] flex items-center justify-center flex-shrink-0">
+              <div class="relative w-8 h-8 rounded-full overflow-hidden border border-emerald-400/40 group-hover:border-[#00B85C] bg-gradient-to-tr from-[#00B85C] to-[#0B2540] flex items-center justify-center flex-shrink-0 transition-all">
                 <img 
                   v-if="authStore.user?.photoURL" 
                   :src="authStore.user.photoURL" 
@@ -110,15 +122,15 @@
 
               <!-- Name & Role -->
               <div class="flex flex-col text-left">
-                <span class="text-xs font-bold text-white max-w-[120px] truncate leading-tight">
+                <span class="text-xs font-bold text-white max-w-[120px] truncate leading-tight group-hover:text-[#00B85C] transition-colors">
                   {{ authStore.user?.displayName || authStore.user?.email?.split('@')[0] || 'Rider' }}
                 </span>
                 <div class="flex items-center gap-1 mt-0.5">
                   <span class="w-1.5 h-1.5 rounded-full bg-[#00B85C] animate-pulse"></span>
-                  <span class="text-[10px] text-slate-300 font-medium uppercase tracking-wider">Rider</span>
+                  <span class="text-[10px] text-slate-300 font-medium uppercase tracking-wider">Rider Settings</span>
                 </div>
               </div>
-            </div>
+            </router-link>
 
             <!-- Logout Button (Desktop) -->
             <button 
@@ -154,18 +166,27 @@
         <!-- Mobile Navigation Drawer -->
         <transition name="drawer">
           <div v-if="showMobileMenu" class="sm:hidden border-t border-white/10 bg-[#0B2540] rounded-b-2xl shadow-2xl py-4 px-2 space-y-2">
-            <!-- Mobile User Profile -->
-            <div class="flex items-center gap-3 px-3 py-2 bg-white/5 rounded-xl border border-white/5 mb-3">
-              <div class="w-9 h-9 rounded-full bg-[#00B85C]/20 border border-[#00B85C] flex items-center justify-center font-bold text-white text-sm">
-                {{ (authStore.user?.displayName || authStore.user?.email || 'R')[0].toUpperCase() }}
+            <!-- Mobile User Profile (Clickable to /profile) -->
+            <router-link to="/profile" @click="closeMobileMenu" class="flex items-center gap-3 px-3 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 mb-3 transition-all group">
+              <div class="w-10 h-10 rounded-full overflow-hidden border border-[#00B85C] bg-[#00B85C]/20 flex items-center justify-center font-bold text-white text-sm flex-shrink-0">
+                <img 
+                  v-if="authStore.user?.photoURL" 
+                  :src="authStore.user.photoURL" 
+                  alt="Avatar"
+                  class="w-full h-full object-cover" 
+                />
+                <span v-else>{{ (authStore.user?.displayName || authStore.user?.email || 'R')[0].toUpperCase() }}</span>
               </div>
-              <div class="flex flex-col">
-                <span class="text-sm font-bold text-white">
+              <div class="flex flex-col text-left min-w-0 flex-1">
+                <span class="text-sm font-bold text-white truncate group-hover:text-[#00B85C] transition-colors">
                   {{ authStore.user?.displayName || authStore.user?.email || 'Rider' }}
                 </span>
-                <span class="text-xs text-[#00B85C] font-semibold">Active Session</span>
+                <span class="text-[11px] text-[#00B85C] font-semibold flex items-center gap-1">
+                  <span class="material-icons text-xs">manage_accounts</span>
+                  Edit Profile & Security
+                </span>
               </div>
-            </div>
+            </router-link>
 
             <!-- Links -->
             <router-link to="/dashboard" class="app-nav-pill-mobile" @click="closeMobileMenu" prefetch>
@@ -186,6 +207,11 @@
             <router-link to="/device-setup" class="app-nav-pill-mobile" @click="closeMobileMenu" prefetch>
               <span class="material-icons text-lg">settings_suggest</span>
               <span>Device Setup</span>
+            </router-link>
+
+            <router-link to="/profile" class="app-nav-pill-mobile" @click="closeMobileMenu" prefetch>
+              <span class="material-icons text-lg">account_circle</span>
+              <span>Profile Settings</span>
             </router-link>
 
             <!-- Mobile Logout -->
@@ -256,6 +282,14 @@
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
         <span>Setup</span>
+      </router-link>
+
+      <router-link to="/profile" class="mobile-tab-btn" prefetch>
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span>Profile</span>
       </router-link>
     </nav>
 

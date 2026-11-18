@@ -53,6 +53,20 @@ const routes = [
     path: '/emergency-dashboard/:userId',
     name: 'EmergencyContactDashboard',
     component: () => import(/* webpackChunkName: "emergency" */ '../views/EmergencyContactDashboard.vue')
+  },
+  {
+    path: '/profile',
+    name: 'ProfileSettings',
+    component: () => import(/* webpackChunkName: "profile" */ '../views/ProfileSettings.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile-settings',
+    redirect: '/profile'
+  },
+  {
+    path: '/settings',
+    redirect: '/profile'
   }
 ];
 

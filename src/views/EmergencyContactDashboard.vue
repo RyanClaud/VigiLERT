@@ -452,6 +452,9 @@
           :speed-limit="speedLimit"
           :satellites="satelliteCount"
           :is-over-speed="isOverSpeed"
+          :crash-events="crashEvents"
+          :crash-detected="crashDisplayStatus !== 'Stable'"
+          :rider-photo="riderPhoto"
         />
       </div>
 
@@ -629,6 +632,7 @@ const location            = ref({ lat: null, lng: null });
 const currentTime         = ref(new Date().toLocaleTimeString());
 const satelliteCount      = ref(0);
 const emergencyContactLocation = ref({ lat: null, lng: null });
+const riderPhoto              = ref('');
 
 // Anti-theft banner (mirrors user dashboard)
 const antiTheftAlert = ref({
@@ -697,6 +701,14 @@ const playAlertSound = () => {
   } catch {}
 };
 
+const stopAlertSound = () => {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+};
+
 const updateSpeedLimitInFirebase = () => {
   // Write to the path the user dashboard reads from
   set(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), speedLimit.value)
@@ -729,7 +741,15 @@ const triggerSOS = async () => {
   }
 };
 
-const dismissAntiTheftAlert = () => { antiTheftAlert.value.active = false; };
+const dismissAntiTheftAlert = () => { 
+  antiTheftAlert.value.active = false; 
+  stopAlertSound(); 
+};
+
+const dismissCrashAlert = () => {
+  crashDisplayStatus.value = 'Stable';
+  stopAlertSound();
+};
 
 // -- Helper: push alert to list ---------------------------------------------
 const addAlert = (type, message, details = '') => {
@@ -813,8 +833,23 @@ const setupFirebaseListeners = () => {
     if (d.crashDetected) {
       crashDisplayStatus.value  = 'Alert';
       crashDisplayMessage.value = 'Crash Detected';
+      // If no crash event has been indexed yet, synthesize live crash marker on the map
+      if (crashEvents.value.length === 0 && location.value.lat && location.value.lng) {
+        crashEvents.value.unshift({
+          timestamp: Date.now(),
+          impactStrength: d.mpu6050?.totalAccel ? (d.mpu6050.totalAccel / 9.81).toFixed(1) : 'Severe',
+          roll: d.mpu6050?.roll || 0,
+          lat: location.value.lat,
+          lng: location.value.lng,
+          hasGPS: true,
+          severity: 'High',
+          time: new Date().toLocaleTimeString(),
+          speed: d.speed || 0
+        });
+      }
     } else {
-      // Only reset if no crash events are stored
+      // Vehicle uprighted / crash cleared
+      stopAlertSound();
       if (crashEvents.value.length === 0) {
         crashDisplayStatus.value  = 'Stable';
         crashDisplayMessage.value = 'Normal';
@@ -937,6 +972,16 @@ const setupFirebaseListeners = () => {
     const d = snap.val();
     if (d !== null && d !== undefined) speedLimit.value = d;
   });
+
+  // -- 10. Rider profile & avatar sync for map marker ------------------------
+  onValue(dbRef(database, `users/${userUID}`), snap => {
+    const d = snap.val();
+    if (d && d.photoURL) riderPhoto.value = d.photoURL;
+  });
+  onValue(dbRef(database, `helmet_public/${userUID}/profile`), snap => {
+    const d = snap.val();
+    if (d && d.photoURL) riderPhoto.value = d.photoURL;
+  });
 };
 
 // -- Lifecycle --------------------------------------------------------------
@@ -965,3 +1010,4 @@ onUnmounted(() => {
 .custom-scrollbar::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #7091E6, #3D52A0); border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3D52A0; }
 </style>
+

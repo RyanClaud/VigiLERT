@@ -13,11 +13,11 @@
 
 // WiFi Configuration
 const char* ssid = "DPWH";
-const char* password = "12345678900";
+const char* password = "123456789000";
 
 // Firebase Configuration
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
-const String userUID = "sAMQqMSJyINqxy5jDbOktViJ8oH3";
+const String userUID = "DMIARybyNHVhzwAmrx2QQjdpSb13";
 const String firebaseAuth = "";
 
 // Hardware Pins

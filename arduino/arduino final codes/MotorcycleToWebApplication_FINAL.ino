@@ -37,7 +37,7 @@ const char* password = "123456789000";
 
 // Firebase Configuration
 const String firebaseHost = "https://vigilance-shield-default-rtdb.firebaseio.com";
-const String userUID = "sAMQqMSJyINqxy5jDbOktViJ8oH3";
+const String userUID = "DMIARybyNHVhzwAmrx2QQjdpSb13";
 const String firebaseAuth = "";
 
 // ✅ Emergency contacts are fetched from Firebase (users/{uid}/emergencyContacts)
@@ -127,7 +127,7 @@ bool helmetConnected = false;
 unsigned long lastHelmetCheck = 0;
 const unsigned long HELMET_CHECK_INTERVAL = 1000;  // Check every 1s for faster detection
 uint64_t lastHelmetHeartbeat = 0;
-const unsigned long HELMET_TIMEOUT = 5000;   // 5s � engine cuts within ~6s of helmet disconnect
+const unsigned long HELMET_TIMEOUT = 20000;  // 20s - prevents false engine cut-off on WiFi jitter
 const unsigned long HELMET_FORCE_OFF_TIMEOUT = 20000;
 unsigned long lastHelmetUpdateTime = 0;
 bool helmetStatusForcedOff = false;
@@ -832,7 +832,8 @@ void loop() {
     bool isStable = (currentTotalAccel < ACCEL_THRESHOLD - 2.0 && totalG < 2.0);
     if (isUpright && isStable) {
       crashDetected = false;
-      Serial.println("[INFO] ✓ Vehicle restored upright — Crash cleared");
+      stopSiren();  // ✅ Automatically silence siren when vehicle is restored upright!
+      Serial.println("[INFO] ✓ Vehicle restored upright — Crash cleared & Siren silenced");
       sendLiveToFirebase();
     }
   }
@@ -2091,20 +2092,23 @@ void checkWiFiWatchdog() {
 }
 
 void checkHelmetConnection() {
-  static String        lastSuffix  = "";
-  static unsigned long lastAdvTime = 0;
-  static bool          initialized = false;
+  static String        lastSuffix           = "";
+  static unsigned long lastAdvTime          = 0;
+  static bool          initialized          = false;
+  static int           consecutiveFailures  = 0;
+  static int           httpFailures         = 0;
 
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  http.setTimeout(1500);
+  http.setTimeout(2500);  // Allow up to 2.5s for Firebase response
   String helmetPath = firebaseHost + "/helmet_public/" + userUID + "/devices/helmet.json?auth=" + firebaseAuth;
   http.begin(helmetPath);
   int httpCode = http.GET();
   unsigned long now = millis();
 
   if (httpCode == HTTP_CODE_OK) {
+    httpFailures = 0;
     String response = http.getString();
     http.end();
 
@@ -2125,17 +2129,21 @@ void checkHelmetConnection() {
       bool on = (response.indexOf("\"status\":\"On\"") != -1);
       if (on) {
         lastHelmetUpdateTime = now;
+        consecutiveFailures = 0;
         if (!helmetConnected) { helmetConnected = true; Serial.println("[HELMET] Connected"); }
       } else if (helmetConnected) {
-        Serial.println("[HELMET] Status Off - disconnected");
-        helmetConnected = false;
-        lastHelmetUpdateTime = 0;
-        if (engineRunning) {
-          Serial.println("[HELMET] Cutting relay - status Off");
-          digitalWrite(relayPin, HIGH);
-          engineRunning = false;
-          endTrip();
-          startSiren();
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) {
+          Serial.println("[HELMET] Status Off - disconnected");
+          helmetConnected = false;
+          lastHelmetUpdateTime = 0;
+          if (engineRunning) {
+            Serial.println("[HELMET] Cutting relay - status Off");
+            digitalWrite(relayPin, HIGH);
+            engineRunning = false;
+            endTrip();
+            startSiren();
+          }
         }
       }
       return;
@@ -2146,6 +2154,7 @@ void checkHelmetConnection() {
       lastAdvTime  = now;
       initialized  = true;
       lastHelmetUpdateTime = now;
+      consecutiveFailures = 0;
       Serial.printf("[HELMET] First read suffix: %s\n", suffix.c_str());
       return;
     }
@@ -2154,6 +2163,7 @@ void checkHelmetConnection() {
       lastSuffix   = suffix;
       lastAdvTime  = now;
       lastHelmetUpdateTime = now;
+      consecutiveFailures = 0;
       helmetStatusForcedOff = false;
       if (!helmetConnected) {
         Serial.println("[HELMET] Connected - heartbeat advancing");
@@ -2162,8 +2172,9 @@ void checkHelmetConnection() {
     } else {
       unsigned long frozen = now - lastAdvTime;
       if (frozen > HELMET_TIMEOUT) {
-        if (helmetConnected) {
-          Serial.printf("[HELMET] Frozen %lu ms - DISCONNECTED\n", frozen);
+        consecutiveFailures++;
+        if (helmetConnected && consecutiveFailures >= 3) {
+          Serial.printf("[HELMET] Frozen %lu ms (strikes: %d) - DISCONNECTED\n", frozen, consecutiveFailures);
           helmetConnected = false;
           lastHelmetUpdateTime = 0;
           if (engineRunning) {
@@ -2176,14 +2187,16 @@ void checkHelmetConnection() {
         }
       } else {
         lastHelmetUpdateTime = now;
+        consecutiveFailures = 0;
       }
     }
 
   } else {
     http.end();
+    httpFailures++;
     unsigned long sinceLastOK = (lastHelmetUpdateTime > 0) ? (now - lastHelmetUpdateTime) : now;
-    if (sinceLastOK > HELMET_TIMEOUT && helmetConnected) {
-      Serial.printf("[HELMET] HTTP %d for %lu ms - DISCONNECTED\n", httpCode, sinceLastOK);
+    if (sinceLastOK > HELMET_TIMEOUT && httpFailures >= 4 && helmetConnected) {
+      Serial.printf("[HELMET] HTTP %d for %lu ms (fails: %d) - DISCONNECTED\n", httpCode, sinceLastOK, httpFailures);
       helmetConnected = false;
       lastHelmetUpdateTime = 0;
       if (engineRunning) {
@@ -2196,7 +2209,7 @@ void checkHelmetConnection() {
     } else {
       static unsigned long lastFailLog = 0;
       if (now - lastFailLog > 3000) {
-        Serial.printf("[HELMET] HTTP %d | No OK for %lu ms\n", httpCode, sinceLastOK);
+        Serial.printf("[HELMET] HTTP %d | No OK for %lu ms (failures: %d)\n", httpCode, sinceLastOK, httpFailures);
         lastFailLog = now;
       }
     }
@@ -2241,7 +2254,7 @@ void forceHelmetStatusOff() {
   
   http.end();
 }
-// ✅ NEW: Trip tracking functions
+// ✅ ENHANCED: Trip tracking functions
 void startTrip() {
   Serial.println("\n🗺️ STARTING TRIP TRACKING");
   
@@ -2251,12 +2264,30 @@ void startTrip() {
   currentTrip.startTime = 1746057600000ULL + (uint64_t)millis();
   currentTrip.maxSpeed = 0.0;
   currentTrip.totalDistance = 0.0;
-  currentTrip.fromLat = 0.0;
-  currentTrip.fromLng = 0.0;
-  currentTrip.toLat = 0.0;
-  currentTrip.toLng = 0.0;
   
-  Serial.println("[TRIP] 📍 Waiting for first GPS fix...");
+  if (gps.location.isValid()) {
+    currentTrip.fromLat = gps.location.lat();
+    currentTrip.fromLng = gps.location.lng();
+    currentTrip.toLat = currentTrip.fromLat;
+    currentTrip.toLng = currentTrip.fromLng;
+    currentTrip.hasValidStart = true;
+    lastValidLat = currentTrip.fromLat;
+    lastValidLng = currentTrip.fromLng;
+    Serial.printf("[TRIP] 🚀 Starting at GPS: %.6f, %.6f\n", currentTrip.fromLat, currentTrip.fromLng);
+  } else if (lastValidLat != 0.0 && lastValidLng != 0.0) {
+    currentTrip.fromLat = lastValidLat;
+    currentTrip.fromLng = lastValidLng;
+    currentTrip.toLat = lastValidLat;
+    currentTrip.toLng = lastValidLng;
+    currentTrip.hasValidStart = true;
+    Serial.printf("[TRIP] 🚀 Starting at Last Known GPS: %.6f, %.6f\n", lastValidLat, lastValidLng);
+  } else {
+    currentTrip.fromLat = 0.0;
+    currentTrip.fromLng = 0.0;
+    currentTrip.toLat = 0.0;
+    currentTrip.toLng = 0.0;
+    Serial.println("[TRIP] 📍 Waiting for GPS fix during ride...");
+  }
 }
 
 void updateTripData() {
@@ -2317,26 +2348,30 @@ void endTrip() {
   currentTrip.endTime = 1746057600000ULL + (uint64_t)millis();
   currentTrip.isActive = false;
   
-  // Only save trip if we have valid start and end coordinates
-  if (currentTrip.hasValidStart && currentTrip.toLat != 0.0 && currentTrip.toLng != 0.0) {
+  uint64_t duration = currentTrip.endTime - currentTrip.startTime;
+
+  // If GPS acquired coordinates during the trip, use them; otherwise use last valid or fallback
+  if (!currentTrip.hasValidStart && lastValidLat != 0.0 && lastValidLng != 0.0) {
+    currentTrip.fromLat = lastValidLat;
+    currentTrip.fromLng = lastValidLng;
+    currentTrip.toLat = lastValidLat;
+    currentTrip.toLng = lastValidLng;
+    currentTrip.hasValidStart = true;
+  }
+
+  // Save trip if engine ran for at least 3 seconds
+  if (duration >= 3000) {
     Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\n", currentTrip.fromLat, currentTrip.fromLng);
     Serial.printf("[TRIP] 🏁 TO: %.6f, %.6f\n", currentTrip.toLat, currentTrip.toLng);
     Serial.printf("[TRIP] 📊 Distance: %.2f km | Max Speed: %.1f kph\n", 
                   currentTrip.totalDistance, currentTrip.maxSpeed);
-    
-    // Calculate trip duration
-    uint64_t duration = currentTrip.endTime - currentTrip.startTime;
-    Serial.printf("[TRIP] ⏱️ Duration: %llu minutes\n", duration / 60000);
+    Serial.printf("[TRIP] ⏱️ Duration: %llu seconds\n", duration / 1000);
     
     // Save trip to Firebase
     saveTripToFirebase();
   } else {
-    Serial.println("[TRIP] ⚠️ No valid GPS data - trip not saved");
+    Serial.println("[TRIP] ⚠️ Ride duration < 3s — trip ignored");
   }
-  
-  // Reset for next trip
-  lastValidLat = 0.0;
-  lastValidLng = 0.0;
 }
 
 void saveTripToFirebase() {
@@ -2347,6 +2382,7 @@ void saveTripToFirebase() {
   StaticJsonDocument<512> doc;
   doc["startTime"] = currentTrip.startTime;
   doc["endTime"]   = currentTrip.endTime;
+  doc["timestamp"] = currentTrip.endTime;
   doc["duration"]  = currentTrip.endTime - currentTrip.startTime;
 
   // ── Coordinates using field names the dashboard expects ──────────────────
@@ -2370,6 +2406,7 @@ void saveTripToFirebase() {
     ? (currentTrip.totalDistance / (durationMs / 3600000.0))
     : 0.0;
 
+  doc["hasGPS"]      = (currentTrip.fromLat != 0.0 && currentTrip.fromLng != 0.0);
   doc["vehicleType"] = "motorcycle";
   doc["userId"]      = userUID;
   doc["tripId"]      = String(currentTrip.startTime);
@@ -2512,6 +2549,7 @@ void printSecurityStatus() {
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
+
 
 
 
