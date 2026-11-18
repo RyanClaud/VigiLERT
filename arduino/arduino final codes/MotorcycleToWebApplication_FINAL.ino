@@ -695,31 +695,90 @@ void loop() {
     }
   }
 
-  // ✅ OPTIMIZED: Read MPU6050 continuously (no delay) for instant crash and tilt detection
-  float leanAngle = 0.0;
-  if (MPU6050_ENABLED) {
-    mpu.getEvent(&accel, &gyro, &temp);
-    currentTotalAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
-                             accel.acceleration.y * accel.acceleration.y +
-                             accel.acceleration.z * accel.acceleration.z);
-    // Roll: rotation around X axis (left/right lean)
-    currentRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
-    // Pitch: rotation around Y axis (forward/backward pitch)
-    currentPitch = atan2(-accel.acceleration.x, sqrt(accel.acceleration.y * accel.acceleration.y + accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
-    // 3D deviation from vertical (upright Z axis with gravity ~9.8 m/s²)
-    float safeAccel = currentTotalAccel > 0.1 ? currentTotalAccel : 9.8;
-    float normalizedZ = constrain(abs(accel.acceleration.z) / safeAccel, 0.0, 1.0);
-    float tiltFromVertical = acos(normalizedZ) * 180.0 / PI;
-    // Comprehensive lean angle catches tilting in ANY direction (roll, pitch, or diagonal)
-    leanAngle = max(abs(currentRoll), tiltFromVertical);
-    currentLeanAngle = leanAngle;
-  } else {
-    // ✅ TESTING: Simulate normal values when MPU6050 is not connected
-    currentTotalAccel = 9.8;  // Normal gravity
-    currentRoll = 0.0;        // Level position
-    currentPitch = 0.0;
-    currentLeanAngle = 0.0;
-    leanAngle = 0.0;
+  // ── MPU6050 Periodic Read & Crash Detection (50ms interval = 20Hz) ─────────
+  // Throttled to 50ms to prevent I2C bus starvation and sensor FIFO timeouts.
+  static unsigned long lastMPUSampleTime = 0;
+  static int consecutiveTiltCrashCount = 0;
+  static int consecutiveUprightCount = 0;
+
+  if (millis() - lastMPUSampleTime >= 50) {
+    lastMPUSampleTime = millis();
+
+    if (MPU6050_ENABLED) {
+      bool mpuSuccess = mpu.getEvent(&accel, &gyro, &temp);
+      float measuredAccel = sqrt(accel.acceleration.x * accel.acceleration.x +
+                                 accel.acceleration.y * accel.acceleration.y +
+                                 accel.acceleration.z * accel.acceleration.z);
+
+      // Sanity validation: On Earth, gravity exerts ~9.8 m/s² (1.0g).
+      // If measuredAccel < 3.0 m/s², it is an invalid I2C read / glitch / booting.
+      // NEVER calculate a false 90° tilt on zero acceleration!
+      if (mpuSuccess && measuredAccel >= 3.0) {
+        currentTotalAccel = measuredAccel;
+        // Roll: sideways tilt (left/right lean)
+        currentRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+        // Pitch: front/rear tilt (forward/backward pitch)
+        currentPitch = atan2(-accel.acceleration.x, sqrt(accel.acceleration.y * accel.acceleration.y + accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
+        // Real motorcycle lean is how far the vehicle has rolled or pitched away from vertical
+        currentLeanAngle = max(abs(currentRoll), abs(currentPitch));
+      } else {
+        // Safe baseline: keep normal gravity and 0° lean if read is zero/glitched
+        if (currentTotalAccel < 3.0) {
+          currentTotalAccel = 9.8;
+          currentRoll = 0.0;
+          currentPitch = 0.0;
+          currentLeanAngle = 0.0;
+        }
+      }
+    } else {
+      currentTotalAccel = 9.8;
+      currentRoll = 0.0;
+      currentPitch = 0.0;
+      currentLeanAngle = 0.0;
+    }
+
+    // ── Crash & Tilt Detection Logic ─────────────────────────────────────────
+    float totalG = currentTotalAccel / 9.80665;
+    bool isImpactCrash = (currentTotalAccel >= ACCEL_THRESHOLD || totalG >= 3.5);
+    bool isSevereTilt  = (currentLeanAngle >= 45.0 && currentTotalAccel >= 4.0);
+    bool isRidingCrash = (engineRunning && currentLeanAngle >= 40.0 && currentTotalAccel >= 4.0);
+
+    // Require sustained tilt for 3 consecutive samples (150ms) to filter out table taps / sensor noise
+    if (isSevereTilt || isRidingCrash) {
+      consecutiveTiltCrashCount++;
+    } else {
+      consecutiveTiltCrashCount = 0;
+    }
+
+    bool shouldTriggerCrash = isImpactCrash || (consecutiveTiltCrashCount >= 3);
+
+    if (MPU6050_ENABLED && shouldTriggerCrash && !crashDetected) {
+      unsigned long timeSinceLastCrash = millis() - lastCrashTime;
+      if (timeSinceLastCrash >= CRASH_COOLDOWN) {
+        Serial.printf("\n[CRASH] 🚨 DETECTED! Accel: %.2fg (%.1f m/s²), Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Engine: %s\n",
+                      totalG, currentTotalAccel, currentLeanAngle, currentRoll, currentPitch,
+                      engineRunning ? "RUNNING" : "STOPPED");
+        triggerCrashShutdown(totalG, currentLeanAngle);
+      }
+    }
+
+    // Auto-restore when vehicle is upright and stable
+    if (crashDetected && MPU6050_ENABLED) {
+      bool isUpright = (currentLeanAngle < 25.0 && currentTotalAccel >= 6.0 && currentTotalAccel <= 14.0);
+      if (isUpright) {
+        consecutiveUprightCount++;
+        if (consecutiveUprightCount >= 3) { // 3 consecutive upright readings (150ms)
+          crashDetected = false;
+          consecutiveUprightCount = 0;
+          consecutiveTiltCrashCount = 0;
+          stopSiren();
+          Serial.println("[INFO] ✓ Vehicle restored upright — Crash cleared & Siren silenced");
+          sendLiveToFirebase();
+        }
+      } else {
+        consecutiveUprightCount = 0;
+      }
+    }
   }
 
   // -- Vibration sensor / anti-theft state management -------------------------
@@ -770,47 +829,11 @@ void loop() {
   if (millis() - lastMPULogTime >= 1000) {
     if (MPU6050_ENABLED) {
       Serial.printf("[MPU6050] Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Accel: %.2fg | Engine: %s | State: %s\n",
-                    leanAngle, currentRoll, currentPitch, currentTotalAccel / 9.80665,
+                    currentLeanAngle, currentRoll, currentPitch, currentTotalAccel / 9.80665,
                     engineRunning ? "RUNNING" : "STOPPED",
                     crashDetected ? "CRASH ALERT" : "NORMAL");
     }
     lastMPULogTime = millis();
-  }
-
-  // ✅ OPTIMIZED: Crash & Tilt detection with continuous monitoring
-  // 1. High impact spike (currentTotalAccel >= ACCEL_THRESHOLD or >= 3.0g)
-  // 2. Severe tilt / tip-over (leanAngle >= 45.0 degrees) - works even during bench testing or parked tip-over!
-  // 3. Riding lean limit (engineRunning && leanAngle >= 40.0 degrees)
-  float totalG = currentTotalAccel / 9.80665;
-  bool isImpactCrash = (currentTotalAccel >= ACCEL_THRESHOLD || totalG >= 3.0);
-  bool isSevereTilt  = (leanAngle >= 45.0);
-  bool isRidingCrash = (engineRunning && leanAngle >= 40.0);
-
-  if (MPU6050_ENABLED && (isImpactCrash || isSevereTilt || isRidingCrash) && !crashDetected) {
-    unsigned long timeSinceLastCrash = millis() - lastCrashTime;
-    if (timeSinceLastCrash >= CRASH_COOLDOWN) {
-      Serial.printf("\n[CRASH] 🚨 DETECTED! Accel: %.2fg (%.1f m/s²), Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Engine: %s\n",
-                    totalG, currentTotalAccel, leanAngle, currentRoll, currentPitch,
-                    engineRunning ? "RUNNING" : "STOPPED");
-      triggerCrashShutdown(totalG, leanAngle);
-    } else {
-      static unsigned long lastCooldownMsg = 0;
-      if (millis() - lastCooldownMsg > 1000) {
-        Serial.printf("[CRASH] In cooldown (%lu ms remaining)\n", CRASH_COOLDOWN - timeSinceLastCrash);
-        lastCooldownMsg = millis();
-      }
-    }
-  }
-
-  if (crashDetected && MPU6050_ENABLED) {
-    bool isUpright = (leanAngle < 25.0);
-    bool isStable = (currentTotalAccel < ACCEL_THRESHOLD - 2.0 && totalG < 2.0);
-    if (isUpright && isStable) {
-      crashDetected = false;
-      stopSiren();  // ✅ Automatically silence siren when vehicle is restored upright!
-      Serial.println("[INFO] ✓ Vehicle restored upright — Crash cleared & Siren silenced");
-      sendLiveToFirebase();
-    }
   }
 
   // ✅ NEW: Helmet connection monitoring
@@ -1388,6 +1411,13 @@ void startEngine() {
   // can be up to 2s stale even when the helmet is live.
   bool helmetOK = helmetConnected;
   bool alcoholOK = !alcoholDetected;
+  // Auto-clear crash alert if vehicle is currently sitting upright
+  if (crashDetected && currentLeanAngle < 30.0 && currentTotalAccel < 15.0) {
+    crashDetected = false;
+    Serial.println("[ENGINE] ✓ Vehicle is currently upright -- auto-cleared previous crash alert!");
+    sendLiveToFirebase();
+  }
+
   bool crashOK   = !crashDetected;
   
   Serial.printf("[ENGINE] WiFi: %s (%lu ms ago)\n", wifiOK ? "OK ✅" : "TIMEOUT ❌", timeSinceWiFi);

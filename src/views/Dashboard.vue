@@ -1449,6 +1449,7 @@ const setupFirebaseListeners = () => {
     console.error('[HELMET_PUBLIC] helmetPublicRef is null, cannot set up listener');
     return;
   }
+  let isInitialLiveCrashCheck = true;
   onValue(helmetPublicRef.value, (snapshot) => {
     const data = snapshot.val();
     if (data?.live) {
@@ -1536,10 +1537,39 @@ const setupFirebaseListeners = () => {
       // ✅ Update crash detection status
       if (typeof liveData.crashDetected !== 'undefined') {
         const wasCrash = sensorData.value.crashDetected;
-        sensorData.value.crashDetected = liveData.crashDetected;
-        console.log('[CRASH] Status updated:', liveData.crashDetected ? 'DETECTED' : 'CLEAR');
+        const incomingCrash = Boolean(liveData.crashDetected);
 
-        if (liveData.crashDetected && !wasCrash) {
+        // Sanity check: is vehicle upright and is this reading stale from before app opened?
+        const mpu = liveData.mpu6050;
+        const isUpright = mpu ? (Math.abs(mpu.roll || 0) < 30 && Math.abs(mpu.pitch || 0) < 30 && (mpu.totalAccel || 9.8) < 15) : true;
+        const liveTimestamp = Number(liveData.timestamp || 0);
+        const isOldSession = liveTimestamp > 0 && liveTimestamp < appStartTime.value - 5000;
+
+        if (isInitialLiveCrashCheck) {
+          isInitialLiveCrashCheck = false;
+          // If dashboard opened/refreshed and crash is either from past session or vehicle is upright:
+          if (incomingCrash && (isUpright || isOldSession)) {
+            console.log('[CRASH] Initial load detected stale or upright crash flag. Auto-clearing...');
+            sensorData.value.crashDetected = false;
+            crashDisplayStatus.value = 'Stable';
+            crashDisplayMessage.value = 'Vehicle Stable';
+            if (userId.value) {
+              set(dbRef(database, `helmet_public/${userId.value}/live/crashDetected`), false).catch(() => {});
+            }
+            return;
+          }
+        }
+
+        sensorData.value.crashDetected = incomingCrash;
+        console.log('[CRASH] Status updated:', incomingCrash ? 'DETECTED' : 'CLEAR');
+
+        if (incomingCrash && !wasCrash && !isOldSession) {
+          // Double check that it's not a zero-accel sensor glitch (0.00g and 0 roll)
+          if (mpu && mpu.totalAccel < 3.0 && Math.abs(mpu.roll || 0) < 5.0 && Math.abs(mpu.pitch || 0) < 5.0) {
+            console.warn('[CRASH] Ignored false crash triggered by zero-accel sensor read');
+            sensorData.value.crashDetected = false;
+            return;
+          }
           crashDisplayStatus.value = 'Alerting';
           crashDisplayMessage.value = 'Crash Detected!';
           const impactVal = liveData.mpu6050?.totalAccel ? (liveData.mpu6050.totalAccel / 9.81).toFixed(1) + ' g' : 'Severe';
@@ -1554,7 +1584,7 @@ const setupFirebaseListeners = () => {
           if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
           flashCrashMessage();
           playSound('crash');
-        } else if (!liveData.crashDetected && (wasCrash || crashDisplayStatus.value === 'Alerting')) {
+        } else if (!incomingCrash && (wasCrash || crashDisplayStatus.value === 'Alerting')) {
           if (crashInterval) {
             clearInterval(crashInterval);
             crashInterval = null;
@@ -2365,6 +2395,8 @@ const initializeCrashListener = () => {
   // Track Firebase keys we've already processed so we never show the same crash twice
   const seenCrashKeys = new Set();
   let initialCrashLoadDone = false;
+  const sessionStartTime = Date.now();
+  setTimeout(() => { initialCrashLoadDone = true; }, 3000);
 
   // Pre-index existing keys using get() so historical crashes don't trigger alerts on boot
   get(crashRef.value).then((snapshot) => {
@@ -2386,21 +2418,11 @@ const initializeCrashListener = () => {
 
     if (!event) return;
 
-    if (!initialCrashLoadDone) {
-      seenCrashKeys.add(key);
-      return;
-    }
-
-    if (seenCrashKeys.has(key)) return;
-    seenCrashKeys.add(key);
-
-    console.log('[CRASH] 🚨 Real-time crash event received:', { key, event });
-
-    const eventTime = event.timestamp || Date.now();
+    const eventTime = Number(event.timestamp || 0);
 
     // Build crash event object
     const crashEvent = {
-      timestamp: eventTime,
+      timestamp: eventTime || Date.now(),
       impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
       roll: event.roll || event.leanAngle || 0,
       location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
@@ -2408,9 +2430,25 @@ const initializeCrashListener = () => {
       lng: event.lng || (event.location && event.location.lng) || null,
       hasGPS: event.hasGPS || (event.gpsValid === true) || (event.lat && event.lat !== 0),
       severity: event.severity || 'Medium',
-      time: new Date().toLocaleTimeString(),
+      time: eventTime ? new Date(eventTime).toLocaleTimeString() : new Date().toLocaleTimeString(),
       speed: event.speed || 0
     };
+
+    // If historical (older than session start or during initial load), only store quietly for map, NEVER alert!
+    const isHistorical = (!initialCrashLoadDone) || (eventTime > 0 && eventTime < sessionStartTime - 10000);
+
+    if (isHistorical) {
+      seenCrashKeys.add(key);
+      if (crashEvents.value.length === 0) {
+        crashEvents.value = [crashEvent];
+      }
+      return;
+    }
+
+    if (seenCrashKeys.has(key)) return;
+    seenCrashKeys.add(key);
+
+    console.log('[CRASH] 🚨 Real-time crash event received:', { key, event });
 
     // Keep only the latest crash marker on the map
     crashEvents.value = [crashEvent];
@@ -2652,8 +2690,17 @@ const toggleEngine = async () => {
 
   const uid = userId.value || authStore.user?.uid || 'DMIARybyNHVHzwAmrx2QQjdpSb13';
 
-  // 3. Trip lifecycle trigger
+  // 3. Trip lifecycle trigger & safety state clearing
   if (nextState) {
+    // When starting engine, instantly clear lingering crash status & silence alarms
+    sensorData.value.crashDetected = false;
+    crashDisplayStatus.value = 'Stable';
+    crashDisplayMessage.value = 'Vehicle Stable';
+    if (crashInterval) {
+      clearInterval(crashInterval);
+      crashInterval = null;
+    }
+    stopSound();
     startTripSession('engine');
   } else {
     endTripSessionAndSave();
@@ -2661,12 +2708,17 @@ const toggleEngine = async () => {
 
   try {
     // 4. Update Firebase instantly across all nodes simultaneously
-    await Promise.all([
+    const updates = [
       set(dbRef(database, `${uid}/engineControl/startButton`), true),
       set(dbRef(database, `${uid}/engineControl/engineRunning`), nextState),
       set(dbRef(database, `helmet_public/${uid}/live/engineRunning`), nextState),
       set(dbRef(database, `helmet_public/${uid}/devices/motorcycle/engineRunning`), nextState)
-    ]);
+    ];
+    if (nextState) {
+      updates.push(set(dbRef(database, `helmet_public/${uid}/live/crashDetected`), false));
+      updates.push(set(dbRef(database, `${uid}/engineControl/crashDetected`), false));
+    }
+    await Promise.all(updates);
     console.log(`[ENGINE] ⚡ Instant toggle completed -> ${nextState ? 'RUNNING' : 'STOPPED'}`);
   } catch (error) {
     console.error('[ENGINE] Failed to toggle engine in Firebase:', error);
