@@ -26,7 +26,7 @@ const int ledPin = 2;
 const int buzzerPin = 5;
 
 // Sensor Configuration
-const int alcoholThreshold = 600;
+const int alcoholThreshold = 1500;
 
 // Update Intervals
 unsigned long lastHeartbeat = 0;

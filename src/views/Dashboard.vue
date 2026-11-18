@@ -1371,10 +1371,13 @@ const setupFirebaseListeners = () => {
         lastUpdate: Date.now()
       };
       
+      // ✅ Determine alcohol danger status
+      const isAlcoholDanger = status === "Danger" || status === "danger" || status === "DANGER" || data.detected === true || (sensorValue >= 1500 && sensorValue > 0);
+      
       // ✅ Update alcohol status with force reactivity using nextTick
-      if (status === "Danger") {
+      if (isAlcoholDanger) {
         console.log('🚨🚨🚨 ALCOHOL DANGER DETECTED! 🚨🚨🚨');
-        console.log(`   Value ${sensorValue} exceeds threshold ${threshold}`);
+        console.log(`   Value ${sensorValue} indicates alcohol danger!`);
         
         // Force update refs with immediate assignment
         alcoholStatus.value = 'Danger';
@@ -1384,6 +1387,34 @@ const setupFirebaseListeners = () => {
         console.log(`[UPDATE] alcoholStatus AFTER update: ${alcoholStatus.value}`);
         console.log(`[UPDATE] alcoholSubtitle AFTER update: ${alcoholSubtitle.value}`);
         console.log(`[UPDATE] alcoholDetected AFTER update: ${alcoholDetected.value}`);
+        
+        // 🛑 AUTOMATIC SAFETY ENGINE SHUTDOWN: If engine is running, cut ignition immediately!
+        if (engineRunning.value) {
+          console.log('[SAFETY] 🚨 Alcohol threshold exceeded while engine is running! Shutting down engine automatically...');
+          engineRunning.value = false;
+          enginePending.value = false;
+          
+          stopSound();
+          playSound();
+          
+          endTripSessionAndSave();
+          
+          const uid = userId.value || authStore.user?.uid || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+          set(dbRef(database, `${uid}/engineControl/command`), 'STOP');
+          set(dbRef(database, `${uid}/engineControl/stopButton`), true);
+          set(dbRef(database, `${uid}/engineControl/startButton`), false);
+          set(dbRef(database, `${uid}/engineControl/engineRunning`), false);
+          set(dbRef(database, `helmet_public/${uid}/live/engineRunning`), false);
+          set(dbRef(database, `helmet_public/${uid}/devices/motorcycle/engineRunning`), false);
+          
+          alerts.value.unshift({
+            type: 'alcohol',
+            message: '🛑 Engine Shut Down — Alcohol Detected!',
+            details: `Engine was automatically stopped for rider safety (Alcohol level: ${sensorValue}). DO NOT RIDE!`,
+            time: new Date().toLocaleTimeString()
+          });
+          if (alerts.value.length > 10) alerts.value = alerts.value.slice(0, 10);
+        }
         
         // Add alcohol alert - only if this is a NEW detection (after app start)
         const alcoholAlertTime = data.timestamp || Date.now();
@@ -2822,14 +2853,26 @@ const syncEngineStatus = async () => {
   
   // Also sync alcohol status
   try {
-    const alcoholRef = dbRef(database, `${userId.value}/alcohol/status/status`);
-    const alcoholSnapshot = await get(alcoholRef);
+    const alcoholSyncRef = dbRef(database, `helmet_public/${userId.value}/alcohol/status`);
+    const alcoholSnapshot = await get(alcoholSyncRef);
     const alcoholData = alcoholSnapshot.val();
     
     if (alcoholData !== null) {
-      const isAlcoholDetected = alcoholData === 'Danger' || alcoholData === 'danger' || alcoholData === 'DANGER';
+      const isAlcoholDetected = alcoholData.status === 'Danger' || alcoholData.status === 'danger' || alcoholData.status === 'DANGER' || alcoholData.detected === true || (alcoholData.sensorValue >= 1500 && alcoholData.sensorValue > 0);
       alcoholDetected.value = isAlcoholDetected;
       console.log('[ALCOHOL] ✅ Status synced:', isAlcoholDetected ? 'DETECTED' : 'SAFE');
+      if (isAlcoholDetected && engineRunning.value) {
+        console.log('[SAFETY] Alcohol detected on sync while engine is running! Shutting down engine...');
+        engineRunning.value = false;
+        endTripSessionAndSave();
+        const uid = userId.value || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+        set(dbRef(database, `${uid}/engineControl/command`), 'STOP');
+        set(dbRef(database, `${uid}/engineControl/stopButton`), true);
+        set(dbRef(database, `${uid}/engineControl/startButton`), false);
+        set(dbRef(database, `${uid}/engineControl/engineRunning`), false);
+        set(dbRef(database, `helmet_public/${uid}/live/engineRunning`), false);
+        set(dbRef(database, `helmet_public/${uid}/devices/motorcycle/engineRunning`), false);
+      }
     }
   } catch (error) {
     console.log('[ALCOHOL] Error syncing status:', error);

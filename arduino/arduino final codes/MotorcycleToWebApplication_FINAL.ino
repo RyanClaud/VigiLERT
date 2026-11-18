@@ -120,7 +120,7 @@ const unsigned long CRASH_COOLDOWN = 3000;  // ✅ Reduced to 3 seconds for fast
 bool alcoholDetected = false;
 bool lastAlcoholState = false;
 unsigned long lastAlcoholCheck = 0;
-const unsigned long ALCOHOL_CHECK_INTERVAL = 2000;  // 2s — balanced to keep WiFi free for instant button control
+const unsigned long ALCOHOL_CHECK_INTERVAL = 500;  // 500ms — matches helmet 500ms write rate for immediate shutdown
 
 // ✅ ENHANCED: Comprehensive security system with BALANCED timeouts
 bool helmetConnected = false;
@@ -852,7 +852,7 @@ void loop() {
   // ── Alcohol safety enforcement — runs every loop ─────────────────────────
   if (alcoholDetected && engineRunning) {
     Serial.println("[ALCOHOL] DANGER — cutting ignition!");
-    stopEngine();
+    triggerAlcoholShutdown();
   }
 
   // Automatic engine control (auto-mode only)
@@ -1702,7 +1702,8 @@ void checkAlcoholStatus() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  http.setTimeout(800);  // Short timeout — must complete within poll interval
+  http.setReuse(true);
+  http.setTimeout(1200);  // 1.2s timeout — reliable over HTTPS
   http.begin(firebaseHost + alcoholPath);
 
   int httpCode = http.GET();
@@ -1733,41 +1734,38 @@ void checkAlcoholStatus() {
   bool currentAlcoholState = false;
   int  sensorValue = 0;
 
-  // ── Priority 1: "detected" boolean (fastest — single field check) ─────────
-  if (response.indexOf("\"detected\":true") != -1) {
-    currentAlcoholState = true;
-  } else if (response.indexOf("\"detected\":false") != -1) {
-    currentAlcoholState = false;
-  }
-  // ── Priority 2: "status" string ───────────────────────────────────────────
-  else if (response.indexOf("\"status\":\"Danger\"") != -1 ||
-           response.indexOf("\"status\":\"danger\"") != -1) {
-    currentAlcoholState = true;
-  } else if (response.indexOf("\"status\":\"Safe\"") != -1 ||
-             response.indexOf("\"status\":\"safe\"") != -1) {
-    currentAlcoholState = false;
-  }
-  // ── Priority 3: raw sensor value fallback ─────────────────────────────────
-  else {
-    int idx = response.indexOf("sensorValue");
-    if (idx != -1) {
-      int s = response.indexOf(":", idx) + 1;
-      int e = response.indexOf(",", s);
-      if (e == -1) e = response.indexOf("}", s);
-      if (e > s) sensorValue = response.substring(s, e).toInt();
-    }
-    currentAlcoholState = (sensorValue > 600);
+  // ── Unconditionally extract numeric sensorValue ───────────────────────────
+  int idx = response.indexOf("\"sensorValue\":");
+  if (idx == -1) idx = response.indexOf("sensorValue");
+  if (idx != -1) {
+    int s = response.indexOf(":", idx) + 1;
+    while (s < (int)response.length() && (response[s] == ' ' || response[s] == '"')) s++;
+    int e = response.indexOf(",", s);
+    if (e == -1) e = response.indexOf("}", s);
+    if (e > s) sensorValue = response.substring(s, e).toInt();
   }
 
-  // ── Update state and act immediately ──────────────────────────────────────
+  // ── Determine Danger status from helmet boolean, status, or raw value ─────
+  if (response.indexOf("\"detected\":true") != -1 ||
+      response.indexOf("\"status\":\"Danger\"") != -1 ||
+      response.indexOf("\"status\":\"danger\"") != -1 ||
+      response.indexOf("\"status\":\"DANGER\"") != -1 ||
+      (sensorValue >= 1500 && sensorValue > 0) ||
+      (sensorValue >= 600 && sensorValue > 0 && response.indexOf("\"detected\":false") == -1)) {
+    currentAlcoholState = true;
+  } else {
+    currentAlcoholState = false;
+  }
+
+  // ── Update state and log transition ───────────────────────────────────────
   if (currentAlcoholState != alcoholDetected) {
     alcoholDetected = currentAlcoholState;
-    Serial.printf("[ALCOHOL] >>> %s <<<\n", alcoholDetected ? "DANGER DETECTED" : "CLEARED");
+    Serial.printf("[ALCOHOL] >>> %s <<< (Value: %d)\n", alcoholDetected ? "DANGER DETECTED" : "CLEARED", sensorValue);
   }
 
   // Cut engine immediately — no guard, no delay
   if (alcoholDetected && engineRunning) {
-    Serial.println("[ALCOHOL] Cutting ignition NOW!");
+    Serial.printf("[ALCOHOL] 🚨 DANGER (Value: %d) — Cutting ignition NOW!\n", sensorValue);
     triggerAlcoholShutdown();
   }
 
@@ -1783,9 +1781,35 @@ void checkAlcoholStatus() {
 void triggerAlcoholShutdown() {
   Serial.println("\n🚨 ALCOHOL - EMERGENCY SHUTDOWN!");
 
-  // ✅ FIX: HIGH = OFF for ACTIVE-LOW relay
+  // ✅ Cut ignition immediately (HIGH = OFF for ACTIVE-LOW relay)
   digitalWrite(relayPin, HIGH);
   engineRunning = false;
+  starterActive = false;
+  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\n", relayPin);
+
+  // End trip session
+  endTrip();
+
+  // Send live update so dashboard sees engineRunning = false immediately
+  sendLiveToFirebase();
+
+  // Sync STOP command to engineControl path in Firebase
+  if (WiFi.status() == WL_CONNECTED) {
+    StaticJsonDocument<128> stopDoc;
+    stopDoc["command"] = "STOP";
+    stopDoc["stopButton"] = true;
+    stopDoc["startButton"] = false;
+    stopDoc["engineRunning"] = false;
+    String stopPayload;
+    serializeJson(stopDoc, stopPayload);
+
+    HTTPClient httpStop;
+    httpStop.setTimeout(1000);
+    httpStop.begin(firebaseHost + "/" + userUID + "/engineControl.json?auth=" + firebaseAuth);
+    httpStop.addHeader("Content-Type", "application/json");
+    httpStop.PATCH(stopPayload);
+    httpStop.end();
+  }
 
   // ✅ SMS alert to all emergency contacts
   String location = "Location unavailable";
@@ -1801,7 +1825,8 @@ void triggerAlcoholShutdown() {
 
   // ✅ Write to /alerts so BOTH dashboards show the alert card immediately
   if (WiFi.status() == WL_CONNECTED) {
-    uint64_t timestamp = 1746057600000ULL + (uint64_t)millis();
+    uint64_t timestamp = getEpochTimestamp();
+    if (timestamp == 0) timestamp = 1746057600000ULL + (uint64_t)millis();
     StaticJsonDocument<256> alertDoc;
     alertDoc["timestamp"] = timestamp;
     alertDoc["type"] = "alcohol";
@@ -1825,7 +1850,7 @@ void triggerAlcoholShutdown() {
     http.end();
   }
 
-  // Siren alert � non-blocking
+  // Siren alert — non-blocking
   startSiren();
 }
 
