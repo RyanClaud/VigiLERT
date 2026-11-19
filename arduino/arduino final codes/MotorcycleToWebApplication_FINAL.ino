@@ -1058,6 +1058,8 @@ void triggerTheftAlert() {
   String location = "Location unavailable";
   if (gps.location.isValid()) {
     location = "https://maps.google.com/?q=" + String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6);
+  } else if (lastValidLat != 0.0 && lastValidLng != 0.0) {
+    location = "https://maps.google.com/?q=" + String(lastValidLat, 6) + "," + String(lastValidLng, 6) + " (Last Known)";
   }
 
   String message = "VIGILERT THEFT ALERT!\nUnauthorized movement detected on your motorcycle.\nLocation: " + location;
@@ -1523,6 +1525,8 @@ void sendCrashToFirebase(float impact, float roll) {
   String locationStr = "No GPS";
   if (gps.location.isValid()) {
     locationStr = "https://maps.google.com/?q=" + String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6);
+  } else if (lastValidLat != 0.0 && lastValidLng != 0.0) {
+    locationStr = "https://maps.google.com/?q=" + String(lastValidLat, 6) + "," + String(lastValidLng, 6) + " (Last Known)";
   }
 
   StaticJsonDocument<256> doc;
@@ -1531,7 +1535,7 @@ void sendCrashToFirebase(float impact, float roll) {
   doc["roll"] = currentRoll;
   doc["pitch"] = currentPitch;
   doc["leanAngle"] = abs(roll);
-  doc["hasGPS"] = gps.location.isValid();
+  doc["hasGPS"] = gps.location.isValid() || (lastValidLat != 0.0 && lastValidLng != 0.0);
   doc["type"] = "crash";
   doc["severity"] = impact > 3.0 ? "severe" : "moderate";
   
@@ -1540,6 +1544,15 @@ void sendCrashToFirebase(float impact, float roll) {
     doc["lng"] = gps.location.lng();
     doc["locationLat"] = gps.location.lat();
     doc["locationLng"] = gps.location.lng();
+    doc["gpsSource"] = "module";
+  } else if (lastValidLat != 0.0 && lastValidLng != 0.0) {
+    doc["lat"] = lastValidLat;
+    doc["lng"] = lastValidLng;
+    doc["locationLat"] = lastValidLat;
+    doc["locationLng"] = lastValidLng;
+    doc["gpsSource"] = "last_known";
+  } else {
+    doc["gpsSource"] = "none";
   }
   
   String payload;
@@ -1622,6 +1635,8 @@ void sendLiveToFirebase() {
   doc["speed"]            = currentSpeed;
 
   if (gps.location.isValid()) {
+    lastValidLat = gps.location.lat();
+    lastValidLng = gps.location.lng();
     doc["locationLat"] = gps.location.lat();
     doc["locationLng"] = gps.location.lng();
     doc["gpsValid"]    = true;

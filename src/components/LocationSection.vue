@@ -94,6 +94,14 @@
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span>Auto-Location Active</span>
           </div>
+          <button 
+            v-if="hasCrashLocation"
+            @click="centerOnCrash"
+            class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all animate-pulse whitespace-nowrap"
+          >
+            <span class="material-icons text-base">warning</span>
+            <span>View Crash Site</span>
+          </button>
           <a 
             v-if="location.lat && location.lng"
             :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" 
@@ -504,7 +512,7 @@ function createCrashMarkerIcon() {
   });
 }
 
-// ✅ ENHANCED: Add crash markers with addresses
+// ✅ ENHANCED: Add crash markers with addresses & automatic Device GPS fallback
 async function addCrashMarkers() {
   if (!mapInstance || !isMapReady.value) return;
   
@@ -516,8 +524,13 @@ async function addCrashMarkers() {
   
   // Add new crash markers with geocoding
   for (const crash of props.crashEvents) {
-    if (crash.lat && crash.lng && crash.hasGPS) {
-      const crashMarker = L.marker([crash.lat, crash.lng], {
+    const lat = Number(crash.lat) || (props.location?.lat ? Number(props.location.lat) : null);
+    const lng = Number(crash.lng) || (props.location?.lng ? Number(props.location.lng) : null);
+    const isValid = lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+
+    if (isValid) {
+      const isDeviceFallback = !crash.lat || crash.gpsSource === 'device_fallback' || !crash.hasGPS;
+      const crashMarker = L.marker([lat, lng], {
         icon: createCrashMarkerIcon()
       }).addTo(mapInstance);
       
@@ -532,11 +545,14 @@ async function addCrashMarkers() {
             <p style="margin: 0; font-size: 13px; color: #991b1b;">
               <strong>📍 Location:</strong> <span id="crash-address-${crash.timestamp}">Loading address...</span>
             </p>
+            <p style="margin: 4px 0 0; font-size: 11px; color: #b91c1c;">
+              <strong>📡 Source:</strong> ${isDeviceFallback ? '📱 Device GPS Fallback (Module searching)' : '🏍️ GPS Module'}
+            </p>
           </div>
           <p style="margin: 4px 0; font-size: 13px;"><strong>💥 Impact:</strong> ${crash.impactStrength || 'N/A'} g</p>
           <p style="margin: 4px 0; font-size: 13px;"><strong>🕐 Time:</strong> ${new Date(crash.timestamp).toLocaleString()}</p>
-          <p style="margin: 4px 0; font-size: 11px; color: #666;"><strong>Coordinates:</strong> ${crash.lat.toFixed(6)}, ${crash.lng.toFixed(6)}</p>
-          <a href="https://www.google.com/maps?q=${crash.lat},${crash.lng}" target="_blank" 
+          <p style="margin: 4px 0; font-size: 11px; color: #666;"><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+          <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" 
              style="display: inline-block; margin-top: 8px; padding: 6px 12px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold;">
             Open in Google Maps →
           </a>
@@ -548,7 +564,7 @@ async function addCrashMarkers() {
       
       // Geocode address asynchronously (with delay to respect rate limits)
       setTimeout(async () => {
-        const address = await reverseGeocode(crash.lat, crash.lng);
+        const address = await reverseGeocode(lat, lng);
         if (address) {
           // Update popup content with address
           const updatedPopup = popupContent.replace(
@@ -563,6 +579,28 @@ async function addCrashMarkers() {
   
   console.log('[LocationSection] Added crash markers:', crashMarkers.length);
 }
+
+// Center map view on latest crash marker
+const centerOnCrash = () => {
+  if (!mapInstance || !props.crashEvents || props.crashEvents.length === 0) return;
+  const crash = props.crashEvents[0];
+  const lat = Number(crash.lat) || (props.location?.lat ? Number(props.location.lat) : null);
+  const lng = Number(crash.lng) || (props.location?.lng ? Number(props.location.lng) : null);
+  if (lat && lng && mapInstance) {
+    mapInstance.setView([lat, lng], 17, { animate: true });
+    if (crashMarkers.length > 0) {
+      crashMarkers[0].openPopup();
+    }
+  }
+};
+
+const hasCrashLocation = computed(() => {
+  if (!props.crashEvents || props.crashEvents.length === 0) return false;
+  const c = props.crashEvents[0];
+  const lat = Number(c.lat) || (props.location?.lat ? Number(props.location.lat) : null);
+  const lng = Number(c.lng) || (props.location?.lng ? Number(props.location.lng) : null);
+  return Boolean(lat && lng);
+});
 
 // Initialize map asynchronously
 const initMap = async () => {

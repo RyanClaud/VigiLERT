@@ -1605,10 +1605,36 @@ const setupFirebaseListeners = () => {
           crashDisplayMessage.value = 'Crash Detected!';
           const impactVal = liveData.mpu6050?.totalAccel ? (liveData.mpu6050.totalAccel / 9.81).toFixed(1) + ' g' : 'Severe';
           const leanVal = liveData.mpu6050?.roll ? Math.abs(liveData.mpu6050.roll).toFixed(1) + '°' : '';
+
+          // Auto-fallback: If hardware GPS has no stable 3D lock, use Device GPS
+          const hasModuleFix = Boolean(liveData.gpsValid && liveData.locationLat && Number(liveData.locationLat) !== 0);
+          const crashLat = hasModuleFix ? Number(liveData.locationLat) : (location.value?.lat || lastPhoneSpeedPos?.lat || null);
+          const crashLng = hasModuleFix ? Number(liveData.locationLng) : (location.value?.lng || lastPhoneSpeedPos?.lng || null);
+          const usedDevice = !hasModuleFix && Boolean(crashLat && crashLng);
+
+          const liveCrashEvent = {
+            timestamp: Date.now(),
+            impactStrength: impactVal,
+            roll: liveData.mpu6050?.roll || 0,
+            location: (crashLat && crashLng) 
+              ? `${Number(crashLat).toFixed(6)}, ${Number(crashLng).toFixed(6)}${usedDevice ? ' (Device GPS)' : ''}` 
+              : 'Location acquiring...',
+            lat: crashLat ? Number(crashLat) : null,
+            lng: crashLng ? Number(crashLng) : null,
+            hasGPS: Boolean(crashLat && crashLng),
+            gpsSource: usedDevice ? 'device_fallback' : (hasModuleFix ? 'module' : 'none'),
+            severity: 'High',
+            time: new Date().toLocaleTimeString(),
+            speed: liveData.speed || 0
+          };
+
+          crashEvents.value = [liveCrashEvent];
+          activeTab.value = 'My Location';
+
           alerts.value.unshift({
             type: 'crash',
             message: '🚨 CRASH DETECTED!',
-            details: `Impact: ${impactVal} | Lean: ${leanVal}`,
+            details: `Impact: ${impactVal} | Lean: ${leanVal} | Location: ${liveCrashEvent.location}`,
             time: new Date().toLocaleTimeString(),
             timestamp: Date.now()
           });
@@ -2451,19 +2477,94 @@ const initializeCrashListener = () => {
 
     const eventTime = Number(event.timestamp || 0);
 
+    const hasModuleGPS = Boolean(
+      (event.hasGPS || event.gpsValid === true) &&
+      event.lat && Number(event.lat) !== 0 &&
+      event.lng && Number(event.lng) !== 0 &&
+      event.gpsSource !== 'device_fallback'
+    );
+
+    let crashLat = hasModuleGPS ? Number(event.lat || (event.location && event.location.lat)) : null;
+    let crashLng = hasModuleGPS ? Number(event.lng || (event.location && event.location.lng)) : null;
+    let isDeviceFallback = false;
+
+    // Auto-fallback: if GPS module coordinates are not available or 0, use device GPS
+    if (!hasModuleGPS) {
+      if ((event.resolvedByDevice || event.gpsSource === 'device_fallback') && event.lat && event.lng) {
+        crashLat = Number(event.lat);
+        crashLng = Number(event.lng);
+        isDeviceFallback = true;
+      } else {
+        const devLat = location.value?.lat || (lastPhoneSpeedPos && lastPhoneSpeedPos.lat);
+        const devLng = location.value?.lng || (lastPhoneSpeedPos && lastPhoneSpeedPos.lng);
+        if (devLat && devLng && Number(devLat) !== 0 && Number(devLng) !== 0) {
+          crashLat = Number(devLat);
+          crashLng = Number(devLng);
+          isDeviceFallback = true;
+        }
+      }
+    }
+
     // Build crash event object
     const crashEvent = {
+      key,
       timestamp: eventTime || Date.now(),
       impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
       roll: event.roll || event.leanAngle || 0,
-      location: event.hasGPS ? `${event.lat}, ${event.lng}` : 'No GPS',
-      lat: event.lat || (event.location && event.location.lat) || null,
-      lng: event.lng || (event.location && event.location.lng) || null,
-      hasGPS: event.hasGPS || (event.gpsValid === true) || (event.lat && event.lat !== 0),
+      location: (crashLat && crashLng) 
+        ? `${crashLat.toFixed(6)}, ${crashLng.toFixed(6)}${isDeviceFallback ? ' (Device GPS)' : ''}` 
+        : 'Location acquiring...',
+      lat: crashLat,
+      lng: crashLng,
+      hasGPS: Boolean(crashLat && crashLng),
+      gpsSource: isDeviceFallback ? 'device_fallback' : (hasModuleGPS ? 'module' : 'none'),
       severity: event.severity || 'Medium',
       time: eventTime ? new Date(eventTime).toLocaleTimeString() : new Date().toLocaleTimeString(),
       speed: event.speed || 0
     };
+
+    // If resolved via device fallback and Firebase doesn't have it yet, backfill Firebase so emergency contacts can see it!
+    if (isDeviceFallback && userId.value && key && !event.resolvedByDevice) {
+      update(dbRef(database, `helmet_public/${userId.value}/crashes/${key}`), {
+        lat: crashLat,
+        lng: crashLng,
+        locationLat: crashLat,
+        locationLng: crashLng,
+        hasGPS: true,
+        gpsSource: 'device_fallback',
+        resolvedByDevice: true
+      }).catch((err) => console.warn('[CRASH] Error updating Firebase crash location:', err));
+    }
+
+    // If coordinates are still unpopulated, attempt high-accuracy browser geolocation in background
+    if (!crashLat && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const dLat = pos.coords.latitude;
+          const dLng = pos.coords.longitude;
+          crashEvent.lat = dLat;
+          crashEvent.lng = dLng;
+          crashEvent.hasGPS = true;
+          crashEvent.gpsSource = 'device_fallback';
+          crashEvent.location = `${dLat.toFixed(6)}, ${dLng.toFixed(6)} (Device GPS)`;
+          crashEvents.value = [crashEvent];
+
+          if (userId.value && key) {
+            update(dbRef(database, `helmet_public/${userId.value}/crashes/${key}`), {
+              lat: dLat,
+              lng: dLng,
+              locationLat: dLat,
+              locationLng: dLng,
+              hasGPS: true,
+              gpsSource: 'device_fallback',
+              resolvedByDevice: true
+            }).catch(() => {});
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
+      );
+    }
 
     // If historical (older than session start or during initial load), only store quietly for map, NEVER alert!
     const isHistorical = (!initialCrashLoadDone) || (eventTime > 0 && eventTime < sessionStartTime - 10000);

@@ -605,7 +605,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue, push, onChildAdded } from 'firebase/database';
+import { ref as dbRef, set, onValue, push, onChildAdded, onChildChanged } from 'firebase/database';
 import EmergencyRiderMap from '../components/EmergencyRiderMap.vue';
 
 const router = useRouter();
@@ -886,13 +886,38 @@ const setupFirebaseListeners = () => {
     if (seenCrashKeys.has(key)) return;
     seenCrashKeys.add(key);
 
+    const hasModuleGPS = Boolean(
+      (event.hasGPS || event.gpsValid) &&
+      event.lat && Number(event.lat) !== 0 &&
+      event.lng && Number(event.lng) !== 0
+    );
+
+    let crashLat = hasModuleGPS ? Number(event.lat || event.location?.lat) : null;
+    let crashLng = hasModuleGPS ? Number(event.lng || event.location?.lng) : null;
+    let isDeviceFallback = false;
+
+    // If GPS module had no fix, fall back to device coordinates (from record or live stream)
+    if (!hasModuleGPS) {
+      if (event.lat && event.lng && Number(event.lat) !== 0 && Number(event.lng) !== 0) {
+        crashLat = Number(event.lat);
+        crashLng = Number(event.lng);
+        isDeviceFallback = true;
+      } else if (location.value?.lat && location.value?.lng) {
+        crashLat = Number(location.value.lat);
+        crashLng = Number(location.value.lng);
+        isDeviceFallback = true;
+      }
+    }
+
     const crashEvent = {
+      key,
       timestamp: event.timestamp,
       impactStrength: event.impactStrength || (event.acceleration ? Number(event.acceleration).toFixed(2) : 'N/A'),
       roll: event.roll || event.leanAngle || 0,
-      lat: event.lat || event.location?.lat || null,
-      lng: event.lng || event.location?.lng || null,
-      hasGPS: event.hasGPS || event.gpsValid || (event.lat && event.lat !== 0),
+      lat: crashLat,
+      lng: crashLng,
+      hasGPS: Boolean(crashLat && crashLng),
+      gpsSource: isDeviceFallback ? 'device_fallback' : (hasModuleGPS ? 'module' : 'none'),
       severity: event.severity || 'Medium',
       time: new Date().toLocaleTimeString(),
       speed: event.speed || 0
@@ -904,10 +929,24 @@ const setupFirebaseListeners = () => {
     crashDisplayStatus.value  = 'Alert';
     crashDisplayMessage.value = 'Crash Detected';
 
-    addAlert('crash', '?? CRASH DETECTED!',
-      `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}� | ${
-        crashEvent.hasGPS ? `${crashEvent.lat?.toFixed(5)}, ${crashEvent.lng?.toFixed(5)}` : 'No GPS'}`);
+    addAlert('crash', '🚨 CRASH DETECTED!',
+      `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | Location: ${
+        crashEvent.hasGPS ? `${crashEvent.lat?.toFixed(5)}, ${crashEvent.lng?.toFixed(5)}${isDeviceFallback ? ' (Device GPS)' : ''}` : 'Location unavailable'}`);
   });
+
+  // Watch for real-time backfills when device GPS coordinates are resolved
+  onChildChanged(dbRef(database, `helmet_public/${userUID}/crashes`), snap => {
+    const updated = snap.val();
+    if (!updated || !updated.lat || !updated.lng) return;
+    const existing = crashEvents.value.find(c => c.timestamp === updated.timestamp || c.key === snap.key);
+    if (existing) {
+      existing.lat = Number(updated.lat);
+      existing.lng = Number(updated.lng);
+      existing.hasGPS = true;
+      existing.gpsSource = updated.gpsSource || 'device_fallback';
+    }
+  });
+
 
   // -- 6. Anti-theft status -------------------------------------------------
   onValue(dbRef(database, `${userUID}/antiTheft/status`), snap => {
