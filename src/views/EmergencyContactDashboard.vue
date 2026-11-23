@@ -656,6 +656,112 @@
       <p class="font-semibold text-sm text-white/40">� 2025 VIGILERT. All rights reserved.</p>
       <p class="text-xs text-white/20 mt-1">Emergency Contact Monitoring System</p>
     </footer>
+  
+      <!-- ===== SOS CONFIRMATION MODAL (Emergency Contact sends to Rider) ===== -->
+      <div v-if="showSosConfirmModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-red-500/50 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 border border-red-400/40 flex items-center justify-center">
+              <span class="material-icons text-red-400 text-4xl animate-pulse">emergency</span>
+            </div>
+
+            <h3 class="text-xl font-black text-white uppercase tracking-wider mb-2">Send Emergency SOS</h3>
+            <p class="text-white/70 text-sm mb-4">
+              Broadcast an urgent SOS alert to rider <strong class="text-white font-bold">{{ riderName }}</strong>?
+            </p>
+
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-3.5 mb-5 text-left text-xs text-white/60">
+              <p class="font-medium text-white/80 mb-1">Alert Details:</p>
+              <p>• Sounds an audible emergency alarm on the rider's dashboard.</p>
+              <p>• Attaches your current location for the rider to view.</p>
+            </div>
+
+            <div class="flex flex-col gap-2.5">
+              <button @click="confirmAndSendSOS" :disabled="isSendingSos"
+                class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                <span class="material-icons text-lg">crisis_alert</span>
+                <span>{{ isSendingSos ? 'Sending Alert...' : 'Send SOS Alert' }}</span>
+              </button>
+              <button @click="showSosConfirmModal = false" :disabled="isSendingSos"
+                class="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white/70 hover:text-white font-semibold text-sm transition-all border border-white/10">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SOS SENT SUCCESS MODAL ===== -->
+      <div v-if="showSosSentModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-emerald-500/50 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
+              <span class="material-icons text-emerald-400 text-4xl">check_circle</span>
+            </div>
+
+            <h3 class="text-xl font-black text-white uppercase tracking-wider mb-2">SOS Broadcast Dispatched</h3>
+            <p class="text-white/80 text-sm mb-5">
+              High-priority SOS alert has been transmitted to rider <strong class="text-white">{{ riderName }}</strong>.
+            </p>
+
+            <button @click="showSosSentModal = false"
+              class="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition-all border border-white/10">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== RIDER IN DISTRESS - SOS ACTIVE MODAL (Incoming to Emergency Contact) ===== -->
+      <div v-if="showRiderSosModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-lg bg-[#0A1A2F] border-2 border-red-500 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="absolute -top-24 -left-24 w-52 h-52 bg-red-600/30 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div class="relative z-10">
+            <div class="w-20 h-20 mx-auto mb-4 rounded-3xl bg-red-600/30 border-2 border-red-400 flex items-center justify-center text-white shadow-xl animate-pulse">
+              <span class="material-icons text-5xl text-red-400">warning</span>
+            </div>
+
+            <div class="inline-block px-3 py-1 bg-red-500/20 border border-red-400/40 text-red-300 text-xs font-bold rounded-full mb-2 uppercase tracking-widest">
+              Emergency Distress Signal
+            </div>
+            <h3 class="text-2xl font-black text-white uppercase tracking-wider mb-1">Rider SOS Active!</h3>
+            <p class="text-white/80 text-sm mb-4">
+              Rider <strong class="text-red-400 font-bold text-base">{{ riderName }}</strong> has triggered an emergency SOS!
+            </p>
+
+            <div class="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 mb-5 text-left">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-red-300 flex items-center gap-1.5">
+                  <span class="material-icons text-sm">place</span> Rider Location
+                </span>
+                <span class="text-xs text-white/50 font-mono">{{ activeRiderSos?.time || 'Just now' }}</span>
+              </div>
+              <p class="text-sm font-mono text-white font-bold mb-1">
+                {{ activeRiderSos?.lat && activeRiderSos?.lng ? `${Number(activeRiderSos.lat).toFixed(6)}, ${Number(activeRiderSos.lng).toFixed(6)}` : 'Location acquired from live stream' }}
+              </p>
+            </div>
+
+            <div class="flex flex-col gap-2.5">
+              <a v-if="activeRiderSos?.lat && activeRiderSos?.lng"
+                :href="`https://www.google.com/maps?q=${activeRiderSos.lat},${activeRiderSos.lng}`" target="_blank"
+                class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-icons text-base">navigation</span>
+                <span>Navigate to Rider on Google Maps</span>
+              </a>
+              <a href="tel:911"
+                class="w-full py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-icons text-base">phone</span>
+                <span>Call 911 Hotline</span>
+              </a>
+              <button @click="acknowledgeRiderSos"
+                class="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 hover:text-white font-medium text-xs transition-all border border-white/10">
+                Acknowledge & Mute Alarm
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
   </div>
 </template>
 
@@ -797,29 +903,50 @@ const adjustSpeedLimit = (delta) => {
   updateSpeedLimitInFirebase();
 };
 
-// -- SOS --------------------------------------------------------------------
-const triggerSOS = async () => {
-  if (!confirm('?? EMERGENCY SOS\n\nThis will send an emergency alert to the rider.\n\nAre you sure?')) return;
+// -- SOS State & Modals -----------------------------------------------------
+const showSosConfirmModal = ref(false);
+const showSosSentModal    = ref(false);
+const showRiderSosModal   = ref(false);
+const isSendingSos        = ref(false);
+const activeRiderSos      = ref(null);
+
+const triggerSOS = () => {
+  showSosConfirmModal.value = true;
+};
+
+const confirmAndSendSOS = async () => {
+  isSendingSos.value = true;
   try {
+    const timestamp = Date.now();
     await push(dbRef(database, `helmet_public/${userUID}/sos`), {
-      timestamp: Date.now(),
+      timestamp,
       triggeredBy: 'emergency_contact',
       emergencyContactLocation: emergencyContactLocation.value,
       status: 'active'
     });
+
     alerts.value.unshift({
       type: 'danger',
-      message: '?? SOS Alert Sent to Rider!',
-      details: 'Emergency contact triggered SOS',
+      message: '🚨 SOS Alert Sent to Rider!',
+      details: 'Emergency alert successfully broadcast to rider dashboard.',
       time: new Date().toLocaleTimeString(),
-      timestamp: Date.now()
+      timestamp
     });
+
     playAlertSound();
-    alert('? SOS Alert sent! The rider has been notified.');
+    showSosConfirmModal.value = false;
+    showSosSentModal.value = true;
   } catch (err) {
     console.error('[SOS]', err);
-    alert('? Failed to send SOS. Please try again.');
+    alert('Failed to send SOS. Please check connection and try again.');
+  } finally {
+    isSendingSos.value = false;
   }
+};
+
+const acknowledgeRiderSos = () => {
+  showRiderSosModal.value = false;
+  stopAlertSound();
 };
 
 const dismissAntiTheftAlert = () => { 
@@ -912,6 +1039,41 @@ const setupFirebaseListeners = () => {
     } else if (motorcyclePaired.value) {
       if (motorcycleDisconnectTimer) clearTimeout(motorcycleDisconnectTimer);
       motorcycleDisconnectTimer = setTimeout(() => { motorcyclePaired.value = false; }, DISCONNECT_TIMEOUT);
+    }
+  });
+
+  // -- 6. Rider SOS Real-Time Listener -----------------------------------
+  const sosRef = dbRef(database, `helmet_public/${userUID}/sos`);
+  const seenSosKeys = new Set();
+  let initialSosLoadDone = false;
+  setTimeout(() => { initialSosLoadDone = true; }, 3000);
+
+  onChildAdded(sosRef, snap => {
+    const key = snap.key;
+    const sosData = snap.val();
+    if (!sosData) return;
+
+    if (!initialSosLoadDone) {
+      seenSosKeys.add(key);
+      return;
+    }
+    if (seenSosKeys.has(key)) return;
+    seenSosKeys.add(key);
+
+    // If SOS was triggered by rider or manual button
+    if (sosData.triggeredBy === 'rider' || sosData.triggeredBy === 'manual') {
+      console.log('[SOS] 🚨 RIDER TRIGGERED SOS:', sosData);
+      activeRiderSos.value = {
+        key,
+        ...sosData,
+        lat: sosData.location?.lat || location.value?.lat,
+        lng: sosData.location?.lng || location.value?.lng,
+        time: new Date(sosData.timestamp || Date.now()).toLocaleTimeString()
+      };
+      showRiderSosModal.value = true;
+      playAlertSound();
+      addAlert('danger', '🚨 RIDER EMERGENCY SOS!',
+        `Rider ${riderName.value} triggered an emergency SOS! Check location and contact immediately.`);
     }
   });
 

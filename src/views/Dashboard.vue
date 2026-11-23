@@ -854,6 +854,140 @@
         </div>
       </button>
     </div>
+  
+      <!-- ===== SOS CONFIRMATION MODAL ===== -->
+      <div v-if="showSosConfirmModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-red-500/50 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="absolute -top-20 -left-20 w-44 h-44 bg-red-600/30 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="absolute -bottom-20 -right-20 w-44 h-44 bg-rose-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 border border-red-400/40 flex items-center justify-center animate-pulse">
+              <span class="material-icons text-red-400 text-4xl">emergency</span>
+            </div>
+
+            <h3 class="text-xl font-black text-white uppercase tracking-wider mb-2">Emergency SOS Alert</h3>
+            <p class="text-white/70 text-sm mb-4">
+              Are you in immediate danger or need emergency roadside assistance?
+            </p>
+
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-3.5 mb-5 text-left">
+              <p class="text-xs text-white/40 uppercase tracking-wide font-semibold mb-1 flex items-center gap-1.5">
+                <span class="material-icons text-xs text-red-400">place</span> Broadcast Location
+              </p>
+              <p class="text-sm font-mono text-white/90">
+                {{ location.lat ? `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}` : 'Resolving GPS location...' }}
+              </p>
+              <p class="text-[11px] text-white/50 mt-1">
+                This alert will instantly notify all your registered emergency safety contacts with your live location.
+              </p>
+            </div>
+
+            <div class="flex flex-col gap-2.5">
+              <button @click="confirmAndSendSOS" :disabled="isSendingSos"
+                class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-bold text-sm uppercase tracking-wider shadow-lg shadow-red-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                <span class="material-icons text-lg">crisis_alert</span>
+                <span>{{ isSendingSos ? 'Broadcasting SOS...' : 'Send SOS Alert Now' }}</span>
+              </button>
+              <button @click="showSosConfirmModal = false" :disabled="isSendingSos"
+                class="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white/70 hover:text-white font-semibold text-sm transition-all border border-white/10">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SOS SENT SUCCESS MODAL ===== -->
+      <div v-if="showSosSentModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-emerald-500/50 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="absolute -top-20 -left-20 w-44 h-44 bg-emerald-600/30 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
+              <span class="material-icons text-emerald-400 text-4xl">check_circle</span>
+            </div>
+
+            <h3 class="text-xl font-black text-white uppercase tracking-wider mb-2">SOS Broadcast Active</h3>
+            <p class="text-white/80 text-sm mb-4">
+              Your emergency contacts have been notified with your live coordinates.
+            </p>
+
+            <div class="flex flex-col gap-2.5 mb-2">
+              <a href="tel:911"
+                class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-icons text-lg">phone</span>
+                <span>Call 911 Hotline</span>
+              </a>
+              <button @click="resolveSos"
+                class="w-full py-3 px-4 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-bold text-sm transition-all">
+                I Am Safe (Cancel SOS)
+              </button>
+              <button @click="showSosSentModal = false"
+                class="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white/60 hover:text-white font-medium text-xs transition-all">
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SOS ERROR MODAL ===== -->
+      <div v-if="showSosErrorModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-red-500/50 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 border border-red-400/40 flex items-center justify-center">
+              <span class="material-icons text-red-400 text-4xl">error</span>
+            </div>
+            <h3 class="text-xl font-black text-white uppercase tracking-wider mb-2">SOS Notice</h3>
+            <p class="text-white/80 text-sm mb-5">{{ sosErrorMessage }}</p>
+            <div class="flex flex-col gap-2.5">
+              <a href="tel:911" class="w-full py-3.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-icons text-lg">phone</span>
+                <span>Call 911 Emergency</span>
+              </a>
+              <button @click="showSosErrorModal = false" class="w-full py-2.5 px-4 rounded-xl bg-white/10 text-white/70 hover:text-white font-medium text-xs">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== INCOMING SOS MODAL (For Rider when Emergency Contact triggers SOS) ===== -->
+      <div v-if="showIncomingSosModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-red-500 rounded-3xl p-6 shadow-2xl text-center overflow-hidden animate-pulse">
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-600 flex items-center justify-center text-white shadow-lg">
+              <span class="material-icons text-4xl">notification_important</span>
+            </div>
+
+            <h3 class="text-xl font-black text-red-400 uppercase tracking-wider mb-2">Incoming Emergency SOS!</h3>
+            <p class="text-white/90 text-sm mb-4 font-medium">
+              Your emergency contact has triggered an urgent safety check on you!
+            </p>
+
+            <div v-if="incomingSosData?.emergencyContactLocation?.lat" class="bg-white/5 border border-white/10 rounded-2xl p-3 mb-5 text-left text-xs">
+              <p class="text-white/40 mb-1 font-semibold">Contact's Location:</p>
+              <p class="font-mono text-white/90">
+                {{ incomingSosData.emergencyContactLocation.lat.toFixed(6) }}, {{ incomingSosData.emergencyContactLocation.lng.toFixed(6) }}
+              </p>
+              <a :href="`https://www.google.com/maps?q=${incomingSosData.emergencyContactLocation.lat},${incomingSosData.emergencyContactLocation.lng}`" target="_blank"
+                class="mt-2 inline-flex items-center gap-1 text-blue-400 hover:underline">
+                <span class="material-icons text-xs">open_in_new</span> View Contact on Google Maps
+              </a>
+            </div>
+
+            <div class="flex flex-col gap-2.5">
+              <button @click="acknowledgeIncomingSos"
+                class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-icons text-base">verified</span>
+                <span>I Am Safe / Acknowledge</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
   </div>
 </template>
 
@@ -1332,7 +1466,13 @@ const setupFirebaseListeners = () => {
 
     console.log('[SOS] 🆘 Emergency Contact triggered SOS:', sosData);
 
-    playSound();
+    incomingSosData.value = {
+      key,
+      ...sosData,
+      time: new Date(sosData.timestamp || Date.now()).toLocaleTimeString()
+    };
+    showIncomingSosModal.value = true;
+    playSound('danger');
 
     addAlert('danger', '🆘 EMERGENCY CONTACT SOS!',
       `Emergency contact has triggered SOS alert. ${
@@ -2426,41 +2566,85 @@ const handleLocationUpdate = async (newLocation) => {
   }
 };
 
-// Trigger SOS Alert
-const triggerSOS = async () => {
-  const confirmed = confirm('⚠️ EMERGENCY SOS\n\nThis will send an emergency alert to all your emergency contacts with your current location.\n\nAre you sure you want to trigger SOS?');
-  
-  if (!confirmed) return;
-  
+// -- SOS State & Modals -----------------------------------------------------
+const showSosConfirmModal  = ref(false);
+const showSosSentModal     = ref(false);
+const showIncomingSosModal = ref(false);
+const showSosErrorModal    = ref(false);
+const isSendingSos         = ref(false);
+const incomingSosData      = ref(null);
+const sosErrorMessage      = ref('');
+
+// Open Trigger SOS Confirmation Modal (Replaces browser alert/confirm)
+const triggerSOS = () => {
+  showSosConfirmModal.value = true;
+};
+
+// Confirm and Send SOS Broadcast
+const confirmAndSendSOS = async () => {
+  isSendingSos.value = true;
   try {
-    // ❌ DON'T play sound for rider when they trigger SOS
-    // Sound will only play on emergency contact's dashboard
-    
-    // Add to alerts (visual confirmation only)
+    const timestamp = Date.now();
+    const lat = location.value?.lat || null;
+    const lng = location.value?.lng || null;
+    const locString = lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Location acquired from live stream';
+
+    // 1. Add visual alert to rider's alert list
     alerts.value.unshift({
       type: 'danger',
-      message: '🆘 EMERGENCY SOS TRIGGERED',
-      details: `Location: ${location.value.lat ? `${location.value.lat.toFixed(6)}, ${location.value.lng.toFixed(6)}` : 'Unknown'}`,
-      time: new Date().toLocaleTimeString()
+      message: '🆘 EMERGENCY SOS BROADCASTED',
+      details: `Location: ${locString}`,
+      time: new Date().toLocaleTimeString(),
+      timestamp
     });
-    
-    // Log SOS event to Firebase
-    const sosRef = dbRef(database, `helmet_public/${userId.value}/sos/${Date.now()}`);
+
+    // 2. Write to Firebase /sos list (so emergency contact dashboard receives it in real-time)
+    const sosRef = dbRef(database, `helmet_public/${userId.value}/sos/${timestamp}`);
     await set(sosRef, {
-      timestamp: Date.now(),
-      location: {
-        lat: location.value.lat,
-        lng: location.value.lng
-      },
-      triggeredBy: 'manual',
-      status: 'active'
+      timestamp,
+      location: { lat, lng },
+      triggeredBy: 'rider',
+      status: 'active',
+      riderName: user.value?.name || user.value?.displayName || 'Rider'
     });
-    
-    alert('✅ SOS Alert Sent!\n\nEmergency contacts have been notified with your location.');
+
+    // 3. Write to /alerts path for emergency contact real-time push
+    await push(dbRef(database, `helmet_public/${userId.value}/alerts`), {
+      type: 'danger',
+      message: '🚨 EMERGENCY SOS TRIGGERED BY RIDER!',
+      details: `Rider has requested emergency assistance. Location: ${locString}`,
+      timestamp,
+      severity: 'critical'
+    });
+
+    // 4. Update live sosActive flag
+    await set(dbRef(database, `helmet_public/${userId.value}/live/sosActive`), true);
+
+    showSosConfirmModal.value = false;
+    showSosSentModal.value = true;
   } catch (error) {
-    console.error('Failed to trigger SOS:', error);
-    alert('❌ Failed to send SOS alert. Please try again or call emergency services directly.');
+    console.error('[SOS] Failed to trigger SOS:', error);
+    sosErrorMessage.value = 'Failed to broadcast SOS alert. Please check your network connection or call 911 directly.';
+    showSosErrorModal.value = true;
+  } finally {
+    isSendingSos.value = false;
   }
+};
+
+// Resolve active SOS
+const resolveSos = async () => {
+  try {
+    if (userId.value) {
+      await set(dbRef(database, `helmet_public/${userId.value}/live/sosActive`), false);
+    }
+  } catch (e) {}
+  showSosSentModal.value = false;
+};
+
+// Acknowledge Incoming SOS from Emergency Contact
+const acknowledgeIncomingSos = () => {
+  showIncomingSosModal.value = false;
+  stopSound();
 };
 
 // Initialize crash event listener
