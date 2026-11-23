@@ -240,68 +240,98 @@ void IRAM_ATTR onVibration() {
 // tone() is called from loop() — completely safe, no ISR, no crash.
 // Sounds like a real police/ambulance wail.
 
-// ── Non-blocking police siren state machine ──────────────────────────────
-// Produces an authentic police mobile alert tone (Wail & Yelp frequency modulation).
-// Non-blocking via millis() — updates tone smoothly every 10ms.
-// Sounds unmistakably like a police car / emergency vehicle mobile siren.
+// ── FreeRTOS Police Siren & Alert Task (Runs independently on Core 0) ───────
+// Decoupled from loop() so HTTP / GSM / delays NEVER freeze or flatline the tone!
+// Produces an authentic police mobile alert tone:
+//   Phase 1: Police Yelp (fast rising sweeps 700 Hz -> 1800 Hz with sharp cadence)
+//   Phase 2: European Hi-Lo Two-Tone ("WEE-WOO", 1650 Hz & 850 Hz)
+//   Phase 3: Urgent Staccato Beeps (piercing 10-beep/sec alarm pulses)
+// Guaranteed to sound like an urgent police siren on BOTH passive and active buzzers!
 
 enum BuzzerMode { BUZZER_OFF, BUZZER_SIREN };
-BuzzerMode buzzerMode = BUZZER_OFF;
+volatile BuzzerMode buzzerMode = BUZZER_OFF;
 
-const unsigned long SIREN_DURATION    = 15000; // total siren time per trigger (15s)
-const unsigned long SIREN_STEP_MS     = 10;    // update pitch every 10ms for smooth glide
-const int           SIREN_FREQ_MIN    = 650;   // Hz (low police wail)
-const int           SIREN_FREQ_MAX    = 1800;  // Hz (high police wail)
-const int           SIREN_FREQ_STEP   = 45;    // Hz per 10ms step (~250ms sweep up, ~250ms sweep down)
+volatile bool sirenActive = false;
+unsigned long sirenStartTime = 0;
+const unsigned long SIREN_DURATION = 15000; // 15 seconds per trigger
+TaskHandle_t sirenTaskHandle = NULL;
 
-unsigned long sirenStartTime   = 0;
-unsigned long sirenLastStep    = 0;
-int           sirenCurrentFreq = SIREN_FREQ_MIN;
-int           sirenDirection   = 1;   // +1 = sweeping up, -1 = sweeping down
-int           sirenCycleCount  = 0;
-
-// Called every loop iteration — updates police tone smoothly without blocking
-void tickSiren() {
-  if (buzzerMode != BUZZER_SIREN) return;
-
-  unsigned long now = millis();
-
-  // Stop after SIREN_DURATION
-  if (now - sirenStartTime >= SIREN_DURATION) {
-    noTone(buzzerPin);
-    digitalWrite(lightIndicatorPin, LOW);
-    buzzerMode = BUZZER_OFF;
-    return;
-  }
-
-  // Smooth police siren frequency modulation every SIREN_STEP_MS
-  if (now - sirenLastStep >= SIREN_STEP_MS) {
-    sirenLastStep = now;
-
-    // Fast Yelp every few cycles for maximum urgency (police mobile alert)
-    bool isYelpMode = ((sirenCycleCount / 4) % 2 == 1);
-    int step = isYelpMode ? 75 : SIREN_FREQ_STEP;
-
-    sirenCurrentFreq += sirenDirection * step;
-
-    if (sirenCurrentFreq >= SIREN_FREQ_MAX) {
-      sirenCurrentFreq = SIREN_FREQ_MAX;
-      sirenDirection = -1;
-      sirenCycleCount++;
-    } else if (sirenCurrentFreq <= SIREN_FREQ_MIN) {
-      sirenCurrentFreq = SIREN_FREQ_MIN;
-      sirenDirection = 1;
-      sirenCycleCount++;
-      // Brief pause between sweeps: gives natural cadence to passive buzzers
-      // and pulses active buzzers so it never sounds like a flat drone
+void sirenTaskCode(void* pvParameters) {
+  for (;;) {
+    if (!sirenActive) {
       noTone(buzzerPin);
-      return;
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+      vTaskDelay(pdMS_TO_TICKS(40));
+      continue;
     }
 
-    tone(buzzerPin, sirenCurrentFreq);
-    // Police strobe sync: LED flashes rapidly when pitch is in the upper half
-    digitalWrite(lightIndicatorPin, (sirenCurrentFreq > (SIREN_FREQ_MIN + SIREN_FREQ_MAX) / 2) ? HIGH : LOW);
+    // Auto-stop after SIREN_DURATION
+    if (millis() - sirenStartTime >= SIREN_DURATION) {
+      noTone(buzzerPin);
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+      sirenActive = false;
+      buzzerMode = BUZZER_OFF;
+      vTaskDelay(pdMS_TO_TICKS(40));
+      continue;
+    }
+
+    // ── Phase 1: Rapid Police Yelp (4 cycles of fast rising sweeps) ────────
+    for (int yelp = 0; yelp < 4 && sirenActive; yelp++) {
+      if (millis() - sirenStartTime >= SIREN_DURATION) break;
+      digitalWrite(lightIndicatorPin, HIGH);
+      // Fast pitch sweep up from 700 to 1800 Hz in ~150ms
+      for (int f = 700; f <= 1800 && sirenActive; f += 80) {
+        tone(buzzerPin, f);
+        vTaskDelay(pdMS_TO_TICKS(11));
+      }
+      // Sharp gap (gives active buzzers a distinct pulsing beep cadence)
+      noTone(buzzerPin);
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+      vTaskDelay(pdMS_TO_TICKS(35));
+    }
+
+    // ── Phase 2: European Police Hi-Lo Two-Tone ("WEE-WOO", 3 cycles) ──────
+    for (int hilo = 0; hilo < 3 && sirenActive; hilo++) {
+      if (millis() - sirenStartTime >= SIREN_DURATION) break;
+      // High note (1650 Hz, 140ms)
+      tone(buzzerPin, 1650);
+      digitalWrite(lightIndicatorPin, HIGH);
+      vTaskDelay(pdMS_TO_TICKS(140));
+      noTone(buzzerPin);
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+      vTaskDelay(pdMS_TO_TICKS(20));
+
+      // Low note (850 Hz, 140ms)
+      tone(buzzerPin, 850);
+      digitalWrite(lightIndicatorPin, HIGH);
+      vTaskDelay(pdMS_TO_TICKS(140));
+      noTone(buzzerPin);
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
+
+    // ── Phase 3: Urgent Piercing Staccato Beeps (6 rapid alert pulses) ─────
+    for (int b = 0; b < 6 && sirenActive; b++) {
+      if (millis() - sirenStartTime >= SIREN_DURATION) break;
+      tone(buzzerPin, 1950);
+      digitalWrite(lightIndicatorPin, HIGH);
+      vTaskDelay(pdMS_TO_TICKS(60));
+      noTone(buzzerPin);
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(lightIndicatorPin, LOW);
+      vTaskDelay(pdMS_TO_TICKS(35));
+    }
   }
+}
+
+// Tick siren — called from loop(), siren runs independently on Core 0
+void tickSiren() {
+  // Handled asynchronously by dedicated FreeRTOS siren task on Core 0
 }
 
 // GSM status
@@ -315,20 +345,17 @@ const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?a
 
 // ── Siren helpers ─────────────────────────────────────────────────────────
 void startSiren() {
-  buzzerMode       = BUZZER_SIREN;
-  sirenStartTime   = millis();
-  sirenLastStep    = millis();
-  sirenCurrentFreq = SIREN_FREQ_MIN;
-  sirenDirection   = 1;
-  sirenCycleCount  = 0;
-  tone(buzzerPin, SIREN_FREQ_MIN);
-  digitalWrite(lightIndicatorPin, HIGH);
-  Serial.println("[SIREN] 🚨 Police mobile alert tone started!");
+  buzzerMode     = BUZZER_SIREN;
+  sirenStartTime = millis();
+  sirenActive    = true;
+  Serial.println("[SIREN] 🚨 Police mobile siren & alert tone started!");
 }
 
 void stopSiren() {
-  buzzerMode = BUZZER_OFF;
+  buzzerMode  = BUZZER_OFF;
+  sirenActive = false;
   noTone(buzzerPin);
+  digitalWrite(buzzerPin, LOW);
   digitalWrite(lightIndicatorPin, LOW);
   Serial.println("[SIREN] Stopped");
 }
@@ -448,7 +475,20 @@ void setup() {
   // Set initial pin states
   digitalWrite(relayPin, HIGH);       // Relay OFF (active-low)
   noTone(buzzerPin);                  // Buzzer silent
+  digitalWrite(buzzerPin, LOW);
   digitalWrite(lightIndicatorPin, LOW);
+
+  // Start background FreeRTOS Siren Task on Core 0
+  xTaskCreatePinnedToCore(
+    sirenTaskCode,
+    "SirenTask",
+    3072,
+    NULL,
+    1,
+    &sirenTaskHandle,
+    0
+  );
+  Serial.println("[SETUP] ✓ Background Siren Task started on Core 0");
 
   // Hardware interrupt for vibration sensor
   attachInterrupt(digitalPinToInterrupt(vibrationSensorPin), onVibration, CHANGE);
@@ -1214,23 +1254,28 @@ bool sendSMS(String phoneNumber, String message) {
   Serial.println("[GSM] 📱 Sending SMS to: " + phoneNumber);
   
   gsmSerial.println("AT+CMGF=1");
-  delay(1000);
+  delay(200);
   
   gsmSerial.println("AT+CMGS=\"" + phoneNumber + "\"");
-  delay(1000);
+  delay(300);
   
   gsmSerial.print(message);
-  delay(500);
+  delay(100);
   
   gsmSerial.write(26);  // Ctrl+Z to send
-  delay(5000);
-
+  
+  // Fast response check (up to 3.5s max, returns immediately on modem reply)
+  unsigned long sendStart = millis();
   bool success = false;
-  if (gsmSerial.available()) {
-    String response = gsmSerial.readString();
-    if (response.indexOf("OK") != -1 || response.indexOf("+CMGS") != -1) {
-      success = true;
+  while (millis() - sendStart < 3500) {
+    if (gsmSerial.available()) {
+      String response = gsmSerial.readString();
+      if (response.indexOf("OK") != -1 || response.indexOf("+CMGS") != -1) {
+        success = true;
+        break;
+      }
     }
+    delay(50);
   }
 
   return success;
