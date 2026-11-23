@@ -240,19 +240,27 @@ void IRAM_ATTR onVibration() {
 // tone() is called from loop() — completely safe, no ISR, no crash.
 // Sounds like a real police/ambulance wail.
 
+// ── Non-blocking police siren state machine ──────────────────────────────
+// Produces an authentic police mobile alert tone (Wail & Yelp frequency modulation).
+// Non-blocking via millis() — updates tone smoothly every 10ms.
+// Sounds unmistakably like a police car / emergency vehicle mobile siren.
+
 enum BuzzerMode { BUZZER_OFF, BUZZER_SIREN };
 BuzzerMode buzzerMode = BUZZER_OFF;
 
-const int           SIREN_TONE_HIGH  = 1700;  // Hz — high note
-const int           SIREN_TONE_LOW   = 700;   // Hz — low note
-const unsigned long SIREN_PHASE_MS   = 700;   // ms per note (700ms high, 700ms low)
-const unsigned long SIREN_DURATION   = 10000; // total siren time per trigger
+const unsigned long SIREN_DURATION    = 15000; // total siren time per trigger (15s)
+const unsigned long SIREN_STEP_MS     = 10;    // update pitch every 10ms for smooth glide
+const int           SIREN_FREQ_MIN    = 650;   // Hz (low police wail)
+const int           SIREN_FREQ_MAX    = 1800;  // Hz (high police wail)
+const int           SIREN_FREQ_STEP   = 45;    // Hz per 10ms step (~250ms sweep up, ~250ms sweep down)
 
-unsigned long sirenStartTime  = 0;
-unsigned long sirenPhaseStart = 0;
-bool          sirenHighPhase  = true;  // true = playing high note
+unsigned long sirenStartTime   = 0;
+unsigned long sirenLastStep    = 0;
+int           sirenCurrentFreq = SIREN_FREQ_MIN;
+int           sirenDirection   = 1;   // +1 = sweeping up, -1 = sweeping down
+int           sirenCycleCount  = 0;
 
-// Called every loop iteration — updates tone if phase has changed
+// Called every loop iteration — updates police tone smoothly without blocking
 void tickSiren() {
   if (buzzerMode != BUZZER_SIREN) return;
 
@@ -266,12 +274,33 @@ void tickSiren() {
     return;
   }
 
-  // Switch note every SIREN_PHASE_MS
-  if (now - sirenPhaseStart >= SIREN_PHASE_MS) {
-    sirenPhaseStart = now;
-    sirenHighPhase  = !sirenHighPhase;
-    tone(buzzerPin, sirenHighPhase ? SIREN_TONE_HIGH : SIREN_TONE_LOW);
-    digitalWrite(lightIndicatorPin, sirenHighPhase ? HIGH : LOW);
+  // Smooth police siren frequency modulation every SIREN_STEP_MS
+  if (now - sirenLastStep >= SIREN_STEP_MS) {
+    sirenLastStep = now;
+
+    // Fast Yelp every few cycles for maximum urgency (police mobile alert)
+    bool isYelpMode = ((sirenCycleCount / 4) % 2 == 1);
+    int step = isYelpMode ? 75 : SIREN_FREQ_STEP;
+
+    sirenCurrentFreq += sirenDirection * step;
+
+    if (sirenCurrentFreq >= SIREN_FREQ_MAX) {
+      sirenCurrentFreq = SIREN_FREQ_MAX;
+      sirenDirection = -1;
+      sirenCycleCount++;
+    } else if (sirenCurrentFreq <= SIREN_FREQ_MIN) {
+      sirenCurrentFreq = SIREN_FREQ_MIN;
+      sirenDirection = 1;
+      sirenCycleCount++;
+      // Brief pause between sweeps: gives natural cadence to passive buzzers
+      // and pulses active buzzers so it never sounds like a flat drone
+      noTone(buzzerPin);
+      return;
+    }
+
+    tone(buzzerPin, sirenCurrentFreq);
+    // Police strobe sync: LED flashes rapidly when pitch is in the upper half
+    digitalWrite(lightIndicatorPin, (sirenCurrentFreq > (SIREN_FREQ_MIN + SIREN_FREQ_MAX) / 2) ? HIGH : LOW);
   }
 }
 
@@ -286,13 +315,15 @@ const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?a
 
 // ── Siren helpers ─────────────────────────────────────────────────────────
 void startSiren() {
-  buzzerMode      = BUZZER_SIREN;
-  sirenStartTime  = millis();
-  sirenPhaseStart = millis();
-  sirenHighPhase  = true;
-  tone(buzzerPin, SIREN_TONE_HIGH);
+  buzzerMode       = BUZZER_SIREN;
+  sirenStartTime   = millis();
+  sirenLastStep    = millis();
+  sirenCurrentFreq = SIREN_FREQ_MIN;
+  sirenDirection   = 1;
+  sirenCycleCount  = 0;
+  tone(buzzerPin, SIREN_FREQ_MIN);
   digitalWrite(lightIndicatorPin, HIGH);
-  Serial.println("[SIREN] Started");
+  Serial.println("[SIREN] 🚨 Police mobile alert tone started!");
 }
 
 void stopSiren() {

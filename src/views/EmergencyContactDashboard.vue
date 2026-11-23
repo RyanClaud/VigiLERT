@@ -144,11 +144,26 @@
     <!-- ===== CRASH HISTORY (shown when crashes exist) ===== -->
     <div v-if="crashEvents.length > 0" class="mx-4 md:mx-8 mt-4">
       <div class="relative overflow-hidden bg-red-500/5 backdrop-blur-lg rounded-2xl shadow-xl p-5 border border-red-500/20">
-        <h3 class="font-bold text-base text-red-400 mb-4 flex items-center gap-2">
-          <span class="material-icons text-lg">place</span>
-          Crash Site Locations
-          <span class="bg-red-500/20 border border-red-400/30 text-red-400 text-xs px-2 py-0.5 rounded-full ml-1">{{ crashEvents.length }}</span>
-        </h3>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-base text-red-400 flex items-center gap-2">
+            <span class="material-icons text-lg">place</span>
+            Crash Site Locations
+            <span class="bg-red-500/20 border border-red-400/30 text-red-400 text-xs px-2 py-0.5 rounded-full ml-1">{{ crashEvents.length }}</span>
+          </h3>
+          <div class="flex items-center gap-2">
+            <button @click="dismissAllCrashLocations"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 hover:text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+              title="Clear all crash locations from view">
+              <span class="material-icons text-xs">clear_all</span>
+              <span>Dismiss All</span>
+            </button>
+            <button @click="dismissAllCrashLocations"
+              class="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-all border border-white/10 flex items-center justify-center"
+              title="Close Crash Site Locations">
+              <span class="material-icons text-base">close</span>
+            </button>
+          </div>
+        </div>
         <div class="space-y-3">
           <div v-for="(event, index) in crashEvents" :key="index"
             class="p-4 border border-red-500/20 rounded-xl bg-red-500/5">
@@ -160,7 +175,14 @@
                   : 'bg-orange-500/20 border-orange-400/40 text-orange-400']">
                 {{ event.severity || 'Medium' }} Severity
               </span>
-              <span class="text-xs text-white/30">{{ event.time }}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-white/40">{{ event.time }}</span>
+                <button @click="dismissCrashLocation(index, event)"
+                  class="p-1 rounded-lg bg-white/10 hover:bg-red-500/30 text-white/50 hover:text-red-300 border border-white/10 hover:border-red-500/30 transition-all flex items-center justify-center"
+                  title="Remove this crash location">
+                  <span class="material-icons text-sm">close</span>
+                </button>
+              </div>
             </div>
             <!-- Stats -->
             <div class="grid grid-cols-2 gap-2 mb-3">
@@ -191,6 +213,12 @@
                 class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 text-white/30 text-xs rounded-lg">
                 <span class="material-icons text-sm">gps_off</span>No GPS location
               </div>
+              <button @click="dismissCrashLocation(index, event)"
+                class="px-3 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1"
+                title="Dismiss this crash location">
+                <span class="material-icons text-sm">delete</span>
+                <span>Dismiss</span>
+              </button>
             </div>
           </div>
         </div>
@@ -799,10 +827,55 @@ const dismissAntiTheftAlert = () => {
   stopAlertSound(); 
 };
 
+const dismissedCrashKeys = ref(new Set());
+
+const dismissCrashLocation = async (index, event) => {
+  if (!event && crashEvents.value[index]) {
+    event = crashEvents.value[index];
+  }
+  if (event) {
+    if (event.key) dismissedCrashKeys.value.add(event.key);
+    if (event.timestamp) dismissedCrashKeys.value.add(String(event.timestamp));
+  }
+  crashEvents.value.splice(index, 1);
+  if (crashEvents.value.length === 0) {
+    crashDisplayStatus.value = 'Stable';
+    crashDisplayMessage.value = 'Vehicle Stable';
+    stopAlertSound();
+  }
+  if (event && event.key && !event.key.startsWith('live_synth')) {
+    try {
+      await remove(dbRef(database, `helmet_public/${userUID}/crashes/${event.key}`));
+    } catch (e) {}
+  }
+};
+
+const dismissAllCrashLocations = async () => {
+  const eventsToDismiss = [...crashEvents.value];
+  eventsToDismiss.forEach(event => {
+    if (event.key) dismissedCrashKeys.value.add(event.key);
+    if (event.timestamp) dismissedCrashKeys.value.add(String(event.timestamp));
+  });
+  dismissedCrashKeys.value.add('live_synth');
+  crashEvents.value = [];
+  crashDisplayStatus.value = 'Stable';
+  crashDisplayMessage.value = 'Vehicle Stable';
+  stopAlertSound();
+
+  for (const event of eventsToDismiss) {
+    if (event && event.key && !event.key.startsWith('live_synth')) {
+      try {
+        await remove(dbRef(database, `helmet_public/${userUID}/crashes/${event.key}`));
+      } catch (e) {}
+    }
+  }
+};
+
 const dismissCrashAlert = () => {
   crashDisplayStatus.value = 'Stable';
   crashDisplayMessage.value = 'Vehicle Stable';
   stopAlertSound();
+  dismissAllCrashLocations();
 };
 
 // -- Helper: push alert to list ---------------------------------------------
@@ -890,7 +963,7 @@ const setupFirebaseListeners = () => {
       crashDisplayStatus.value  = 'Alert';
       crashDisplayMessage.value = 'Crash Detected';
       // If no crash event has been indexed yet, synthesize live crash marker on the map
-      if (crashEvents.value.length === 0 && location.value.lat && location.value.lng) {
+      if (crashEvents.value.length === 0 && location.value.lat && location.value.lng && (!dismissedCrashKeys.value || !dismissedCrashKeys.value.has('live_synth'))) {
         crashEvents.value.unshift({
           timestamp: Date.now(),
           impactStrength: d.mpu6050?.totalAccel ? (d.mpu6050.totalAccel / 9.81).toFixed(1) : 'Severe',
@@ -938,6 +1011,7 @@ const setupFirebaseListeners = () => {
 
     if (!initialCrashLoadDone) { seenCrashKeys.add(key); return; }
     if (seenCrashKeys.has(key)) return;
+    if (dismissedCrashKeys.value && (dismissedCrashKeys.value.has(key) || dismissedCrashKeys.value.has(String(event.timestamp)))) return;
     seenCrashKeys.add(key);
 
     const hasModuleGPS = Boolean(

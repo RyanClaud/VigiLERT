@@ -205,15 +205,27 @@ void sendAlcoholToFirebase(int alcoholVal, bool alcoholStatus) {
 }
 
 void playBeepAlert() {
-  static unsigned long previousBeepMillis = 0;
-  const long beepInterval = 20;
-  const int beepDuration = 1500;
-  const int beepFrequency = 1200;
-  
-  unsigned long currentMillis = millis();
-  
-  if (currentMillis - previousBeepMillis >= beepInterval) {
-    previousBeepMillis = currentMillis;
-    tone(buzzerPin, beepFrequency, beepDuration);
+  static unsigned long lastSirenStep = 0;
+  static int sirenFreq = 700;
+  static int sirenDir = 1;
+  const int minFreq = 700;
+  const int maxFreq = 1750;
+  const int stepHz = 50;
+  const unsigned long stepMs = 12;
+
+  unsigned long now = millis();
+  if (now - lastSirenStep >= stepMs) {
+    lastSirenStep = now;
+    sirenFreq += sirenDir * stepHz;
+    if (sirenFreq >= maxFreq) {
+      sirenFreq = maxFreq;
+      sirenDir = -1;
+    } else if (sirenFreq <= minFreq) {
+      sirenFreq = minFreq;
+      sirenDir = 1;
+      noTone(buzzerPin);
+      return;
+    }
+    tone(buzzerPin, sirenFreq);
   }
 }

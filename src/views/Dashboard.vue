@@ -744,6 +744,19 @@
               <span>Crash Site Locations</span>
               <span class="bg-red-500/20 border border-red-400/30 text-red-400 text-xs px-2 py-0.5 rounded-full">{{ crashEvents.length }}</span>
             </h3>
+            <div class="flex items-center gap-2">
+              <button @click="clearAllCrashLocations"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 hover:text-white text-xs font-bold rounded-xl transition-all"
+                title="Dismiss all crash locations from view">
+                <span class="material-icons text-xs">clear_all</span>
+                <span>Dismiss All</span>
+              </button>
+              <button @click="clearAllCrashLocations"
+                class="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-all border border-white/10 flex items-center justify-center"
+                title="Close Crash Site Locations">
+                <span class="material-icons text-base">close</span>
+              </button>
+            </div>
           </div>
 
           <div class="space-y-4">
@@ -1916,6 +1929,15 @@ const clearAllAlerts = () => {
   }
   
   // Reset crash display
+  crashDisplayStatus.value = 'Stable';
+  crashDisplayMessage.value = 'Vehicle Stable';
+};
+
+// Clear All Crash Locations
+const clearAllCrashLocations = async () => {
+  while (crashEvents.value.length > 0) {
+    await deleteCrashEvent(0);
+  }
   crashDisplayStatus.value = 'Stable';
   crashDisplayMessage.value = 'Vehicle Stable';
 };
