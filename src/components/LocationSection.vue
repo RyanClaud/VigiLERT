@@ -158,6 +158,10 @@ const props = defineProps({
   crashEvents: {
     type: Array,
     default: () => []
+  },
+  crashDetected: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -520,6 +524,9 @@ async function addCrashMarkers() {
   crashMarkers.forEach(m => m.remove());
   crashMarkers = [];
   
+  // Only display crash marker on the map if crash is actively detected!
+  if (!props.crashDetected) return;
+  
   console.log('[LocationSection] Adding crash markers:', props.crashEvents.length);
   
   // Add new crash markers with geocoding
@@ -595,6 +602,8 @@ const centerOnCrash = () => {
 };
 
 const hasCrashLocation = computed(() => {
+  // Only display View Crash Site if a crash is actively detected!
+  if (!props.crashDetected) return false;
   if (!props.crashEvents || props.crashEvents.length === 0) return false;
   const c = props.crashEvents[0];
   const lat = Number(c.lat) || (props.location?.lat ? Number(props.location.lat) : null);
@@ -703,11 +712,11 @@ watch(
   { deep: true }
 );
 
-// Watch for crash events changes
+// Watch for crash events and crash detection state changes
 watch(
-  () => props.crashEvents,
+  () => [props.crashEvents, props.crashDetected],
   () => {
-    console.log('[LocationSection] Crash events updated:', props.crashEvents.length);
+    console.log('[LocationSection] Crash state updated:', props.crashEvents.length, 'active:', props.crashDetected);
     addCrashMarkers();
   },
   { deep: true }

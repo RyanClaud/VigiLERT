@@ -570,7 +570,7 @@
       <!-- Tab Content -->
       <div id="map" class="relative z-0">
         <div v-show="activeTab === 'My Location'" class="bg-[#0B2540]/75 backdrop-blur-md rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6 border border-white/10 hover:border-[#00B85C]/30 transition-all duration-300">
-          <LocationSection :location="location" :user="user" :crash-events="crashEvents" @update-location="handleLocationUpdate" />
+          <LocationSection :location="location" :user="user" :crash-events="crashEvents" :crash-detected="crashDisplayStatus !== 'Stable' || !!sensorData.crashDetected" @update-location="handleLocationUpdate" />
         </div>
         <div v-show="activeTab === 'Speed Data'" class="bg-[#0B2540]/75 backdrop-blur-md rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6 border border-white/10 hover:border-[#00B85C]/30 transition-all duration-300">
           <SpeedDataSection

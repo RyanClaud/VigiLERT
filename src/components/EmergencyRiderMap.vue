@@ -30,7 +30,7 @@
 
         <!-- Action Buttons -->
         <div class="flex flex-wrap gap-2 flex-shrink-0">
-          <button v-if="crashEvents.length > 0" @click="centerOnCrash"
+          <button v-if="crashDetected && crashEvents.length > 0" @click="centerOnCrash"
             class="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-700 text-white text-sm font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-red-500/20 animate-pulse">
             <span class="material-icons text-sm">warning</span>
             Crash Site
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Crash alert badge on map -->
-      <div v-if="isMapReady && (crashDetected || crashEvents.length > 0)"
+      <div v-if="isMapReady && crashDetected && crashEvents.length > 0"
         class="absolute top-4 right-4 bg-red-600 text-white px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-1.5 z-[500] border-2 border-white animate-pulse">
         <span class="material-icons text-sm">warning</span>
         <span class="text-xs font-black uppercase tracking-wider">Crash Site Pinned</span>
@@ -257,6 +257,9 @@ async function updateCrashMarkers() {
   // Clear existing crash markers
   crashMarkers.forEach(m => m.remove());
   crashMarkers = [];
+
+  // Only display crash marker on the map if crash is actively detected!
+  if (!props.crashDetected) return;
 
   const validCrashes = (props.crashEvents || []).filter(c => {
     const lat = Number(c.lat);
