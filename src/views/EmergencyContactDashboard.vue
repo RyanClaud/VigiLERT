@@ -31,12 +31,12 @@
               </div>
               <h1 class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
                 Safety Monitor,
-                <span class="bg-gradient-to-r from-red-300 to-orange-300 bg-clip-text text-transparent">Guardian</span>
+                <span class="bg-gradient-to-r from-red-300 to-orange-300 bg-clip-text text-transparent">{{ guardianName }}</span>
               </h1>
-              <div class="flex items-center gap-3 text-white/70 text-sm mt-1">
-                <span class="material-icons text-sm">visibility</span>
-                <span>Monitoring Rider Safety</span>
-                <span class="material-icons text-sm ml-2">schedule</span>
+              <div class="flex flex-wrap items-center gap-3 text-white/70 text-sm mt-1">
+                <span class="material-icons text-sm">two_wheeler</span>
+                <span>Rider: <strong class="text-white">{{ riderName }}</strong></span>
+                <span class="material-icons text-sm ml-1">schedule</span>
                 <span>{{ currentTime }}</span>
               </div>
             </div>
@@ -347,54 +347,78 @@
               </div>
               <div>
                 <h3 class="text-base font-bold text-white">Speed Limit Control</h3>
-                <p class="text-white/60 text-xs flex items-center gap-1">
-                  <span class="material-icons text-xs">edit</span>
-                  Only you (emergency contact) can adjust this
+                <p class="text-white/80 text-xs flex items-center gap-1">
+                  <span class="material-icons text-xs">verified</span>
+                  Guardian safety control — sets the speed threshold on the rider's bike
                 </p>
               </div>
             </div>
             <div class="text-right">
               <span class="text-3xl font-black text-white">{{ speedLimit }}</span>
               <span class="text-sm font-semibold text-white/70 ml-1">km/h</span>
-              <p class="text-white/50 text-xs mt-0.5">{{ speedZoneLabel }}</p>
+              <p class="text-white/80 text-xs mt-0.5">{{ speedZoneLabel }}</p>
             </div>
           </div>
 
           <!-- Progress bar with threshold marker and current speed indicator -->
-          <div class="relative mb-2">
+          <div class="relative mb-3">
             <!-- Track background -->
-            <div class="w-full h-5 rounded-full bg-white/15 overflow-visible relative">
+            <div class="w-full h-6 rounded-full bg-black/30 overflow-visible relative border border-white/20">
               <!-- Fill -->
               <div class="h-full rounded-full transition-all duration-300 absolute top-0 left-0"
                 :style="{ width: `${(speedLimit / 120) * 100}%`, background: speedBarColor }"></div>
 
               <!-- Current speed indicator (white vertical line) -->
               <div v-if="currentSpeed > 0"
-                class="absolute top-1/2 -translate-y-1/2 flex flex-col items-center"
+                class="absolute top-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none z-10"
                 :style="{ left: `${Math.min((currentSpeed / 120) * 100, 100)}%` }">
-                <div class="w-0.5 h-7 bg-white shadow-lg rounded-full -mt-1"></div>
-                <span class="text-white text-xs font-bold mt-1 bg-black/30 px-1 rounded whitespace-nowrap">
-                  {{ currentSpeed.toFixed(0) }}
+                <div class="w-1 h-8 bg-white shadow-lg rounded-full -mt-1"></div>
+                <span class="text-white text-[10px] font-bold mt-1 bg-black/70 px-1.5 py-0.5 rounded whitespace-nowrap">
+                  {{ currentSpeed.toFixed(0) }} km/h
                 </span>
               </div>
 
               <!-- Threshold marker (diamond shape at the set limit) -->
-              <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+              <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10"
                 :style="{ left: `${(speedLimit / 120) * 100}%` }">
-                <div class="w-4 h-4 bg-white rotate-45 shadow-xl border-2 border-white/50"
-                  :style="{ boxShadow: `0 0 8px ${speedBarColor}` }"></div>
+                <div class="w-5 h-5 bg-white rotate-45 shadow-xl border-2 border-white/80"
+                  :style="{ boxShadow: `0 0 10px ${speedBarColor}` }"></div>
               </div>
             </div>
 
-            <!-- Invisible range input on top for interaction -->
-            <input type="range" min="0" max="120" step="5" v-model.number="speedLimit"
+            <!-- Visible interactive range input on top -->
+            <input type="range" min="20" max="120" step="5" v-model.number="speedLimit"
               @input="updateSpeedLimitInFirebase"
-              class="absolute inset-0 w-full h-5 opacity-0 cursor-pointer" />
+              class="absolute inset-0 w-full h-6 opacity-0 cursor-pointer z-20" />
           </div>
 
           <!-- Labels -->
-          <div class="flex justify-between text-xs font-bold text-white/60 mt-3">
+          <div class="flex justify-between text-xs font-bold text-white/60 mt-2">
             <span>0</span><span>30</span><span>60</span><span>90</span><span>120 km/h</span>
+          </div>
+
+          <!-- Quick Preset Buttons and +/- adjustments -->
+          <div class="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-white/10">
+            <div class="flex items-center gap-2">
+              <button @click="adjustSpeedLimit(-5)" type="button"
+                class="px-3 py-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 border border-white/20">
+                <span class="material-icons text-sm">remove</span> 5 km/h
+              </button>
+              <button @click="adjustSpeedLimit(5)" type="button"
+                class="px-3 py-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 border border-white/20">
+                <span class="material-icons text-sm">add</span> 5 km/h
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs text-white/60 mr-1 hidden sm:inline">Presets:</span>
+              <button v-for="preset in [40, 60, 80, 100]" :key="preset"
+                @click="setSpeedLimitPreset(preset)" type="button"
+                :class="['px-2.5 py-1 rounded-lg text-xs font-bold transition-all border',
+                  speedLimit === preset ? 'bg-white text-slate-900 border-white shadow-md scale-105' : 'bg-white/10 text-white/80 border-white/10 hover:bg-white/20']">
+                {{ preset }}
+              </button>
+            </div>
           </div>
 
           <!-- Legend -->
@@ -612,14 +636,28 @@ const router = useRouter();
 const route  = useRoute();
 
 // userUID comes from the route param set at login � never hardcoded
-const userUID = route.params.userId || 'MnzBjTBslZNijOkq732PE91hHa23';
+const getInitialUserUID = () => {
+  if (route.params.userId) return route.params.userId;
+  const saved = sessionStorage.getItem('vigilert_emergency_contact');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed.riderUid) return parsed.riderUid;
+    } catch {}
+  }
+  return 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+};
+
+const userUID = getInitialUserUID();
 
 // -- State ------------------------------------------------------------------
+const guardianName        = ref('Guardian');
+const riderName           = ref('Rider');
 const helmetPaired        = ref(false);
 const motorcyclePaired    = ref(false);
 const engineRunning       = ref(false);
 const currentSpeed        = ref(0);
-const speedLimit          = ref(60);
+const speedLimit          = ref(80);
 const isOverSpeed         = ref(false);
 const alcoholStatus       = ref('Safe');
 const crashDisplayStatus  = ref('Stable');
@@ -631,8 +669,7 @@ const speedHistory        = ref([]);
 const location            = ref({ lat: null, lng: null });
 const currentTime         = ref(new Date().toLocaleTimeString());
 const satelliteCount      = ref(0);
-const emergencyContactLocation = ref({ lat: null, lng: null });
-const riderPhoto              = ref('');
+const riderPhoto          = ref('');
 
 // Anti-theft banner (mirrors user dashboard)
 const antiTheftAlert = ref({
@@ -714,6 +751,16 @@ const updateSpeedLimitInFirebase = () => {
   set(dbRef(database, `helmet_public/${userUID}/settings/speedLimit`), speedLimit.value)
     .then(() => console.log('[SPEED LIMIT] Updated to', speedLimit.value, 'km/h'))
     .catch(err => console.error('[SPEED LIMIT]', err));
+};
+
+const setSpeedLimitPreset = (val) => {
+  speedLimit.value = val;
+  updateSpeedLimitInFirebase();
+};
+
+const adjustSpeedLimit = (delta) => {
+  speedLimit.value = Math.max(20, Math.min(120, speedLimit.value + delta));
+  updateSpeedLimitInFirebase();
 };
 
 // -- SOS --------------------------------------------------------------------
@@ -822,8 +869,10 @@ const setupFirebaseListeners = () => {
       if (speedHistory.value.length > 50) speedHistory.value.shift();
     }
 
-    if (d.locationLat && d.locationLng) {
-      location.value = { lat: d.locationLat, lng: d.locationLng };
+    const lat = d.locationLat ?? d.latitude ?? d.lat ?? (d.location && d.location.lat);
+    const lng = d.locationLng ?? d.longitude ?? d.lng ?? (d.location && d.location.lng);
+    if (lat && lng && Number(lat) !== 0 && Number(lng) !== 0) {
+      location.value = { lat: Number(lat), lng: Number(lng) };
     }
 
     if (d.gps?.satellites !== undefined) satelliteCount.value = d.gps.satellites;
@@ -1015,11 +1064,17 @@ const setupFirebaseListeners = () => {
   // -- 10. Rider profile & avatar sync for map marker ------------------------
   onValue(dbRef(database, `users/${userUID}`), snap => {
     const d = snap.val();
-    if (d && d.photoURL) riderPhoto.value = d.photoURL;
+    if (d) {
+      if (d.photoURL) riderPhoto.value = d.photoURL;
+      if (d.displayName || d.fullName || d.name) riderName.value = d.displayName || d.fullName || d.name;
+    }
   });
   onValue(dbRef(database, `helmet_public/${userUID}/profile`), snap => {
     const d = snap.val();
-    if (d && d.photoURL) riderPhoto.value = d.photoURL;
+    if (d) {
+      if (d.photoURL) riderPhoto.value = d.photoURL;
+      if (d.displayName || d.fullName || d.name) riderName.value = d.displayName || d.fullName || d.name;
+    }
   });
 };
 
@@ -1027,11 +1082,16 @@ const setupFirebaseListeners = () => {
 onMounted(() => {
   setupFirebaseListeners();
   clockInterval = setInterval(() => { currentTime.value = new Date().toLocaleTimeString(); }, 1000);
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      pos => { emergencyContactLocation.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }; },
-      err => console.warn('[GEO]', err)
-    );
+
+  // Retrieve logged-in guardian info from session
+  const saved = sessionStorage.getItem('vigilert_emergency_contact');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed.contactName) {
+        guardianName.value = `${parsed.contactName}${parsed.relationship ? ` (${parsed.relationship})` : ''}`;
+      }
+    } catch {}
   }
 });
 

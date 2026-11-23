@@ -50,6 +50,19 @@ const routes = [
     component: () => import(/* webpackChunkName: "emergency" */ '../views/EmergencyContactLogin.vue')
   },
   {
+    path: '/emergency-dashboard',
+    redirect: () => {
+      const saved = sessionStorage.getItem('vigilert_emergency_contact');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.riderUid) return `/emergency-dashboard/${parsed.riderUid}`;
+        } catch {}
+      }
+      return '/emergency-login';
+    }
+  },
+  {
     path: '/emergency-dashboard/:userId',
     name: 'EmergencyContactDashboard',
     component: () => import(/* webpackChunkName: "emergency" */ '../views/EmergencyContactDashboard.vue')
@@ -101,7 +114,7 @@ router.beforeEach(async (to, from, next) => {
 
   if (requiresAuth && !authStore.isAuthenticated) {
     next('/login');
-  } else if (!requiresAuth && authStore.isAuthenticated) {
+  } else if (authStore.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
     next('/dashboard');
   } else {
     next();

@@ -206,15 +206,24 @@ const addContact = async () => {
   if (!authStore.user) return;
 
   try {
-    const contactsRef = dbRef(database, `users/${authStore.user.uid}/emergencyContacts`);
-    const newContactRef = push(contactsRef);
-    
-    await set(newContactRef, {
+    const contactData = {
       name: newContact.value.name,
       phone: newContact.value.phone,
       relationship: newContact.value.relationship,
       createdAt: Date.now()
-    });
+    };
+
+    const contactsRef = dbRef(database, `users/${authStore.user.uid}/emergencyContacts`);
+    const newContactRef = push(contactsRef);
+    await set(newContactRef, contactData);
+
+    // Also mirror to helmet_public so emergency login and hardware lookups can access seamlessly
+    try {
+      const publicRef = dbRef(database, `helmet_public/${authStore.user.uid}/emergencyContacts/${newContactRef.key}`);
+      await set(publicRef, contactData);
+    } catch (e) {
+      console.warn('Could not mirror contact to helmet_public:', e);
+    }
 
     // Reset form
     newContact.value = {
@@ -234,6 +243,13 @@ const deleteContact = async (contactId) => {
   try {
     const contactRef = dbRef(database, `users/${authStore.user.uid}/emergencyContacts/${contactId}`);
     await remove(contactRef);
+
+    try {
+      const publicContactRef = dbRef(database, `helmet_public/${authStore.user.uid}/emergencyContacts/${contactId}`);
+      await remove(publicContactRef);
+    } catch (e) {
+      console.warn('Could not remove contact from helmet_public:', e);
+    }
   } catch (error) {
     console.error('Error deleting contact:', error);
   }

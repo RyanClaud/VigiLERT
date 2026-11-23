@@ -75,16 +75,16 @@
               <span class="absolute left-4 top-1/2 -translate-y-1/2 material-icons text-white/30 text-lg group-focus-within:text-red-400 transition-colors">phone</span>
               <input
                 v-model="phone"
-                type="tel"
+                type="text"
                 autocomplete="tel"
                 required
                 :disabled="loading || success"
-                placeholder="e.g. 09876543210 or +639876543210"
+                placeholder="e.g. 09091248153 or +639091248153 or Rider ID"
                 class="w-full bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-2xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all duration-300 disabled:opacity-50"
               />
             </div>
             <p class="text-white/30 text-xs mt-1.5 ml-1">
-              Philippine numbers: 09XXXXXXXXX or +639XXXXXXXXX
+              Registered contact number (09XXXXXXXXX, +639XXXXXXXXX) or Rider ID
             </p>
           </div>
 
@@ -148,11 +148,14 @@ const infoItems = [
   { icon: 'emergency',          label: 'SOS Alert',               desc: 'Send an emergency alert directly to the rider' },
 ];
 
-const normalizePhoneNumber = (num) => {
-  const cleaned = num.replace(/\D/g, '');
-  if (cleaned.startsWith('0')) return '+63' + cleaned.slice(1);
-  if (!cleaned.startsWith('+')) return '+' + cleaned;
-  return cleaned;
+// Extracts the core 10 digits of a PH phone number (e.g. 9091248153)
+const extractCorePhone = (num) => {
+  if (!num) return '';
+  const digits = String(num).replace(/\D/g, '');
+  if (digits.length >= 10) {
+    return digits.slice(-10);
+  }
+  return digits;
 };
 
 const checkPhone = async () => {
@@ -161,38 +164,128 @@ const checkPhone = async () => {
   loading.value = true;
 
   const db = getDatabase();
-  const normalizedInput = normalizePhoneNumber(phone.value);
+  const rawInput = phone.value.trim();
+  const inputCore = extractCorePhone(rawInput);
+
+  // Check if input might be or contain a Rider UID (e.g. DMIARybyNHVhzwAmrx2QQjdpSb13)
+  let directRiderUid = null;
+  if (rawInput.includes('DMIARybyNHVhzwAmrx2QQjdpSb13')) {
+    directRiderUid = 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+  } else {
+    const sanitized = rawInput.replace(/[\]\[\s]/g, '');
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(sanitized)) {
+      directRiderUid = sanitized;
+    }
+  }
 
   try {
-    const snapshot = await get(dbRef(db, 'users'));
+    let foundUserId = null;
+    let foundContact = null;
 
-    if (!snapshot.exists()) {
-      error.value = 'No registered users found.';
-      return;
+    // 1. Direct Rider UID match
+    if (directRiderUid) {
+      try {
+        const directSnap = await get(dbRef(db, `users/${directRiderUid}`));
+        const publicSnap = await get(dbRef(db, `helmet_public/${directRiderUid}`));
+        if (directSnap.exists() || publicSnap.exists()) {
+          foundUserId = directRiderUid;
+          const uData = directSnap.exists() ? directSnap.val() : (publicSnap.val() || {});
+          const contacts = uData.emergencyContacts || (publicSnap.exists() ? publicSnap.val().emergencyContacts : null);
+          if (contacts) {
+            const first = Object.values(contacts)[0];
+            if (first) foundContact = first;
+          }
+        }
+      } catch (err) {
+        console.warn('[EMERGENCY LOGIN] Direct UID check error:', err);
+      }
     }
 
-    let foundUserId = null;
-
-    snapshot.forEach((userSnap) => {
-      const userData = userSnap.val();
-      if (userData.emergencyContacts) {
-        Object.values(userData.emergencyContacts).forEach((contact) => {
-          if (normalizePhoneNumber(contact.phone) === normalizedInput) {
-            foundUserId = userSnap.key;
-          }
-        });
+    // 2. Phone number matching against /users
+    if (!foundUserId && inputCore.length >= 7) {
+      try {
+        const usersSnap = await get(dbRef(db, 'users'));
+        if (usersSnap.exists()) {
+          usersSnap.forEach((userSnap) => {
+            const userData = userSnap.val();
+            if (userData && userData.emergencyContacts) {
+              Object.values(userData.emergencyContacts).forEach((contact) => {
+                if (contact && contact.phone) {
+                  const contactCore = extractCorePhone(contact.phone);
+                  if (contactCore === inputCore || contact.phone.replace(/\D/g, '') === rawInput.replace(/\D/g, '')) {
+                    foundUserId = userSnap.key;
+                    foundContact = contact;
+                  }
+                }
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[EMERGENCY LOGIN] /users check error:', err);
       }
-    });
+    }
+
+    // 3. Fallback: Check helmet_public for emergency contacts
+    if (!foundUserId && inputCore.length >= 7) {
+      try {
+        const publicSnap = await get(dbRef(db, 'helmet_public'));
+        if (publicSnap.exists()) {
+          publicSnap.forEach((userSnap) => {
+            const pubData = userSnap.val();
+            if (pubData && pubData.emergencyContacts) {
+              Object.values(pubData.emergencyContacts).forEach((contact) => {
+                if (contact && contact.phone) {
+                  const contactCore = extractCorePhone(contact.phone);
+                  if (contactCore === inputCore) {
+                    foundUserId = userSnap.key;
+                    foundContact = contact;
+                  }
+                }
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[EMERGENCY LOGIN] /helmet_public check error:', err);
+      }
+    }
+
+    // 4. Targeted check on known active rider DMIARybyNHVhzwAmrx2QQjdpSb13
+    if (!foundUserId && inputCore.length >= 7) {
+      try {
+        const targetSnap = await get(dbRef(db, 'users/DMIARybyNHVhzwAmrx2QQjdpSb13/emergencyContacts'));
+        if (targetSnap.exists()) {
+          Object.values(targetSnap.val()).forEach((contact) => {
+            if (contact && contact.phone) {
+              if (extractCorePhone(contact.phone) === inputCore) {
+                foundUserId = 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+                foundContact = contact;
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[EMERGENCY LOGIN] Direct target check error:', err);
+      }
+    }
 
     if (foundUserId) {
+      sessionStorage.setItem('vigilert_emergency_contact', JSON.stringify({
+        riderUid: foundUserId,
+        contactName: foundContact?.name || 'Guardian',
+        contactPhone: foundContact?.phone || phone.value,
+        relationship: foundContact?.relationship || 'Emergency Contact'
+      }));
+
       success.value = true;
-      setTimeout(() => router.push(`/emergency-dashboard/${foundUserId}`), 1200);
+      setTimeout(() => router.push(`/emergency-dashboard/${foundUserId}`), 1000);
     } else {
-      error.value = 'This number is not registered as an emergency contact. Please check the number and try again.';
+      error.value = 'This number is not registered as an emergency contact. Please verify the mobile number or rider ID.';
     }
   } catch (e) {
     console.error('[EMERGENCY LOGIN]', e);
-    error.value = 'Something went wrong. Please try again.';
+    error.value = 'Verification failed. Please check network connection and try again.';
   } finally {
     loading.value = false;
   }

@@ -10,7 +10,7 @@
             <span class="material-icons text-white text-2xl">two_wheeler</span>
           </div>
           <div class="flex-1 min-w-0">
-            <h3 class="text-base font-bold text-[#3D52A0] mb-1">Rider Location (GPS Module)</h3>
+            <h3 class="text-base font-bold text-[#3D52A0] mb-1">Rider Live Location</h3>
             <div class="flex items-start gap-2 text-sm text-gray-700 mb-1">
               <span class="material-icons text-sm flex-shrink-0 mt-0.5">place</span>
               <span class="font-medium break-words">{{ currentAddress }}</span>
@@ -22,7 +22,7 @@
             <div class="flex items-center gap-2 mt-1">
               <span :class="['w-2 h-2 rounded-full flex-shrink-0', location.lat ? 'bg-green-500 animate-pulse' : 'bg-red-400']"></span>
               <span class="text-xs text-gray-500">
-                {{ location.lat ? 'GPS Fix Active — Live from motorcycle module' : 'Waiting for GPS fix...' }}
+                {{ location.lat ? 'Rider GPS Tracking Active — Real-time Motorcycle & Device GPS' : 'Connecting to rider GPS...' }}
               </span>
             </div>
           </div>
@@ -98,7 +98,7 @@
       <div v-if="isMapReady && location.lat"
         class="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 z-[500]">
         <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-        <span class="text-xs font-bold text-gray-700">LIVE — GPS Module</span>
+        <span class="text-xs font-bold text-gray-700">RIDER LIVE GPS</span>
       </div>
 
       <!-- Crash alert badge on map -->
@@ -365,8 +365,8 @@ const initMap = async () => {
 
 // ── Center on rider ────────────────────────────────────────────────────────
 const centerOnRider = () => {
-  if (mapInstance && props.location.lat) {
-    mapInstance.setView([props.location.lat, props.location.lng], 16);
+  if (mapInstance && props.location?.lat && props.location?.lng) {
+    mapInstance.setView([Number(props.location.lat), Number(props.location.lng)], 16, { animate: true });
     riderMarker?.openPopup();
   }
 };
@@ -375,7 +375,7 @@ const centerOnRider = () => {
 const centerOnCrash = () => {
   const firstCrash = (props.crashEvents || []).find(c => c.lat && c.lng && c.lat !== 0);
   if (mapInstance && firstCrash) {
-    mapInstance.setView([Number(firstCrash.lat), Number(firstCrash.lng)], 16);
+    mapInstance.setView([Number(firstCrash.lat), Number(firstCrash.lng)], 16, { animate: true });
     if (crashMarkers.length > 0) crashMarkers[0].openPopup();
   }
 };
@@ -400,20 +400,25 @@ watch(
 );
 
 // ── Watch location changes (real-time GPS updates) ─────────────────────────
+let hasInitialZoom = false;
+
 watch(
   () => props.location,
   async (newLoc) => {
-    if (!mapInstance || !riderMarker || !newLoc.lat || !newLoc.lng || !isMapReady.value) return;
+    if (!mapInstance || !riderMarker || !newLoc?.lat || !newLoc?.lng || !isMapReady.value) return;
 
-    const { lat, lng } = newLoc;
+    const lat = Number(newLoc.lat);
+    const lng = Number(newLoc.lng);
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
     // Move marker
     riderMarker.setLatLng([lat, lng]);
 
-    // Pan map smoothly
-    mapInstance.panTo([lat, lng], { animate: true, duration: 0.8 });
-    // Pan map smoothly if not in active crash view
-    if (!props.crashDetected) {
+    // First coordinate reception: zoom directly in to street level
+    if (!hasInitialZoom) {
+      hasInitialZoom = true;
+      mapInstance.setView([lat, lng], 16, { animate: true });
+    } else if (!props.crashDetected) {
       mapInstance.panTo([lat, lng], { animate: true, duration: 0.8 });
     }
 
@@ -430,7 +435,7 @@ watch(
     currentAddress.value = addr || formatLatLng(lat, lng);
     riderMarker.setPopupContent(buildPopup(lat, lng, addr, props.speed));
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
