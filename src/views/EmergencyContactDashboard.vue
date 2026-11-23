@@ -762,6 +762,28 @@
           </div>
         </div>
       </div>
+  
+      <!-- ===== SOS ERROR MODAL ===== -->
+      <div v-if="showSosErrorModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div class="relative w-full max-w-md bg-[#0A1A2F] border-2 border-red-500/50 rounded-3xl p-6 shadow-2xl text-center overflow-hidden">
+          <div class="relative z-10">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 border border-red-400/40 flex items-center justify-center">
+              <span class="material-icons text-red-400 text-4xl">error</span>
+            </div>
+            <h3 class="text-xl font-black text-white uppercase tracking-wider mb-2">SOS Broadcast Notice</h3>
+            <p class="text-white/80 text-sm mb-5">{{ sosErrorMessage }}</p>
+            <div class="flex flex-col gap-2.5">
+              <a href="tel:911" class="w-full py-3.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-icons text-lg">phone</span>
+                <span>Call 911 Emergency</span>
+              </a>
+              <button @click="showSosErrorModal = false" class="w-full py-2.5 px-4 rounded-xl bg-white/10 text-white/70 hover:text-white font-medium text-xs">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
   </div>
 </template>
 
@@ -769,7 +791,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, onValue, push, onChildAdded, onChildChanged } from 'firebase/database';
+import { ref as dbRef, set, update, onValue, push, onChildAdded, onChildChanged } from 'firebase/database';
 import EmergencyRiderMap from '../components/EmergencyRiderMap.vue';
 
 const router = useRouter();
@@ -907,8 +929,10 @@ const adjustSpeedLimit = (delta) => {
 const showSosConfirmModal = ref(false);
 const showSosSentModal    = ref(false);
 const showRiderSosModal   = ref(false);
+const showSosErrorModal   = ref(false);
 const isSendingSos        = ref(false);
 const activeRiderSos      = ref(null);
+const sosErrorMessage     = ref('');
 
 const triggerSOS = () => {
   showSosConfirmModal.value = true;
@@ -938,7 +962,8 @@ const confirmAndSendSOS = async () => {
     showSosSentModal.value = true;
   } catch (err) {
     console.error('[SOS]', err);
-    alert('Failed to send SOS. Please check connection and try again.');
+    sosErrorMessage.value = 'Failed to broadcast SOS to rider. Please check your connection or contact the rider directly.';
+    showSosErrorModal.value = true;
   } finally {
     isSendingSos.value = false;
   }
@@ -1045,23 +1070,22 @@ const setupFirebaseListeners = () => {
   // -- 6. Rider SOS Real-Time Listener -----------------------------------
   const sosRef = dbRef(database, `helmet_public/${userUID}/sos`);
   const seenSosKeys = new Set();
-  let initialSosLoadDone = false;
-  setTimeout(() => { initialSosLoadDone = true; }, 3000);
+  const sessionStartTime = Date.now() - 30000;
 
   onChildAdded(sosRef, snap => {
     const key = snap.key;
     const sosData = snap.val();
     if (!sosData) return;
 
-    if (!initialSosLoadDone) {
-      seenSosKeys.add(key);
-      return;
-    }
     if (seenSosKeys.has(key)) return;
     seenSosKeys.add(key);
 
+    const isRecent = sosData.timestamp && (Date.now() - sosData.timestamp < 30 * 60 * 1000);
+    const isNew = sosData.timestamp && (sosData.timestamp >= sessionStartTime);
+    const isActive = sosData.status === 'active';
+
     // If SOS was triggered by rider or manual button
-    if (sosData.triggeredBy === 'rider' || sosData.triggeredBy === 'manual') {
+    if ((sosData.triggeredBy === 'rider' || sosData.triggeredBy === 'manual') && (isActive || isNew) && isRecent) {
       console.log('[SOS] 🚨 RIDER TRIGGERED SOS:', sosData);
       activeRiderSos.value = {
         key,
@@ -1074,6 +1098,16 @@ const setupFirebaseListeners = () => {
       playAlertSound();
       addAlert('danger', '🚨 RIDER EMERGENCY SOS!',
         `Rider ${riderName.value} triggered an emergency SOS! Check location and contact immediately.`);
+    }
+  });
+
+  // Listen to live sosActive flag for instant resolution
+  onValue(dbRef(database, `helmet_public/${userUID}/live/sosActive`), snap => {
+    const isSosActive = snap.val();
+    if (isSosActive === false && showRiderSosModal.value) {
+      showRiderSosModal.value = false;
+      stopAlertSound();
+      addAlert('info', 'ℹ️ Rider Reported Safe', `Rider ${riderName.value} has cancelled the SOS alert.`);
     }
   });
 

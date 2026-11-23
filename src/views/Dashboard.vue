@@ -995,7 +995,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { database } from '../firebase/config';
-import { ref as dbRef, set, update, onValue, onChildAdded, remove, get } from 'firebase/database';
+import { ref as dbRef, set, update, onValue, onChildAdded, remove, get, push } from 'firebase/database';
 
 // Components
 import TabGroup from '../components/TabGroup.vue';
@@ -1445,50 +1445,50 @@ const setupFirebaseListeners = () => {
   // ✅ Listen for SOS alerts from Emergency Contact
   const sosRef = dbRef(database, `helmet_public/${userId.value}/sos`);
   const seenSosKeys = new Set();
-  let initialSosLoadDone = false;
-  setTimeout(() => { initialSosLoadDone = true; }, 3000);
+  const sessionStartTime = Date.now() - 30000;
 
   onChildAdded(sosRef, (snapshot) => {
     const key = snapshot.key;
     const sosData = snapshot.val();
     if (!sosData) return;
 
-    // Skip pre-existing SOS entries during initial load
-    if (!initialSosLoadDone) {
-      seenSosKeys.add(key);
-      return;
-    }
     if (seenSosKeys.has(key)) return;
     seenSosKeys.add(key);
 
     // Only handle SOS triggered by emergency contact
     if (sosData.triggeredBy !== 'emergency_contact') return;
 
-    console.log('[SOS] 🆘 Emergency Contact triggered SOS:', sosData);
+    const isRecent = sosData.timestamp && (Date.now() - sosData.timestamp < 30 * 60 * 1000);
+    const isNew = sosData.timestamp && (sosData.timestamp >= sessionStartTime);
+    const isActive = sosData.status === 'active';
 
-    incomingSosData.value = {
-      key,
-      ...sosData,
-      time: new Date(sosData.timestamp || Date.now()).toLocaleTimeString()
-    };
-    showIncomingSosModal.value = true;
-    playSound('danger');
+    if ((isActive || isNew) && isRecent) {
+      console.log('[SOS] 🆘 Emergency Contact triggered SOS:', sosData);
 
-    addAlert('danger', '🆘 EMERGENCY CONTACT SOS!',
-      `Emergency contact has triggered SOS alert. ${
-        sosData.emergencyContactLocation?.lat
-          ? `Their location: ${sosData.emergencyContactLocation.lat.toFixed(6)}, ${sosData.emergencyContactLocation.lng.toFixed(6)}`
-          : ''
-      }`
-    );
+      incomingSosData.value = {
+        key,
+        ...sosData,
+        time: new Date(sosData.timestamp || Date.now()).toLocaleTimeString()
+      };
+      showIncomingSosModal.value = true;
+      playSound('danger');
 
-    // Browser notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('🆘 Emergency Contact SOS', {
-        body: 'Your emergency contact has triggered an SOS alert!',
-        icon: '/favicon.ico',
-        tag: 'sos-alert'
-      });
+      addAlert('danger', '🆘 EMERGENCY CONTACT SOS!',
+        `Emergency contact has triggered SOS alert. ${
+          sosData.emergencyContactLocation?.lat
+            ? `Their location: ${sosData.emergencyContactLocation.lat.toFixed(6)}, ${sosData.emergencyContactLocation.lng.toFixed(6)}`
+            : ''
+        }`
+      );
+
+      // Browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('🆘 Emergency Contact SOS', {
+          body: 'Your emergency contact has triggered an SOS alert!',
+          icon: '/favicon.ico',
+          tag: 'sos-alert'
+        });
+      }
     }
   });
 
@@ -2574,6 +2574,7 @@ const showSosErrorModal    = ref(false);
 const isSendingSos         = ref(false);
 const incomingSosData      = ref(null);
 const sosErrorMessage      = ref('');
+const activeSosKey         = ref('');
 
 // Open Trigger SOS Confirmation Modal (Replaces browser alert/confirm)
 const triggerSOS = () => {
@@ -2599,8 +2600,9 @@ const confirmAndSendSOS = async () => {
     });
 
     // 2. Write to Firebase /sos list (so emergency contact dashboard receives it in real-time)
-    const sosRef = dbRef(database, `helmet_public/${userId.value}/sos/${timestamp}`);
-    await set(sosRef, {
+    const sosPushRef = push(dbRef(database, `helmet_public/${userId.value}/sos`));
+    activeSosKey.value = sosPushRef.key;
+    await set(sosPushRef, {
       timestamp,
       location: { lat, lng },
       triggeredBy: 'rider',
@@ -2636,13 +2638,27 @@ const resolveSos = async () => {
   try {
     if (userId.value) {
       await set(dbRef(database, `helmet_public/${userId.value}/live/sosActive`), false);
+      if (activeSosKey.value) {
+        await update(dbRef(database, `helmet_public/${userId.value}/sos/${activeSosKey.value}`), {
+          status: 'resolved',
+          resolvedAt: Date.now()
+        });
+      }
     }
   } catch (e) {}
   showSosSentModal.value = false;
 };
 
 // Acknowledge Incoming SOS from Emergency Contact
-const acknowledgeIncomingSos = () => {
+const acknowledgeIncomingSos = async () => {
+  if (incomingSosData.value?.key && userId.value) {
+    try {
+      await update(dbRef(database, `helmet_public/${userId.value}/sos/${incomingSosData.value.key}`), {
+        riderAcknowledged: true,
+        riderAcknowledgedAt: Date.now()
+      });
+    } catch (e) {}
+  }
   showIncomingSosModal.value = false;
   stopSound();
 };
