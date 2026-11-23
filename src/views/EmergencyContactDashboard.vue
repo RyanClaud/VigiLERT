@@ -93,21 +93,27 @@
     <!-- ===== CRASH ALERT BANNER ===== -->
     <div v-if="crashDisplayStatus !== 'Stable'"
       class="mx-4 md:mx-8 mt-4 relative overflow-hidden bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-2xl shadow-2xl border-4 border-red-300 animate-pulse">
-      <div class="relative p-5 flex items-center gap-4">
-        <div class="bg-white/20 p-3 rounded-full animate-bounce">
-          <span class="material-icons text-4xl text-white">warning</span>
+      <div class="relative p-5 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-4 flex-1">
+          <div class="bg-white/20 p-3 rounded-full animate-bounce flex-shrink-0">
+            <span class="material-icons text-4xl text-white">warning</span>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-xl font-bold text-white flex items-center gap-2">
+              <span class="material-icons text-white text-2xl">warning</span> CRASH DETECTED
+            </h3>
+            <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} • Check on rider immediately!</p>
+            <a v-if="location.lat && location.lng"
+              :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" target="_blank"
+              class="inline-flex items-center gap-1 mt-2 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1 rounded-lg transition-all border border-white/20">
+              <span class="material-icons text-sm">map</span> View Location
+            </a>
+          </div>
         </div>
-        <div class="flex-1">
-          <h3 class="text-xl font-bold text-white flex items-center gap-2">
-            <span>??</span> CRASH DETECTED
-          </h3>
-          <p class="text-white/90 text-sm mt-1">{{ crashDisplayMessage }} � Check on rider immediately!</p>
-          <a v-if="location.lat && location.lng"
-            :href="`https://www.google.com/maps?q=${location.lat},${location.lng}`" target="_blank"
-            class="inline-flex items-center gap-1 mt-2 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1 rounded-lg transition-all">
-            <span class="material-icons text-sm">map</span> View Location
-          </a>
-        </div>
+        <button @click="dismissCrashAlert"
+          class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all flex-shrink-0 border border-white/30 hover:scale-105 active:scale-95">
+          Dismiss
+        </button>
       </div>
     </div>
 
@@ -118,18 +124,18 @@
             : antiTheftAlert.severity === 'medium' ? 'bg-gradient-to-r from-yellow-600 to-orange-600 border-yellow-300'
             : 'bg-gradient-to-r from-yellow-500 to-yellow-600 border-yellow-200'">
       <div class="relative p-5 flex items-center gap-4">
-        <div class="bg-white/20 p-3 rounded-full animate-bounce">
+        <div class="bg-white/20 p-3 rounded-full animate-bounce flex-shrink-0">
           <span class="material-icons text-4xl text-white">security</span>
         </div>
         <div class="flex-1">
           <h3 class="text-xl font-bold text-white flex items-center gap-2">
-            <span>??</span> ANTI-THEFT ALERT
+            <span class="material-icons text-white text-2xl">security</span> ANTI-THEFT ALERT
           </h3>
           <p class="text-white/90 text-sm mt-1">{{ antiTheftAlert.message }}</p>
-          <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} � Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
+          <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} • Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
         </div>
         <button @click="dismissAntiTheftAlert"
-          class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all">
+          class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all border border-white/30">
           Dismiss
         </button>
       </div>
@@ -795,6 +801,7 @@ const dismissAntiTheftAlert = () => {
 
 const dismissCrashAlert = () => {
   crashDisplayStatus.value = 'Stable';
+  crashDisplayMessage.value = 'Vehicle Stable';
   stopAlertSound();
 };
 
@@ -897,12 +904,10 @@ const setupFirebaseListeners = () => {
         });
       }
     } else {
-      // Vehicle uprighted / crash cleared
+      // Vehicle uprighted / balance stable - clear alert banner immediately
       stopAlertSound();
-      if (crashEvents.value.length === 0) {
-        crashDisplayStatus.value  = 'Stable';
-        crashDisplayMessage.value = 'Normal';
-      }
+      crashDisplayStatus.value  = 'Stable';
+      crashDisplayMessage.value = 'Vehicle Stable';
     }
   });
 
@@ -975,8 +980,12 @@ const setupFirebaseListeners = () => {
     crashEvents.value.unshift(crashEvent);
     if (crashEvents.value.length > 5) crashEvents.value = crashEvents.value.slice(0, 5);
 
-    crashDisplayStatus.value  = 'Alert';
-    crashDisplayMessage.value = 'Crash Detected';
+    // Only activate alert banner if initial load is done AND crash event is fresh (last 60s)
+    const isFresh = (Date.now() - (event.timestamp || 0)) < 60000;
+    if (initialCrashLoadDone && isFresh) {
+      crashDisplayStatus.value  = 'Alert';
+      crashDisplayMessage.value = 'Crash Detected';
+    }
 
     addAlert('crash', '🚨 CRASH DETECTED!',
       `Impact: ${crashEvent.impactStrength} g | Lean: ${Math.abs(crashEvent.roll).toFixed(1)}° | Location: ${

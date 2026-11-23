@@ -199,13 +199,13 @@ const unsigned long QUICK_STATUS_INTERVAL = 1000;  // 1 second quick status
 bool antiTheftEnabled = false;
 bool antiTheftArmed = false;
 unsigned long engineOffTime = 0;
-const unsigned long ARM_DELAY = 10000;          // 10 seconds after engine off before arming
+const unsigned long ARM_DELAY = 1500;           // 1.5 seconds after engine off before activating vibration sensor
 unsigned long lastTheftAlert = 0;
-const unsigned long THEFT_ALERT_COOLDOWN = 60000; // 60 seconds between SMS/Firebase alerts
+const unsigned long THEFT_ALERT_COOLDOWN = 30000; // 30 seconds between SMS/Firebase alerts
 bool theftAlertSent = false;
 int theftDetectionCount = 0;
-const int THEFT_DETECTION_REQUIRED = 3;            // Require at least 3 pulses to confirm real movement
-const unsigned long VIBRATION_DEBOUNCE = 75;       // 75ms debounce between pulses
+const int THEFT_DETECTION_REQUIRED = 1;            // Instant alarm on detected movement
+const unsigned long VIBRATION_DEBOUNCE = 50;       // 50ms debounce between pulses
 const unsigned long VIBRATION_WINDOW_MS = 2000;    // 2-second moving window
 unsigned long vibrationWindowStart = 0;
 unsigned long lastVibrationTime = 0;
@@ -372,7 +372,7 @@ void setup() {
   // ✅ SECURITY: Record boot time for startup WiFi check
   deviceBootTime = millis();
   
-  Serial.println("\n╔════════════════════════════════════════╗");
+  Serial.println("\r\n╔════════════════════════════════════════╗");
   Serial.println("║   MOTORCYCLE MODULE - FIXED VERSION    ║");
   Serial.println("╠════════════════════════════════════════╣");
   Serial.println("║ ⚡ 1s heartbeat                        ║");
@@ -382,7 +382,7 @@ void setup() {
   Serial.println("║ 🔒 Balanced security (10-15s timeouts)║");
   Serial.println("║ 🛡️ Enhanced vibration detection       ║");
   Serial.println("║ 🚨 WiFi watchdog with alerts          ║");
-  Serial.println("╚════════════════════════════════════════╝\n");
+  Serial.println("╚════════════════════════════════════════╝\r\n");
 
   // Initialize MPU6050
   Wire.begin(21, 22);
@@ -428,10 +428,10 @@ void setup() {
   noTone(buzzerPin);
 
   delay(100);
-  Serial.println("\n[SETUP] ═══════════════════════════════════");
+  Serial.println("\r\n[SETUP] ═══════════════════════════════════");
   Serial.println("[SETUP] SINGLE RELAY on starter switch");
-  Serial.printf("[SETUP] GPIO %d: Relay = %s\n", relayPin, digitalRead(relayPin) ? "OFF" : "ON");
-  Serial.println("[SETUP] ═══════════════════════════════════\n");
+  Serial.printf("[SETUP] GPIO %d: Relay = %s\r\n", relayPin, digitalRead(relayPin) ? "OFF" : "ON");
+  Serial.println("[SETUP] ═══════════════════════════════════\r\n");
 
   connectToWiFi();
   
@@ -442,10 +442,10 @@ void setup() {
   // ✅ VIBRATION SENSOR: Enhanced baseline verification with diagnostic
   delay(500);  // Let pin stabilize
   int baselineReading = digitalRead(vibrationSensorPin);
-  Serial.printf("\n[VIBRATION] 🔍 Enhanced sensor baseline check:\n");
-  Serial.printf("[VIBRATION] Pin %d reading: %s (INPUT_PULLUP mode)\n", 
+  Serial.printf("\r\n[VIBRATION] 🔍 Enhanced sensor baseline check:\r\n");
+  Serial.printf("[VIBRATION] Pin %d reading: %s (INPUT_PULLUP mode)\r\n", 
                 vibrationSensorPin, baselineReading ? "HIGH" : "LOW");
-  Serial.printf("[VIBRATION] Expected: HIGH (pulled up), LOW on vibration\n");
+  Serial.printf("[VIBRATION] Expected: HIGH (pulled up), LOW on vibration\r\n");
   
   if (baselineReading == HIGH) {
     Serial.println("[VIBRATION] ✅ Sensor ready (HIGH baseline with pull-up)");
@@ -458,10 +458,10 @@ void setup() {
   for (int i = 0; i < 3; i++) {
     delay(500);
     int testReading = digitalRead(vibrationSensorPin);
-    Serial.printf("[VIBRATION] Test %d: GPIO %d = %s\n", i+1, vibrationSensorPin, testReading ? "HIGH" : "LOW");
+    Serial.printf("[VIBRATION] Test %d: GPIO %d = %s\r\n", i+1, vibrationSensorPin, testReading ? "HIGH" : "LOW");
   }
 
-  Serial.println("\n📋 SERIAL COMMANDS:");
+  Serial.println("\r\n📋 SERIAL COMMANDS:");
   Serial.println("   START ENGINE / STOP ENGINE");
   Serial.println("   ARM THEFT / DISARM THEFT");
   Serial.println("   SECURITY ON / SECURITY OFF");
@@ -469,48 +469,45 @@ void setup() {
   Serial.println("   TEST VIBRATION");
   Serial.println("   MONITOR (10s real-time data)");
   Serial.println("   STATUS");
-  Serial.println("   (SMS alerts are automatic — sent to Firebase emergency contacts)\n");
+  Serial.println("   (SMS alerts are automatic — sent to Firebase emergency contacts)\r\n");
 }
 
 void loop() {
   // ── PRIORITY #0: Tick the siren (two-tone wail, loop-safe) ───────────────
   tickSiren();
 
-  // ── PRIORITY #1: Vibration interrupt handler (Multi-pulse noise filtered) ──
-  if (vibrationISRTriggered) {
-    vibrationISRTriggered = false;  // clear flag immediately
+  // ── PRIORITY #1: Vibration detection (Interrupt + Pin Level Polling) ───────
+  int currentVib = digitalRead(vibrationSensorPin);
+  static int lastVibState = -1;
+  bool vibPinChanged = (lastVibState != -1 && currentVib != lastVibState);
+  lastVibState = currentVib;
+
+  bool movementDetected = (vibrationISRTriggered || vibPinChanged);
+  if (vibrationISRTriggered) vibrationISRTriggered = false;
+
+  if (movementDetected) {
     unsigned long now = millis();
 
+    // Inactive when engine is RUNNING or STARTING — ONLY active when engine is STOPPED and anti-theft is ARMED
     if (!engineRunning && antiTheftArmed) {
       if (now - vibrationISRTime >= VIBRATION_DEBOUNCE) {
         vibrationISRTime = now;
-
-        // Reset cluster window if last pulse was more than 2 seconds ago
-        if (now - vibrationWindowStart > VIBRATION_WINDOW_MS) {
-          consecutiveVibrations = 0;
-          vibrationWindowStart = now;
-        }
-
         consecutiveVibrations++;
-        Serial.printf("[ANTI-THEFT] Vibration pulse #%d/%d (window elapsed: %lu ms)\n",
-                      consecutiveVibrations, THEFT_DETECTION_REQUIRED, now - vibrationWindowStart);
 
-        // Require sustained vibration (at least 3 pulses within 2 seconds)
-        if (consecutiveVibrations >= THEFT_DETECTION_REQUIRED) {
-          Serial.println("\n🚨🚨🚨 [ANTI-THEFT] CONFIRMED UNAUTHORIZED MOVEMENT! 🚨🚨🚨");
-          startSiren();
+        Serial.printf("\r\n🚨🚨🚨 [ANTI-THEFT] MOVEMENT DETECTED (GPIO %d)! SOUNDING BUZZER & ALERTING GSM... 🚨🚨🚨\r\n", vibrationSensorPin);
 
-          if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
-            Serial.println("[ANTI-THEFT] Sending Firebase + SMS alert...");
-            triggerTheftAlert();
-            lastTheftAlert = now;
-            theftAlertSent = true;
-          } else {
-            Serial.printf("[ANTI-THEFT] Alert cooldown active (%lu s remaining)\n",
-                          (THEFT_ALERT_COOLDOWN - (now - lastTheftAlert)) / 1000);
-          }
+        // Buzz / siren sounds immediately to warn the thief
+        startSiren();
 
-          consecutiveVibrations = 0; // reset for next detection window
+        // Dispatch SMS via GSM module to emergency contacts and log to Firebase
+        if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
+          Serial.println("[ANTI-THEFT] 📱 Dispatching GSM SMS to emergency contact + Firebase alert...");
+          triggerTheftAlert();
+          lastTheftAlert = now;
+          theftAlertSent = true;
+        } else {
+          Serial.printf("[ANTI-THEFT] Alert cooldown active (%lu s remaining)\r\n",
+                        (THEFT_ALERT_COOLDOWN - (now - lastTheftAlert)) / 1000);
         }
       }
     }
@@ -557,7 +554,7 @@ void loop() {
     // Debug GPS status every 10 seconds
     static unsigned long lastGPSDebug = 0;
     if (millis() - lastGPSDebug >= 10000) {
-      Serial.printf("[GPS] Fix:%s | Sats:%d | Lat:%.6f | Lng:%.6f | Speed:%.1f kph | Chars:%lu\n",
+      Serial.printf("[GPS] Fix:%s | Sats:%d | Lat:%.6f | Lng:%.6f | Speed:%.1f kph | Chars:%lu\r\n",
                     gps.location.isValid() ? "YES" : "NO",
                     gps.satellites.isValid() ? (int)gps.satellites.value() : 0,
                     gps.location.isValid() ? gps.location.lat() : 0.0,
@@ -589,7 +586,7 @@ void loop() {
 
   // Serial commands
   if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
+    String cmd = Serial.readStringUntil('\r\n');
     cmd.trim();
     cmd.toUpperCase();
     
@@ -634,23 +631,23 @@ void loop() {
       Serial.println("🧪 TESTING VIBRATION SENSOR...");
       Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       int reading = digitalRead(vibrationSensorPin);
-      Serial.printf("📍 GPIO %d current reading: %d (%s)\n", vibrationSensorPin, reading, reading ? "HIGH" : "LOW");
-      Serial.printf("🛡️ Anti-theft armed: %s\n", antiTheftArmed ? "YES" : "NO");
-      Serial.printf("🛡️ Anti-theft enabled: %s\n", antiTheftEnabled ? "YES" : "NO");
-      Serial.printf("🔧 Pin mode: INPUT_PULLUP (expect HIGH normally)\n");
+      Serial.printf("📍 GPIO %d current reading: %d (%s)\r\n", vibrationSensorPin, reading, reading ? "HIGH" : "LOW");
+      Serial.printf("🛡️ Anti-theft armed: %s\r\n", antiTheftArmed ? "YES" : "NO");
+      Serial.printf("🛡️ Anti-theft enabled: %s\r\n", antiTheftEnabled ? "YES" : "NO");
+      Serial.printf("🔧 Pin mode: INPUT_PULLUP (expect HIGH normally)\r\n");
       
-      Serial.println("\n📊 Reading sensor 10 times (tap sensor now):");
+      Serial.println("\r\n📊 Reading sensor 10 times (tap sensor now):");
       for (int i = 0; i < 10; i++) {
         int testRead = digitalRead(vibrationSensorPin);
-        Serial.printf("  Reading %d: %s\n", i+1, testRead ? "HIGH" : "LOW");
+        Serial.printf("  Reading %d: %s\r\n", i+1, testRead ? "HIGH" : "LOW");
         delay(200);
       }
       
       // Force trigger for testing
       if (antiTheftArmed) {
-        Serial.println("\n🚨 FORCE TRIGGERING VIBRATION ALERT!");
+        Serial.println("\r\n🚨 FORCE TRIGGERING VIBRATION ALERT!");
         consecutiveVibrations++;
-        Serial.printf("🚨 [TEST] VIBRATION DETECTED #%d!\n", consecutiveVibrations);
+        Serial.printf("🚨 [TEST] VIBRATION DETECTED #%d!\r\n", consecutiveVibrations);
         
         // Test siren
         startSiren();
@@ -683,7 +680,7 @@ void loop() {
         
         int vibration = digitalRead(vibrationSensorPin);
         
-        Serial.printf("[LIVE] Accel:%.1fg Roll:%.1f° Vib:%d Speed:%.1fkph WiFi:%s %s\n",
+        Serial.printf("[LIVE] Accel:%.1fg Roll:%.1f° Vib:%d Speed:%.1fkph WiFi:%s %s\r\n",
                       totalAccel, roll, vibration, currentSpeed,
                       WiFi.status() == WL_CONNECTED ? "OK" : "FAIL",
                       MPU6050_ENABLED ? "" : "(MPU6050 BYPASSED)");
@@ -750,7 +747,7 @@ void loop() {
     if (MPU6050_ENABLED && shouldTriggerCrash && !crashDetected) {
       unsigned long timeSinceLastCrash = millis() - lastCrashTime;
       if (timeSinceLastCrash >= CRASH_COOLDOWN) {
-        Serial.printf("\n[CRASH] 🚨 DETECTED! Accel: %.2fg (%.1f m/s²), Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Engine: %s\n",
+        Serial.printf("\r\n[CRASH] 🚨 DETECTED! Accel: %.2fg (%.1f m/s²), Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Engine: %s\r\n",
                       totalG, currentTotalAccel, currentLeanAngle, currentRoll, currentPitch,
                       engineRunning ? "RUNNING" : "STOPPED");
         triggerCrashShutdown(totalG, currentLeanAngle);
@@ -778,38 +775,33 @@ void loop() {
 
   // -- Vibration sensor / anti-theft state management -------------------------
   if (!engineRunning) {
-    // Step 1: enable system as soon as engine turns off
+    // Step 1: Automatically enable system every time engine stops
     if (!antiTheftEnabled) {
       antiTheftEnabled = true;
       engineOffTime = millis();
       consecutiveVibrations = 0;
-      Serial.println("\n[ANTI-THEFT] System enabled -- arming in 10 seconds...");
-      Serial.printf("[ANTI-THEFT] Baseline: GPIO%d = %s\n",
+      Serial.println("\r\n[ANTI-THEFT] Engine stopped -- activating vibration sensor in 1.5s...");
+      Serial.printf("[ANTI-THEFT] Baseline: GPIO%d = %s\r\n",
                     vibrationSensorPin, digitalRead(vibrationSensorPin) ? "HIGH" : "LOW");
     }
 
-    // Step 2: arm after ARM_DELAY
+    // Step 2: Arm vibration sensor after brief 1.5s settle window
     if (!antiTheftArmed && (millis() - engineOffTime >= ARM_DELAY)) {
       antiTheftArmed = true;
       theftDetectionCount = 0;
       theftAlertSent = false;
       consecutiveVibrations = 0;
       vibrationWindowStart = millis();
-      Serial.println("\n[ANTI-THEFT] ARMED! Monitoring for confirmed movement (3+ pulses)...");
-      Serial.printf("[ANTI-THEFT] GPIO %d baseline at arm: %s\n",
+      Serial.println("\r\n[ANTI-THEFT] 🛡️ ARMED! Vibration sensor activated (movement triggers buzzer + GSM SMS)...");
+      Serial.printf("[ANTI-THEFT] GPIO %d baseline at arm: %s\r\n",
                     vibrationSensorPin, digitalRead(vibrationSensorPin) ? "HIGH" : "LOW");
       playConfirmBeep();
     }
 
-    // Step 3: Auto-reset vibration pulse counter after inactivity window
-    if (consecutiveVibrations > 0 && (millis() - vibrationISRTime > VIBRATION_WINDOW_MS)) {
-      consecutiveVibrations = 0;
-    }
-
   } else {
-    // Engine running -- disarm anti-theft and silence buzzer/siren
+    // Engine running or at start -- disarm anti-theft (vibration sensor inactive during ride)
     if (antiTheftArmed || antiTheftEnabled) {
-      Serial.println("[ANTI-THEFT] Disarmed -- engine running");
+      Serial.println("[ANTI-THEFT] 🔓 Disarmed -- engine running / at start (vibration sensor inactive)");
       antiTheftArmed = false;
       antiTheftEnabled = false;
       theftDetectionCount = 0;
@@ -823,7 +815,7 @@ void loop() {
   static unsigned long lastMPULogTime = 0;
   if (millis() - lastMPULogTime >= 1000) {
     if (MPU6050_ENABLED) {
-      Serial.printf("[MPU6050] Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Accel: %.2fg | Engine: %s | State: %s\n",
+      Serial.printf("[MPU6050] Lean: %.1f° (Roll: %.1f°, Pitch: %.1f°) | Accel: %.2fg | Engine: %s | State: %s\r\n",
                     currentLeanAngle, currentRoll, currentPitch, currentTotalAccel / 9.80665,
                     engineRunning ? "RUNNING" : "STOPPED",
                     crashDetected ? "CRASH ALERT" : "NORMAL");
@@ -858,7 +850,7 @@ void loop() {
   // Automatic engine control (auto-mode only)
   if (autoEngineControl) {
     if (!alcoholDetected && engineStartRequested && !engineRunning) {
-      Serial.println("\n✅ AUTO-START: Alcohol cleared!");
+      Serial.println("\r\n✅ AUTO-START: Alcohol cleared!");
       startEngine();
     }
   }
@@ -866,7 +858,7 @@ void loop() {
   // ✅ REAL-TIME: Fast sensor monitoring every 500ms
   if (millis() - lastSensorPrint > SENSOR_PRINT_INTERVAL) {
     int vibReading = digitalRead(vibrationSensorPin);
-    Serial.printf("[SENSORS] Accel: %.2f g | Lean: %.1f° | Speed: %.1f kph | Vibration: %d (%s) %s\n", 
+    Serial.printf("[SENSORS] Accel: %.2f g | Lean: %.1f° | Speed: %.1f kph | Vibration: %d (%s) %s\r\n", 
                   currentTotalAccel, abs(currentRoll), currentSpeed, vibReading,
                   vibReading ? "HIGH/Normal" : "LOW/Triggered",
                   MPU6050_ENABLED ? "" : "(MPU6050 BYPASSED)");
@@ -875,7 +867,7 @@ void loop() {
 
   // ✅ QUICK STATUS: System status every 1 second
   if (millis() - lastQuickStatus > QUICK_STATUS_INTERVAL) {
-    Serial.printf("[STATUS] Engine:%s | Relay:%s | Helmet:%s | Alcohol:%s | Security:%s\n",
+    Serial.printf("[STATUS] Engine:%s | Relay:%s | Helmet:%s | Alcohol:%s | Security:%s\r\n",
                   engineRunning ? "RUN" : "STOP",
                   digitalRead(relayPin) ? "OFF" : "ON",
                   helmetConnected ? "CONN" : "DISC",
@@ -944,10 +936,10 @@ bool sendMotorcycleHeartbeat(bool isActive) {
     // ✅ Update lastWiFiConnected here so security checks don't false-trigger
     lastWiFiConnected = millis();
     lastFirebaseSuccess = millis();
-    Serial.printf("[HEARTBEAT] ✓ Sent\n");
+    Serial.printf("[HEARTBEAT] ✓ Sent\r\n");
     return true;
   } else {
-    Serial.printf("[HEARTBEAT] ✗ Failed: HTTP %d\n", code);
+    Serial.printf("[HEARTBEAT] ✗ Failed: HTTP %d\r\n", code);
     return false;
   }
 }
@@ -966,7 +958,7 @@ void handleAntiTheftWithVibrationSensor_OLD() {
     antiTheftEnabled = true;
     engineOffTime = millis();
     consecutiveVibrations = 0;
-    Serial.println("\n[ANTI-THEFT] 🛡️ System enabled - arming in 10 seconds...");
+    Serial.println("\r\n[ANTI-THEFT] 🛡️ System enabled - arming in 10 seconds...");
     return;
   }
 
@@ -975,8 +967,8 @@ void handleAntiTheftWithVibrationSensor_OLD() {
     theftDetectionCount = 0;
     theftAlertSent = false;
     consecutiveVibrations = 0;
-    Serial.println("\n[ANTI-THEFT] 🛡️ ARMED! Ultra-sensitive vibration detection active...");
-    Serial.printf("[ANTI-THEFT] 📍 Monitoring GPIO %d (any movement triggers alarm)\n", vibrationSensorPin);
+    Serial.println("\r\n[ANTI-THEFT] 🛡️ ARMED! Ultra-sensitive vibration detection active...");
+    Serial.printf("[ANTI-THEFT] 📍 Monitoring GPIO %d (any movement triggers alarm)\r\n", vibrationSensorPin);
     
     // Confirmation chirp � arming confirmed
       playConfirmBeep();
@@ -1001,8 +993,8 @@ void handleAntiTheftWithVibrationSensor_OLD() {
         consecutiveVibrations++;
         lastVibrationTime = currentTime;
         
-        Serial.printf("\n🚨🚨 [ANTI-THEFT] VIBRATION DETECTED #%d! 🚨🚨\n", consecutiveVibrations);
-        Serial.printf("[ANTI-THEFT] 📍 GPIO %d: %s → %s (movement detected)!\n", 
+        Serial.printf("\r\n🚨🚨 [ANTI-THEFT] VIBRATION DETECTED #%d! 🚨🚨\r\n", consecutiveVibrations);
+        Serial.printf("[ANTI-THEFT] 📍 GPIO %d: %s → %s (movement detected)!\r\n", 
                       vibrationSensorPin,
                       lastVibrationState ? "HIGH" : "LOW",
                       vibrationDetected ? "HIGH" : "LOW");
@@ -1019,12 +1011,12 @@ void handleAntiTheftWithVibrationSensor_OLD() {
           lastTheftAlert = currentTime;
           theftAlertSent = true;
         } else {
-          Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\n", 
+          Serial.printf("[ANTI-THEFT] ⏳ SMS cooldown active (%lu seconds remaining)\r\n", 
                         (THEFT_ALERT_COOLDOWN - timeSinceLastAlert) / 1000);
         }
       } else {
         // Movement detected but still in debounce period
-        Serial.printf("[VIBRATION] 🔍 Movement detected but debouncing (%lu ms remaining)\n", 
+        Serial.printf("[VIBRATION] 🔍 Movement detected but debouncing (%lu ms remaining)\r\n", 
                       VIBRATION_DEBOUNCE - timeSinceLastVibration);
       }
     }
@@ -1032,7 +1024,7 @@ void handleAntiTheftWithVibrationSensor_OLD() {
     // ✅ CONTINUOUS MONITORING: Show sensor reading every 5 seconds for debugging
     static unsigned long lastDebugPrint = 0;
     if (millis() - lastDebugPrint > 5000) {
-      Serial.printf("[VIBRATION] Status: %s | Armed: YES | Detections: %d | Sensitivity: ULTRA-HIGH\n", 
+      Serial.printf("[VIBRATION] Status: %s | Armed: YES | Detections: %d | Sensitivity: ULTRA-HIGH\r\n", 
                     vibrationDetected ? "HIGH" : "LOW",
                     consecutiveVibrations);
       lastDebugPrint = millis();
@@ -1050,7 +1042,7 @@ void handleAntiTheftWithVibrationSensor_OLD() {
 }
 
 void triggerTheftAlert() {
-  Serial.println("\n🚨🚨🚨 THEFT ALERT! 🚨🚨🚨");
+  Serial.println("\r\n🚨🚨🚨 THEFT ALERT! 🚨🚨🚨");
 
   // Buzzer is already running via the non-blocking state machine in loop().
   // No blocking delay() here — just do the Firebase + SMS work.
@@ -1062,7 +1054,7 @@ void triggerTheftAlert() {
     location = "https://maps.google.com/?q=" + String(lastValidLat, 6) + "," + String(lastValidLng, 6) + " (Last Known)";
   }
 
-  String message = "VIGILERT THEFT ALERT!\nUnauthorized movement detected on your motorcycle.\nLocation: " + location;
+  String message = "VIGILERT THEFT ALERT!\r\nUnauthorized movement detected on your motorcycle.\r\nLocation: " + location;
 
   Serial.println("[ANTI-THEFT] 📱 Sending SMS to emergency contacts...");
   sendSMSToAllContacts(message, "theft");
@@ -1130,7 +1122,7 @@ void tickGSMInit() {
         String resp = "";
         while (gsmSerial.available()) resp += (char)gsmSerial.read();
         if (resp.indexOf("OK") != -1) {
-          Serial.printf("[GSM] OK on attempt %d\n", gsmAttempt);
+          Serial.printf("[GSM] OK on attempt %d\r\n", gsmAttempt);
           gsmInitState  = GSM_SETUP_ECHO;
           gsmStateTimer = now;
         } else if (now - gsmStateTimer >= 800) {
@@ -1237,15 +1229,24 @@ void sendSMSToAllContacts(String message, String alertType) {
   http.begin(contactsUrl);
 
   int httpCode = http.GET();
-
-  if (httpCode != HTTP_CODE_OK) {
-    Serial.printf("[SMS] ❌ Failed to fetch contacts: HTTP %d\n", httpCode);
-    http.end();
-    return;
+  String response = "";
+  if (httpCode == HTTP_CODE_OK) {
+    response = http.getString();
   }
-
-  String response = http.getString();
   http.end();
+
+  // If /users returned null or empty, also check /helmet_public/
+  if (response == "null" || response.length() <= 2) {
+    HTTPClient http2;
+    http2.setTimeout(5000);
+    String pubUrl = firebaseHost + "/helmet_public/" + userUID + "/emergencyContacts.json?auth=" + firebaseAuth;
+    http2.begin(pubUrl);
+    int pubCode = http2.GET();
+    if (pubCode == HTTP_CODE_OK) {
+      response = http2.getString();
+    }
+    http2.end();
+  }
 
   if (response == "null" || response.length() <= 2) {
     Serial.println("[SMS] ⚠️ No emergency contacts found in Firebase");
@@ -1287,14 +1288,14 @@ void sendSMSToAllContacts(String message, String alertType) {
     }
 
     if (phone.length() >= 10) {
-      Serial.printf("[SMS] 📱 Sending %s alert to %s (%s)...\n",
+      Serial.printf("[SMS] 📱 Sending %s alert to %s (%s)...\r\n",
                     alertType.c_str(), contactName.c_str(), phone.c_str());
       bool sent = sendSMS(phone, message);
       if (sent) {
-        Serial.printf("[SMS] ✅ Sent to %s\n", contactName.c_str());
+        Serial.printf("[SMS] ✅ Sent to %s\r\n", contactName.c_str());
         sentCount++;
       } else {
-        Serial.printf("[SMS] ❌ Failed to send to %s\n", contactName.c_str());
+        Serial.printf("[SMS] ❌ Failed to send to %s\r\n", contactName.c_str());
       }
       delay(500);  // Brief pause between SMS sends
     }
@@ -1305,7 +1306,7 @@ void sendSMSToAllContacts(String message, String alertType) {
   if (sentCount == 0) {
     Serial.println("[SMS] ⚠️ No valid phone numbers found in contacts");
   } else {
-    Serial.printf("[SMS] ✅ Alert sent to %d contact(s)\n", sentCount);
+    Serial.printf("[SMS] ✅ Alert sent to %d contact(s)\r\n", sentCount);
   }
 }
 
@@ -1334,7 +1335,7 @@ void logTheftToFirebase(String location) {
   if (code == HTTP_CODE_OK) {
     Serial.println("[FIREBASE] ✓ Theft alert logged to /theft_alerts");
   } else {
-    Serial.printf("[FIREBASE] ✗ Theft alert failed: %d\n", code);
+    Serial.printf("[FIREBASE] ✗ Theft alert failed: %d\r\n", code);
   }
   http.end();
 
@@ -1357,14 +1358,14 @@ void logTheftToFirebase(String location) {
   if (alertCode == HTTP_CODE_OK) {
     Serial.println("[FIREBASE] ✓ Theft alert written to /alerts");
   } else {
-    Serial.printf("[FIREBASE] ✗ Theft /alerts write failed: %d\n", alertCode);
+    Serial.printf("[FIREBASE] ✗ Theft /alerts write failed: %d\r\n", alertCode);
   }
   http2.end();
 }
 
 void triggerCrashShutdown(float impact, float roll) {
-  Serial.println("\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
-  Serial.printf("Impact: %.2f g | Lean/Roll: %.1f°\n", impact, roll);
+  Serial.println("\r\n⚠️⚠️⚠️ CRASH DETECTED! ⚠️⚠️⚠️");
+  Serial.printf("Impact: %.2f g | Lean/Roll: %.1f°\r\n", impact, roll);
   
   // ✅ FIX: HIGH = OFF for ACTIVE-LOW relay
   digitalWrite(relayPin, HIGH);
@@ -1372,7 +1373,7 @@ void triggerCrashShutdown(float impact, float roll) {
   crashDetected = true;
   lastCrashTime = millis();
   
-  Serial.printf("🚨 Relay GPIO %d = %d (OFF)\n", relayPin, digitalRead(relayPin));
+  Serial.printf("🚨 Relay GPIO %d = %d (OFF)\r\n", relayPin, digitalRead(relayPin));
   
   sendCrashToFirebase(impact, roll);
   sendLiveToFirebase(); // Send real-time state immediately so dashboard alerts instantly
@@ -1382,10 +1383,10 @@ void triggerCrashShutdown(float impact, float roll) {
   if (gps.location.isValid()) {
     location = "https://maps.google.com/?q=" + String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6);
   }
-  String crashMsg = "🚨 VIGILERT CRASH ALERT!\n"
-                    "A crash has been detected on the motorcycle.\n"
-                    "Impact: " + String(impact, 1) + "g | Lean: " + String(abs(roll), 1) + "deg\n"
-                    "Location: " + location + "\n"
+  String crashMsg = "🚨 VIGILERT CRASH ALERT!\r\n"
+                    "A crash has been detected on the motorcycle.\r\n"
+                    "Impact: " + String(impact, 1) + "g | Lean: " + String(abs(roll), 1) + "deg\r\n"
+                    "Location: " + location + "\r\n"
                     "Engine has been automatically shut off.";
   Serial.println("[CRASH] 📱 Sending SMS to emergency contacts...");
   sendSMSToAllContacts(crashMsg, "crash");
@@ -1395,7 +1396,7 @@ void triggerCrashShutdown(float impact, float roll) {
 }
 
 void startEngine() {
-  Serial.println("\n[ENGINE] startEngine() called");
+  Serial.println("\r\n[ENGINE] startEngine() called");
   
   // ✅ ENHANCED: Comprehensive security checks before engine start
   unsigned long currentTime = millis();
@@ -1417,16 +1418,16 @@ void startEngine() {
 
   bool crashOK   = !crashDetected;
   
-  Serial.printf("[ENGINE] WiFi: %s (%lu ms ago)\n", wifiOK ? "OK ✅" : "TIMEOUT ❌", timeSinceWiFi);
-  Serial.printf("[ENGINE] Helmet: %s (%lu ms ago)\n", helmetOK ? "OK ✅" : "TIMEOUT ❌", timeSinceHelmet);
-  Serial.printf("[ENGINE] Alcohol: %s\n", alcoholOK ? "SAFE ✅" : "DETECTED ❌");
-  Serial.printf("[ENGINE] Crash: %s\n", crashOK ? "NONE ✅" : "DETECTED ❌");
-  Serial.printf("[ENGINE] Current state: %s\n", engineRunning ? "RUNNING" : "STOPPED");
+  Serial.printf("[ENGINE] WiFi: %s (%lu ms ago)\r\n", wifiOK ? "OK ✅" : "TIMEOUT ❌", timeSinceWiFi);
+  Serial.printf("[ENGINE] Helmet: %s (%lu ms ago)\r\n", helmetOK ? "OK ✅" : "TIMEOUT ❌", timeSinceHelmet);
+  Serial.printf("[ENGINE] Alcohol: %s\r\n", alcoholOK ? "SAFE ✅" : "DETECTED ❌");
+  Serial.printf("[ENGINE] Crash: %s\r\n", crashOK ? "NONE ✅" : "DETECTED ❌");
+  Serial.printf("[ENGINE] Current state: %s\r\n", engineRunning ? "RUNNING" : "STOPPED");
   
   // ✅ 1. WiFi Security Check
   if (!wifiOK) {
-    Serial.println("\n❌ ENGINE START BLOCKED - WiFi TIMEOUT!");
-    Serial.printf("💡 WiFi disconnected for %lu ms (>%lu ms limit)\n", timeSinceWiFi, WIFI_TIMEOUT);
+    Serial.println("\r\n❌ ENGINE START BLOCKED - WiFi TIMEOUT!");
+    Serial.printf("💡 WiFi disconnected for %lu ms (>%lu ms limit)\r\n", timeSinceWiFi, WIFI_TIMEOUT);
     digitalWrite(relayPin, HIGH);
     playWarningBeep(3);
     logSecurityEventToFirebase("Engine Start Blocked - WiFi Timeout");
@@ -1435,8 +1436,8 @@ void startEngine() {
 
   // ✅ 2. Helmet Security Check
   if (!helmetOK) {
-    Serial.println("\n❌ ENGINE START BLOCKED - HELMET NOT CONNECTED!");
-    Serial.printf("💡 helmetConnected=%s | Last seen: %lu ms ago\n",
+    Serial.println("\r\n❌ ENGINE START BLOCKED - HELMET NOT CONNECTED!");
+    Serial.printf("💡 helmetConnected=%s | Last seen: %lu ms ago\r\n",
                   helmetConnected ? "true" : "false", timeSinceHelmet);
     digitalWrite(relayPin, HIGH);
     playWarningBeep(2);
@@ -1446,7 +1447,7 @@ void startEngine() {
 
   // ✅ 3. Alcohol Safety Check
   if (!alcoholOK) {
-    Serial.println("\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
+    Serial.println("\r\n❌ ENGINE START BLOCKED - ALCOHOL DETECTED!");
     if (autoEngineControl) engineStartRequested = true;
     digitalWrite(relayPin, HIGH);
     playWarningBeep(3);
@@ -1456,21 +1457,21 @@ void startEngine() {
 
   // ✅ 4. Crash Safety Check
   if (!crashOK) {
-    Serial.println("\n❌ ENGINE START BLOCKED - CRASH DETECTED!");
+    Serial.println("\r\n❌ ENGINE START BLOCKED - CRASH DETECTED!");
     digitalWrite(relayPin, HIGH);
     playWarningBeep(4);
     logSecurityEventToFirebase("Engine Start Blocked - Crash Detected");
     return;
   }
 
-  Serial.println("\n✅ Starting engine...");
+  Serial.println("\r\n✅ Starting engine...");
 
   // Ignition relay wired in series with key switch.
   // Set LOW (energize) → contact closes → ignition circuit complete → engine runs.
   // Relay stays LOW until stopEngine() or a security shutdown sets it HIGH.
   digitalWrite(relayPin, LOW);
   starterActive = false;  // No starter timeout needed — relay stays ON
-  Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — stays ON while engine runs\n", relayPin);
+  Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — stays ON while engine runs\r\n", relayPin);
 
   engineRunning = true;
   engineStartRequested = false;
@@ -1490,7 +1491,7 @@ void startEngine() {
 }
 
 void stopEngine() {
-  Serial.println("\n🛑 Stopping engine...");
+  Serial.println("\r\n🛑 Stopping engine...");
 
   // Set relay HIGH (de-energize) → contact opens → ignition circuit cut.
   // Engine stops immediately even if physical key is still ON.
@@ -1498,7 +1499,7 @@ void stopEngine() {
   engineRunning = false;
   starterActive = false;
 
-  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\n", relayPin);
+  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\r\n", relayPin);
 
   endTrip();
   sendLiveToFirebase();
@@ -1567,7 +1568,7 @@ void sendCrashToFirebase(float impact, float roll) {
   if (code == HTTP_CODE_OK) {
     Serial.println("[FIREBASE] ✓ Crash event logged to /crashes");
   } else {
-    Serial.printf("[FIREBASE] ✗ Crash event failed: %d\n", code);
+    Serial.printf("[FIREBASE] ✗ Crash event failed: %d\r\n", code);
   }
   http.end();
 
@@ -1592,7 +1593,7 @@ void sendCrashToFirebase(float impact, float roll) {
   if (alertCode == HTTP_CODE_OK) {
     Serial.println("[FIREBASE] ✓ Crash alert written to /alerts");
   } else {
-    Serial.printf("[FIREBASE] ✗ Crash alert to /alerts failed: %d\n", alertCode);
+    Serial.printf("[FIREBASE] ✗ Crash alert to /alerts failed: %d\r\n", alertCode);
   }
   http2.end();
 }
@@ -1680,7 +1681,7 @@ void sendLiveToFirebase() {
 void connectToWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
 
-  Serial.println("\n[WIFI] Connecting...");
+  Serial.println("\r\n[WIFI] Connecting...");
 
   // Persistent mode + auto-reconnect
   WiFi.mode(WIFI_STA);
@@ -1697,8 +1698,8 @@ void connectToWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[WIFI] ✅ Connected!");
-    Serial.printf("[WIFI] IP: %s | RSSI: %d dBm\n",
+    Serial.println("\r\n[WIFI] ✅ Connected!");
+    Serial.printf("[WIFI] IP: %s | RSSI: %d dBm\r\n",
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
     // Synchronize real-time clock via NTP
     configTime(0, 0, "pool.ntp.org", "time.google.com");
@@ -1709,7 +1710,7 @@ void connectToWiFi() {
     wifiDisconnectedTime = 0;
     emergencyShutdownTriggered = false;
   } else {
-    Serial.println("\n[WIFI] ❌ Failed — will retry automatically");
+    Serial.println("\r\n[WIFI] ❌ Failed — will retry automatically");
   }
 }
 
@@ -1727,7 +1728,7 @@ void checkAlcoholStatus() {
     // Don't spam Serial on every failed read — only log occasionally
     static unsigned long lastFailLog = 0;
     if (millis() - lastFailLog > 5000) {
-      Serial.printf("[ALCOHOL] HTTP %d\n", httpCode);
+      Serial.printf("[ALCOHOL] HTTP %d\r\n", httpCode);
       lastFailLog = millis();
     }
     http.end();
@@ -1775,32 +1776,32 @@ void checkAlcoholStatus() {
   // ── Update state and log transition ───────────────────────────────────────
   if (currentAlcoholState != alcoholDetected) {
     alcoholDetected = currentAlcoholState;
-    Serial.printf("[ALCOHOL] >>> %s <<< (Value: %d)\n", alcoholDetected ? "DANGER DETECTED" : "CLEARED", sensorValue);
+    Serial.printf("[ALCOHOL] >>> %s <<< (Value: %d)\r\n", alcoholDetected ? "DANGER DETECTED" : "CLEARED", sensorValue);
   }
 
   // Cut engine immediately — no guard, no delay
   if (alcoholDetected && engineRunning) {
-    Serial.printf("[ALCOHOL] 🚨 DANGER (Value: %d) — Cutting ignition NOW!\n", sensorValue);
+    Serial.printf("[ALCOHOL] 🚨 DANGER (Value: %d) — Cutting ignition NOW!\r\n", sensorValue);
     triggerAlcoholShutdown();
   }
 
   // Status log every 3 seconds
   static unsigned long lastLog = 0;
   if (millis() - lastLog > 3000) {
-    Serial.printf("[ALCOHOL] %s | Value:%d\n",
+    Serial.printf("[ALCOHOL] %s | Value:%d\r\n",
                   alcoholDetected ? "DANGER" : "safe", sensorValue);
     lastLog = millis();
   }
 }
 
 void triggerAlcoholShutdown() {
-  Serial.println("\n🚨 ALCOHOL - EMERGENCY SHUTDOWN!");
+  Serial.println("\r\n🚨 ALCOHOL - EMERGENCY SHUTDOWN!");
 
   // ✅ Cut ignition immediately (HIGH = OFF for ACTIVE-LOW relay)
   digitalWrite(relayPin, HIGH);
   engineRunning = false;
   starterActive = false;
-  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\n", relayPin);
+  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — ignition cut\r\n", relayPin);
 
   // End trip session
   endTrip();
@@ -1831,9 +1832,9 @@ void triggerAlcoholShutdown() {
   if (gps.location.isValid()) {
     location = "https://maps.google.com/?q=" + String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6);
   }
-  String alcoholMsg = "⚠️ VIGILERT ALCOHOL ALERT!\n"
-                      "Alcohol was detected on the rider.\n"
-                      "Engine has been automatically shut off for safety.\n"
+  String alcoholMsg = "⚠️ VIGILERT ALCOHOL ALERT!\r\n"
+                      "Alcohol was detected on the rider.\r\n"
+                      "Engine has been automatically shut off for safety.\r\n"
                       "Location: " + location;
   Serial.println("[ALCOHOL] 📱 Sending SMS to emergency contacts...");
   sendSMSToAllContacts(alcoholMsg, "alcohol");
@@ -1860,7 +1861,7 @@ void triggerAlcoholShutdown() {
     if (alertCode == HTTP_CODE_OK) {
       Serial.println("[FIREBASE] ✓ Alcohol alert written to /alerts");
     } else {
-      Serial.printf("[FIREBASE] ✗ Alcohol /alerts write failed: %d\n", alertCode);
+      Serial.printf("[FIREBASE] ✗ Alcohol /alerts write failed: %d\r\n", alertCode);
     }
     http.end();
   }
@@ -1870,18 +1871,18 @@ void triggerAlcoholShutdown() {
 }
 
 void printSystemStatus() {
-  Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  Serial.println("\r\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   Serial.println("🔍 SYSTEM STATUS");
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  Serial.printf("Helmet: %s\n", helmetConnected ? "CONNECTED ✅" : "DISCONNECTED ❌");
-  Serial.printf("Relay: GPIO %d = %d (%s)\n", relayPin, digitalRead(relayPin), 
+  Serial.printf("Helmet: %s\r\n", helmetConnected ? "CONNECTED ✅" : "DISCONNECTED ❌");
+  Serial.printf("Relay: GPIO %d = %d (%s)\r\n", relayPin, digitalRead(relayPin), 
                 digitalRead(relayPin) ? "OFF" : "ON");
-  Serial.printf("Engine: %s\n", engineRunning ? "RUNNING" : "STOPPED");
-  Serial.printf("Crash: %s\n", crashDetected ? "YES" : "NO");
-  Serial.printf("Alcohol: %s\n", alcoholDetected ? "YES" : "NO");
-  Serial.printf("Auto Control: %s\n", autoEngineControl ? "ON" : "OFF");
-  Serial.printf("Anti-Theft: %s\n", antiTheftArmed ? "ARMED" : "DISARMED");
-  Serial.printf("WiFi: %s\n", WiFi.status() == WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
+  Serial.printf("Engine: %s\r\n", engineRunning ? "RUNNING" : "STOPPED");
+  Serial.printf("Crash: %s\r\n", crashDetected ? "YES" : "NO");
+  Serial.printf("Alcohol: %s\r\n", alcoholDetected ? "YES" : "NO");
+  Serial.printf("Auto Control: %s\r\n", autoEngineControl ? "ON" : "OFF");
+  Serial.printf("Anti-Theft: %s\r\n", antiTheftArmed ? "ARMED" : "DISARMED");
+  Serial.printf("WiFi: %s\r\n", WiFi.status() == WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
@@ -1921,12 +1922,12 @@ void checkDashboardButton() {
                        (response.indexOf("\"startButton\":true") != -1 && engineRunning);
 
     if (hasStopCmd && engineRunning) {
-      Serial.println("\n🛑 [DASHBOARD] STOP ENGINE COMMAND RECEIVED!");
+      Serial.println("\r\n🛑 [DASHBOARD] STOP ENGINE COMMAND RECEIVED!");
       stopEngine();
       clearDashboardButton();
     }
     else if (hasStartCmd && !engineRunning) {
-      Serial.println("\n⚡ [DASHBOARD] START ENGINE COMMAND RECEIVED!");
+      Serial.println("\r\n⚡ [DASHBOARD] START ENGINE COMMAND RECEIVED!");
 
       // Auto-clear crash alert if vehicle is currently sitting upright
       if (crashDetected && currentLeanAngle < 30.0 && currentTotalAccel < 15.0) {
@@ -1960,7 +1961,7 @@ void checkDashboardButton() {
         stopSiren();
       }
       playConfirmBeep();
-      Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\n", relayPin);
+      Serial.printf("✅ Ignition relay ON (GPIO %d = LOW) — engine running\r\n", relayPin);
       clearDashboardButton();
       sendLiveToFirebase();
     }
@@ -1984,7 +1985,7 @@ void checkAutoMode() {
     bool dashboardAutoMode = (autoResponse.indexOf("true") != -1);
     if (dashboardAutoMode != autoEngineControl) {
       autoEngineControl = dashboardAutoMode;
-      Serial.printf("[ENGINE] Auto control: %s\n", autoEngineControl ? "ON" : "OFF");
+      Serial.printf("[ENGINE] Auto control: %s\r\n", autoEngineControl ? "ON" : "OFF");
     }
   }
   http.end();
@@ -2002,7 +2003,7 @@ void clearDashboardButton() {
   if (code == HTTP_CODE_OK) {
     Serial.println("[DASHBOARD] ✓ Engine command cleared in Firebase");
   } else {
-    Serial.printf("[DASHBOARD] ⚠️ clearDashboardButton HTTP %d\n", code);
+    Serial.printf("[DASHBOARD] ⚠️ clearDashboardButton HTTP %d\r\n", code);
   }
   http.end();
   lastDashboardButtonState = false;
@@ -2036,8 +2037,8 @@ void checkComprehensiveSecurity() {
   bool securityViolation = wifiTimeout || helmetTimeout;
 
   if (SECURITY_SHUTDOWNS_ENABLED && securityViolation && engineRunning) {
-    Serial.println("\n?????? SECURITY VIOLATION � AUTO SHUTDOWN! ??????");
-    if (wifiTimeout)   Serial.printf("?? WiFi TIMEOUT: %lu ms (>%lu ms)\n", timeSinceWiFi, WIFI_TIMEOUT);
+    Serial.println("\r\n?????? SECURITY VIOLATION � AUTO SHUTDOWN! ??????");
+    if (wifiTimeout)   Serial.printf("?? WiFi TIMEOUT: %lu ms (>%lu ms)\r\n", timeSinceWiFi, WIFI_TIMEOUT);
     if (helmetTimeout) Serial.println("[SECURITY] HELMET DISCONNECTED � shutdown triggered");
     triggerSecurityShutdown("Security Violation");
   }
@@ -2047,7 +2048,7 @@ void checkComprehensiveSecurity() {
   // Debug every 5 seconds
   static unsigned long lastSecurityDebug = 0;
   if (currentTime - lastSecurityDebug > 5000) {
-    Serial.printf("[SECURITY] WiFi:%s(%lums) Helmet:%s Engine:%s\n",
+    Serial.printf("[SECURITY] WiFi:%s(%lums) Helmet:%s Engine:%s\r\n",
                   wifiTimeout ? "TIMEOUT" : "OK", timeSinceWiFi,
                   helmetConnected ? "CONN" : "DISC",
                   engineRunning ? "RUNNING" : "STOPPED");
@@ -2056,7 +2057,7 @@ void checkComprehensiveSecurity() {
 }
 // ✅ NEW: Security shutdown with detailed logging
 void triggerSecurityShutdown(String reason) {
-  Serial.println("\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
+  Serial.println("\r\n🚨 SECURITY SHUTDOWN INITIATED 🚨");
   Serial.println("Reason: " + reason);
 
   // Cut ignition immediately — relay HIGH opens the circuit
@@ -2066,7 +2067,7 @@ void triggerSecurityShutdown(String reason) {
 
   endTrip();
 
-  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — engine cut\n", relayPin);
+  Serial.printf("🛑 Ignition relay OFF (GPIO %d = HIGH) — engine cut\r\n", relayPin);
 
   startSiren();
   logSecurityEventToFirebase(reason);
@@ -2084,12 +2085,12 @@ void checkWiFiWatchdog() {
     if (wifiConnected) {
       startupWiFiCheckComplete = true;
       lastWiFiConnected = currentTime;
-      Serial.printf("\n[STARTUP] ✅ WiFi connected in %lu ms\n", timeSinceBoot);
+      Serial.printf("\r\n[STARTUP] ✅ WiFi connected in %lu ms\r\n", timeSinceBoot);
     } else if (timeSinceBoot >= STARTUP_WIFI_TIMEOUT && !startupShutdownTriggered) {
       startupShutdownTriggered = true;
       startupWiFiCheckComplete = true;
 
-      Serial.println("\n[STARTUP] WiFi FAILED � cutting engine power!");
+      Serial.println("\r\n[STARTUP] WiFi FAILED � cutting engine power!");
       if (SECURITY_SHUTDOWNS_ENABLED) {
         digitalWrite(ignitionRelayPin, HIGH);
         digitalWrite(relayPin, HIGH);
@@ -2102,7 +2103,7 @@ void checkWiFiWatchdog() {
     } else {
       static unsigned long lastStartupWarning = 0;
       if (currentTime - lastStartupWarning >= 1000) {
-        Serial.printf("[STARTUP] ⏳ Waiting for WiFi... (%lu ms remaining)\n",
+        Serial.printf("[STARTUP] ⏳ Waiting for WiFi... (%lu ms remaining)\r\n",
                       STARTUP_WIFI_TIMEOUT - timeSinceBoot);
         lastStartupWarning = currentTime;
       }
@@ -2120,7 +2121,7 @@ void checkWiFiWatchdog() {
   } else {
     if (wifiDisconnectedTime == 0) {
       wifiDisconnectedTime = currentTime;
-      Serial.printf("\n⚠️ [WIFI WATCHDOG] WiFi LOST — alert at %lu s, shutdown at %lu s\n",
+      Serial.printf("\r\n⚠️ [WIFI WATCHDOG] WiFi LOST — alert at %lu s, shutdown at %lu s\r\n",
                     WIFI_WATCHDOG_ALERT_TIME / 1000,
                     WIFI_WATCHDOG_TIMEOUT / 1000);
     }
@@ -2130,7 +2131,7 @@ void checkWiFiWatchdog() {
     // ✅ FIXED: Send alert at 5 seconds
     if (disconnectedDuration >= WIFI_WATCHDOG_ALERT_TIME && !wifiDisconnectionAlertSent) {
       wifiDisconnectionAlertSent = true;
-      Serial.println("\n⚠️ [WIFI WATCHDOG] 5-SECOND ALERT - WiFi still disconnected!");
+      Serial.println("\r\n⚠️ [WIFI WATCHDOG] 5-SECOND ALERT - WiFi still disconnected!");
       
       // Log to Firebase if possible (may fail if WiFi is down)
       logSecurityEventToFirebase("WiFi Disconnection Alert - 5 seconds");
@@ -2142,7 +2143,7 @@ void checkWiFiWatchdog() {
     // ✅ FIXED: Shutdown at 10 seconds (was 3 seconds)
     if (disconnectedDuration >= WIFI_WATCHDOG_TIMEOUT && !emergencyShutdownTriggered) {
       emergencyShutdownTriggered = true;
-      Serial.println("\n🚨 [WIFI WATCHDOG] 10-SECOND TIMEOUT — cutting engine power!");
+      Serial.println("\r\n🚨 [WIFI WATCHDOG] 10-SECOND TIMEOUT — cutting engine power!");
 
       if (SECURITY_SHUTDOWNS_ENABLED) {
         digitalWrite(ignitionRelayPin, HIGH);
@@ -2161,7 +2162,7 @@ void checkWiFiWatchdog() {
     if (!emergencyShutdownTriggered && currentTime - lastWarningBeep >= 2000) {
       tone(buzzerPin, 1000);  // Short 80ms pip — non-blocking
       lastWarningBeep = currentTime;
-      Serial.printf("[WIFI WATCHDOG] ⚠️ Shutdown in %lu ms...\n",
+      Serial.printf("[WIFI WATCHDOG] ⚠️ Shutdown in %lu ms...\r\n",
                     WIFI_WATCHDOG_TIMEOUT - disconnectedDuration);
     }
   }
@@ -2169,7 +2170,7 @@ void checkWiFiWatchdog() {
   // Status log every 5 seconds
   static unsigned long lastWatchdogStatus = 0;
   if (currentTime - lastWatchdogStatus >= 5000) {
-    Serial.printf("[WIFI WATCHDOG] %s | Engine:%s | Siren:%s\n",
+    Serial.printf("[WIFI WATCHDOG] %s | Engine:%s | Siren:%s\r\n",
                   wifiConnected ? "WiFi OK ✅" : "WiFi LOST ❌",
                   engineRunning ? "RUNNING" : "STOPPED",
                   buzzerMode == BUZZER_SIREN ? "ON" : "OFF");
@@ -2241,7 +2242,7 @@ void checkHelmetConnection() {
       initialized  = true;
       lastHelmetUpdateTime = now;
       consecutiveFailures = 0;
-      Serial.printf("[HELMET] First read suffix: %s\n", suffix.c_str());
+      Serial.printf("[HELMET] First read suffix: %s\r\n", suffix.c_str());
       return;
     }
 
@@ -2260,7 +2261,7 @@ void checkHelmetConnection() {
       if (frozen > HELMET_TIMEOUT) {
         consecutiveFailures++;
         if (helmetConnected && consecutiveFailures >= 3) {
-          Serial.printf("[HELMET] Frozen %lu ms (strikes: %d) - DISCONNECTED\n", frozen, consecutiveFailures);
+          Serial.printf("[HELMET] Frozen %lu ms (strikes: %d) - DISCONNECTED\r\n", frozen, consecutiveFailures);
           helmetConnected = false;
           lastHelmetUpdateTime = 0;
           if (engineRunning) {
@@ -2282,7 +2283,7 @@ void checkHelmetConnection() {
     httpFailures++;
     unsigned long sinceLastOK = (lastHelmetUpdateTime > 0) ? (now - lastHelmetUpdateTime) : now;
     if (sinceLastOK > HELMET_TIMEOUT && httpFailures >= 4 && helmetConnected) {
-      Serial.printf("[HELMET] HTTP %d for %lu ms (fails: %d) - DISCONNECTED\n", httpCode, sinceLastOK, httpFailures);
+      Serial.printf("[HELMET] HTTP %d for %lu ms (fails: %d) - DISCONNECTED\r\n", httpCode, sinceLastOK, httpFailures);
       helmetConnected = false;
       lastHelmetUpdateTime = 0;
       if (engineRunning) {
@@ -2295,7 +2296,7 @@ void checkHelmetConnection() {
     } else {
       static unsigned long lastFailLog = 0;
       if (now - lastFailLog > 3000) {
-        Serial.printf("[HELMET] HTTP %d | No OK for %lu ms (failures: %d)\n", httpCode, sinceLastOK, httpFailures);
+        Serial.printf("[HELMET] HTTP %d | No OK for %lu ms (failures: %d)\r\n", httpCode, sinceLastOK, httpFailures);
         lastFailLog = now;
       }
     }
@@ -2304,7 +2305,7 @@ void checkHelmetConnection() {
   static unsigned long lastDebug = 0;
   if (now - lastDebug >= 3000) {
     unsigned long age = (lastHelmetUpdateTime > 0) ? (now - lastHelmetUpdateTime) : 0;
-    Serial.printf("[HELMET] %s | Age: %lu ms | Suffix: %s\n",
+    Serial.printf("[HELMET] %s | Age: %lu ms | Suffix: %s\r\n",
                   helmetConnected ? "CONNECTED" : "DISCONNECTED", age, lastSuffix.c_str());
     lastDebug = now;
   }
@@ -2335,14 +2336,14 @@ void forceHelmetStatusOff() {
   if (code == HTTP_CODE_OK) {
     Serial.println("[HELMET] ✅ Status forced to 'Off' in Firebase");
   } else {
-    Serial.printf("[HELMET] ❌ Failed to update status: HTTP %d\n", code);
+    Serial.printf("[HELMET] ❌ Failed to update status: HTTP %d\r\n", code);
   }
   
   http.end();
 }
 // ✅ ENHANCED: Trip tracking functions
 void startTrip() {
-  Serial.println("\n🗺️ STARTING TRIP TRACKING");
+  Serial.println("\r\n🗺️ STARTING TRIP TRACKING");
   
   // Initialize trip data
   currentTrip.isActive = true;
@@ -2359,14 +2360,14 @@ void startTrip() {
     currentTrip.hasValidStart = true;
     lastValidLat = currentTrip.fromLat;
     lastValidLng = currentTrip.fromLng;
-    Serial.printf("[TRIP] 🚀 Starting at GPS: %.6f, %.6f\n", currentTrip.fromLat, currentTrip.fromLng);
+    Serial.printf("[TRIP] 🚀 Starting at GPS: %.6f, %.6f\r\n", currentTrip.fromLat, currentTrip.fromLng);
   } else if (lastValidLat != 0.0 && lastValidLng != 0.0) {
     currentTrip.fromLat = lastValidLat;
     currentTrip.fromLng = lastValidLng;
     currentTrip.toLat = lastValidLat;
     currentTrip.toLng = lastValidLng;
     currentTrip.hasValidStart = true;
-    Serial.printf("[TRIP] 🚀 Starting at Last Known GPS: %.6f, %.6f\n", lastValidLat, lastValidLng);
+    Serial.printf("[TRIP] 🚀 Starting at Last Known GPS: %.6f, %.6f\r\n", lastValidLat, lastValidLng);
   } else {
     currentTrip.fromLat = 0.0;
     currentTrip.fromLng = 0.0;
@@ -2390,7 +2391,7 @@ void updateTripData() {
       currentTrip.fromLng = currentLng;
       currentTrip.hasValidStart = true;
       
-      Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\n", currentLat, currentLng);
+      Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\r\n", currentLat, currentLng);
       Serial.println("[TRIP] 📍 Trip origin set!");
     }
     
@@ -2419,7 +2420,7 @@ void updateTripData() {
     // Debug output every 10 seconds
     static unsigned long lastTripDebug = 0;
     if (millis() - lastTripDebug > 10000) {
-      Serial.printf("[TRIP] Current: %.6f, %.6f | Distance: %.2f km | Max Speed: %.1f kph\n",
+      Serial.printf("[TRIP] Current: %.6f, %.6f | Distance: %.2f km | Max Speed: %.1f kph\r\n",
                     currentLat, currentLng, currentTrip.totalDistance, currentTrip.maxSpeed);
       lastTripDebug = millis();
     }
@@ -2429,7 +2430,7 @@ void updateTripData() {
 void endTrip() {
   if (!currentTrip.isActive) return;
   
-  Serial.println("\n🏁 ENDING TRIP TRACKING");
+  Serial.println("\r\n🏁 ENDING TRIP TRACKING");
   
   currentTrip.endTime = 1746057600000ULL + (uint64_t)millis();
   currentTrip.isActive = false;
@@ -2447,11 +2448,11 @@ void endTrip() {
 
   // Save trip if engine ran for at least 3 seconds
   if (duration >= 3000) {
-    Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\n", currentTrip.fromLat, currentTrip.fromLng);
-    Serial.printf("[TRIP] 🏁 TO: %.6f, %.6f\n", currentTrip.toLat, currentTrip.toLng);
-    Serial.printf("[TRIP] 📊 Distance: %.2f km | Max Speed: %.1f kph\n", 
+    Serial.printf("[TRIP] 🚀 FROM: %.6f, %.6f\r\n", currentTrip.fromLat, currentTrip.fromLng);
+    Serial.printf("[TRIP] 🏁 TO: %.6f, %.6f\r\n", currentTrip.toLat, currentTrip.toLng);
+    Serial.printf("[TRIP] 📊 Distance: %.2f km | Max Speed: %.1f kph\r\n", 
                   currentTrip.totalDistance, currentTrip.maxSpeed);
-    Serial.printf("[TRIP] ⏱️ Duration: %llu seconds\n", duration / 1000);
+    Serial.printf("[TRIP] ⏱️ Duration: %llu seconds\r\n", duration / 1000);
     
     // Save trip to Firebase
     saveTripToFirebase();
@@ -2509,7 +2510,7 @@ void saveTripToFirebase() {
   if (code == HTTP_CODE_OK) {
     Serial.println("[TRIP] ✅ Trip saved to Firebase!");
   } else {
-    Serial.printf("[TRIP] ❌ Failed to save trip: HTTP %d\n", code);
+    Serial.printf("[TRIP] ❌ Failed to save trip: HTTP %d\r\n", code);
   }
   http.end();
 }
@@ -2570,7 +2571,7 @@ void logSecurityEventToFirebase(String eventType) {
   if (code == HTTP_CODE_OK) {
     Serial.println("[SECURITY] ✅ Security event logged to Firebase");
   } else {
-    Serial.printf("[SECURITY] ❌ Failed to log security event: HTTP %d\n", code);
+    Serial.printf("[SECURITY] ❌ Failed to log security event: HTTP %d\r\n", code);
   }
   
   http.end();
@@ -2582,37 +2583,37 @@ void printSecurityStatus() {
   unsigned long timeSinceWiFi = currentTime - lastWiFiConnected;
   unsigned long timeSinceHelmet = currentTime - lastHelmetUpdateTime;
   
-  Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  Serial.println("\r\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   Serial.println("🔒 COMPREHENSIVE SECURITY STATUS");
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   
   // Security System Status
-  Serial.printf("Security System: %s\n", securitySystemActive ? "ACTIVE 🔒" : "DISABLED ⚠️");
-  Serial.printf("Secure Mode: %s\n", systemInSecureMode ? "ENGAGED 🚨" : "NORMAL ✅");
+  Serial.printf("Security System: %s\r\n", securitySystemActive ? "ACTIVE 🔒" : "DISABLED ⚠️");
+  Serial.printf("Secure Mode: %s\r\n", systemInSecureMode ? "ENGAGED 🚨" : "NORMAL ✅");
   
-  Serial.println("\n📡 CONNECTIVITY STATUS:");
-  Serial.printf("WiFi: %s (%lu ms ago)\n", 
+  Serial.println("\r\n📡 CONNECTIVITY STATUS:");
+  Serial.printf("WiFi: %s (%lu ms ago)\r\n", 
                 (timeSinceWiFi <= WIFI_TIMEOUT) ? "CONNECTED ✅" : "TIMEOUT ❌", 
                 timeSinceWiFi);
-  Serial.printf("WiFi Timeout Limit: %lu ms\n", WIFI_TIMEOUT);
+  Serial.printf("WiFi Timeout Limit: %lu ms\r\n", WIFI_TIMEOUT);
   
-  Serial.printf("Helmet: %s (%lu ms ago)\n", 
+  Serial.printf("Helmet: %s (%lu ms ago)\r\n", 
                 (timeSinceHelmet <= HELMET_TIMEOUT || lastHelmetUpdateTime == 0) ? "CONNECTED ✅" : "TIMEOUT ❌", 
                 timeSinceHelmet);
-  Serial.printf("Helmet Timeout Limit: %lu ms\n", HELMET_TIMEOUT);
+  Serial.printf("Helmet Timeout Limit: %lu ms\r\n", HELMET_TIMEOUT);
   
-  Serial.println("\n🛡️ SAFETY STATUS:");
-  Serial.printf("Engine: %s\n", engineRunning ? "RUNNING 🟢" : "STOPPED 🔴");
-  Serial.printf("Alcohol: %s\n", alcoholDetected ? "DETECTED ❌" : "SAFE ✅");
-  Serial.printf("Crash: %s\n", crashDetected ? "DETECTED ❌" : "NONE ✅");
-  Serial.printf("Anti-Theft: %s\n", antiTheftArmed ? "ARMED 🛡️" : "DISARMED 🔓");
+  Serial.println("\r\n🛡️ SAFETY STATUS:");
+  Serial.printf("Engine: %s\r\n", engineRunning ? "RUNNING 🟢" : "STOPPED 🔴");
+  Serial.printf("Alcohol: %s\r\n", alcoholDetected ? "DETECTED ❌" : "SAFE ✅");
+  Serial.printf("Crash: %s\r\n", crashDetected ? "DETECTED ❌" : "NONE ✅");
+  Serial.printf("Anti-Theft: %s\r\n", antiTheftArmed ? "ARMED 🛡️" : "DISARMED 🔓");
   
-  Serial.println("\n🔑 PHYSICAL KEY STATUS:");
+  Serial.println("\r\n🔑 PHYSICAL KEY STATUS:");
   Serial.println("Physical Key: Not monitored (dual relay security active)");
-  Serial.printf("Key Security: %s\n", securitySystemActive ? "PROTECTED 🔒" : "UNPROTECTED ⚠️");
+  Serial.printf("Key Security: %s\r\n", securitySystemActive ? "PROTECTED 🔒" : "UNPROTECTED ⚠️");
   
-  Serial.println("\n⚡ RELAY STATUS:");
-  Serial.printf("Relay GPIO %d: %d (%s)\n", relayPin, digitalRead(relayPin), 
+  Serial.println("\r\n⚡ RELAY STATUS:");
+  Serial.printf("Relay GPIO %d: %d (%s)\r\n", relayPin, digitalRead(relayPin), 
                 digitalRead(relayPin) ? "ON" : "OFF");
   
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -2633,7 +2634,7 @@ void printSecurityStatus() {
     Serial.println("💡 Recommendation: Turn on helmet and ensure WiFi connection");
   }
   
-  Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\r\n");
 }
 
 
