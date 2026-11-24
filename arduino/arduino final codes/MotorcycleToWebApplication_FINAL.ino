@@ -195,18 +195,20 @@ const unsigned long SENSOR_PRINT_INTERVAL = 500;  // 500ms sensor readings
 unsigned long lastQuickStatus = 0;
 const unsigned long QUICK_STATUS_INTERVAL = 1000;  // 1 second quick status
 
-// Anti-theft system
+// Anti-theft system & vibration acoustic filtering
 bool antiTheftEnabled = false;
 bool antiTheftArmed = false;
 unsigned long engineOffTime = 0;
-const unsigned long ARM_DELAY = 1500;           // 1.5 seconds after engine off before activating vibration sensor
+unsigned long ARM_DELAY = 10000;                  // 10 seconds grace period after engine off before arming (time to dismount)
 unsigned long lastTheftAlert = 0;
 const unsigned long THEFT_ALERT_COOLDOWN = 30000; // 30 seconds between SMS/Firebase alerts
 bool theftAlertSent = false;
 int theftDetectionCount = 0;
-const int THEFT_DETECTION_REQUIRED = 1;            // Instant alarm on detected movement
-const unsigned long VIBRATION_DEBOUNCE = 50;       // 50ms debounce between pulses
-const unsigned long VIBRATION_WINDOW_MS = 2000;    // 2-second moving window
+int THEFT_DETECTION_REQUIRED = 5;                 // Filter: 5 pulses required within window (prevents single-bump false alarms)
+const unsigned long VIBRATION_DEBOUNCE = 35;       // 35ms debounce between pulses
+const unsigned long VIBRATION_WINDOW_MS = 1500;    // 1.5-second moving window to accumulate pulses
+const unsigned long SIREN_SETTLE_MS = 2500;        // 2.5s quiet time after buzzer stops to prevent acoustic re-trigger
+unsigned long lastSirenStopTime = 0;              // Timestamp when buzzer last stopped
 unsigned long vibrationWindowStart = 0;
 unsigned long lastVibrationTime = 0;
 
@@ -273,6 +275,7 @@ void sirenTaskCode(void* pvParameters) {
       digitalWrite(lightIndicatorPin, LOW);
       sirenActive = false;
       buzzerMode = BUZZER_OFF;
+      lastSirenStopTime = millis();
       vTaskDelay(pdMS_TO_TICKS(40));
       continue;
     }
@@ -345,6 +348,7 @@ const String alcoholPath = "/helmet_public/" + userUID + "/alcohol/status.json?a
 
 // ── Siren helpers ─────────────────────────────────────────────────────────
 void startSiren() {
+  if (sirenActive) return; // Prevent acoustic feedback loop from resetting siren timer!
   buzzerMode     = BUZZER_SIREN;
   sirenStartTime = millis();
   sirenActive    = true;
@@ -352,8 +356,9 @@ void startSiren() {
 }
 
 void stopSiren() {
-  buzzerMode  = BUZZER_OFF;
-  sirenActive = false;
+  buzzerMode        = BUZZER_OFF;
+  sirenActive       = false;
+  lastSirenStopTime = millis();
   noTone(buzzerPin);
   digitalWrite(buzzerPin, LOW);
   digitalWrite(lightIndicatorPin, LOW);
@@ -547,7 +552,7 @@ void loop() {
   // ── PRIORITY #0: Tick the siren (two-tone wail, loop-safe) ───────────────
   tickSiren();
 
-  // ── PRIORITY #1: Vibration detection (Interrupt + Pin Level Polling) ───────
+  // ── PRIORITY #1: Vibration detection (Interrupt + Windowed Multi-Pulse Filter) ───
   int currentVib = digitalRead(vibrationSensorPin);
   static int lastVibState = -1;
   bool vibPinChanged = (lastVibState != -1 && currentVib != lastVibState);
@@ -556,32 +561,55 @@ void loop() {
   bool movementDetected = (vibrationISRTriggered || vibPinChanged);
   if (vibrationISRTriggered) vibrationISRTriggered = false;
 
-  if (movementDetected) {
-    unsigned long now = millis();
+  unsigned long now = millis();
 
-    // Inactive when engine is RUNNING or STARTING — ONLY active when engine is STOPPED and anti-theft is ARMED
-    if (!engineRunning && antiTheftArmed) {
-      if (now - vibrationISRTime >= VIBRATION_DEBOUNCE) {
-        vibrationISRTime = now;
+  // Reset pulse accumulator if window has expired
+  if (now - vibrationWindowStart > VIBRATION_WINDOW_MS) {
+    consecutiveVibrations = 0;
+    vibrationWindowStart = now;
+  }
+
+  // Active ONLY when:
+  // 1. Engine is STOPPED
+  // 2. Anti-theft is ARMED
+  // 3. Siren is NOT already sounding (prevents acoustic feedback loop from buzzer vibration!)
+  // 4. Acoustic cooldown has elapsed since siren stopped (prevents ringing re-trigger)
+  if (!engineRunning && antiTheftArmed && !sirenActive && (now - lastSirenStopTime >= SIREN_SETTLE_MS)) {
+    if (movementDetected) {
+      if (now - lastVibrationTime >= VIBRATION_DEBOUNCE) {
+        lastVibrationTime = now;
         consecutiveVibrations++;
 
-        Serial.printf("\r\n🚨🚨🚨 [ANTI-THEFT] MOVEMENT DETECTED (GPIO %d)! SOUNDING BUZZER & ALERTING GSM... 🚨🚨🚨\r\n", vibrationSensorPin);
+        Serial.printf("[ANTI-THEFT] 🔔 Vibration pulse %d/%d (window: %lums)
+",
+                      consecutiveVibrations, THEFT_DETECTION_REQUIRED, now - vibrationWindowStart);
 
-        // Buzz / siren sounds immediately to warn the thief
-        startSiren();
+        if (consecutiveVibrations >= THEFT_DETECTION_REQUIRED) {
+          Serial.printf("
+🚨🚨🚨 [ANTI-THEFT] MOVEMENT DETECTED (%d pulses on GPIO %d)! SOUNDING BUZZER & ALERTING GSM... 🚨🚨🚨
+",
+                        consecutiveVibrations, vibrationSensorPin);
 
-        // Dispatch SMS via GSM module to emergency contacts and log to Firebase
-        if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
-          Serial.println("[ANTI-THEFT] 📱 Dispatching GSM SMS to emergency contact + Firebase alert...");
-          triggerTheftAlert();
-          lastTheftAlert = now;
-          theftAlertSent = true;
-        } else {
-          Serial.printf("[ANTI-THEFT] Alert cooldown active (%lu s remaining)\r\n",
-                        (THEFT_ALERT_COOLDOWN - (now - lastTheftAlert)) / 1000);
+          consecutiveVibrations = 0;  // Reset counter
+          startSiren();
+
+          // Dispatch SMS via GSM module to emergency contacts and log to Firebase
+          if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
+            Serial.println("[ANTI-THEFT] 📱 Dispatching GSM SMS to emergency contact + Firebase alert...");
+            triggerTheftAlert();
+            lastTheftAlert = now;
+            theftAlertSent = true;
+          } else {
+            Serial.printf("[ANTI-THEFT] Alert cooldown active (%lu s remaining)
+",
+                          (THEFT_ALERT_COOLDOWN - (now - lastTheftAlert)) / 1000);
+          }
         }
       }
     }
+  } else {
+    // If suppressed (riding, disarmed, siren active, or settling), discard queued interrupts
+    if (vibrationISRTriggered) vibrationISRTriggered = false;
   }
 
   // ── WiFi auto-reconnect (non-blocking) ────────────────────────────────────
@@ -697,6 +725,27 @@ void loop() {
     }
     else if (cmd == "SECURITY STATUS") {
       printSecurityStatus();
+    }
+    else if (cmd.startsWith("SET THRESHOLD") || cmd.startsWith("SET SENSITIVITY")) {
+      int val = cmd.substring(cmd.lastIndexOf(' ') + 1).toInt();
+      if (val > 0 && val <= 50) {
+        THEFT_DETECTION_REQUIRED = val;
+        Serial.printf("✅ Vibration threshold set to %d pulses (window: %lu ms)\r\n",
+                      THEFT_DETECTION_REQUIRED, VIBRATION_WINDOW_MS);
+      } else {
+        Serial.println("❌ Invalid threshold. Use 1 to 50 (e.g., SET THRESHOLD 5)");
+      }
+    }
+    else if (cmd == "TEST BUZZER") {
+      Serial.println("🔊 Testing Police Siren for 3 seconds...");
+      startSiren();
+      delay(3000);
+      stopSiren();
+      Serial.println("✅ Buzzer test complete!");
+    }
+    else if (cmd == "STOP SIREN") {
+      stopSiren();
+      Serial.println("✅ Siren stopped manually!");
     }
     else if (cmd == "TEST VIBRATION") {
       Serial.println("🧪 TESTING VIBRATION SENSOR...");
@@ -851,7 +900,7 @@ void loop() {
       antiTheftEnabled = true;
       engineOffTime = millis();
       consecutiveVibrations = 0;
-      Serial.println("\r\n[ANTI-THEFT] Engine stopped -- activating vibration sensor in 1.5s...");
+      Serial.println("\r\n[ANTI-THEFT] Engine stopped -- activating vibration sensor in 10s (grace period)...");
       Serial.printf("[ANTI-THEFT] Baseline: GPIO%d = %s\r\n",
                     vibrationSensorPin, digitalRead(vibrationSensorPin) ? "HIGH" : "LOW");
     }
@@ -864,8 +913,9 @@ void loop() {
       consecutiveVibrations = 0;
       vibrationWindowStart = millis();
       Serial.println("\r\n[ANTI-THEFT] 🛡️ ARMED! Vibration sensor activated (movement triggers buzzer + GSM SMS)...");
-      Serial.printf("[ANTI-THEFT] GPIO %d baseline at arm: %s\r\n",
-                    vibrationSensorPin, digitalRead(vibrationSensorPin) ? "HIGH" : "LOW");
+      Serial.printf("[ANTI-THEFT] GPIO %d baseline at arm: %s | Filter: %d pulses within %lums\r\n",
+                    vibrationSensorPin, digitalRead(vibrationSensorPin) ? "HIGH" : "LOW",
+                    THEFT_DETECTION_REQUIRED, VIBRATION_WINDOW_MS);
       playConfirmBeep();
     }
 
