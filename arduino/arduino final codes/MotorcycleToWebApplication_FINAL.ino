@@ -2043,11 +2043,23 @@ void checkDashboardButton() {
     // Check for explicit commands or button states
     bool hasStartCmd = (response.indexOf("\"command\":\"START\"") != -1) ||
                        (response.indexOf("\"startButton\":true") != -1 && !engineRunning);
+    bool hasSilenceCmd = (response.indexOf("\"command\":\"SILENCE_ALARM\"") != -1) ||
+                         (response.indexOf("\"muteBuzzer\":true") != -1) ||
+                         (response.indexOf("\"command\":\"DISMISS_ALARM\"") != -1);
     bool hasStopCmd  = (response.indexOf("\"command\":\"STOP\"") != -1) ||
                        (response.indexOf("\"stopButton\":true") != -1) ||
                        (response.indexOf("\"startButton\":true") != -1 && engineRunning);
 
-    if (hasStopCmd && engineRunning) {
+    if (hasSilenceCmd) {
+      Serial.println("\r\n🔕 [DASHBOARD] ANTI-THEFT DISMISSED / MUTE ALARM COMMAND RECEIVED!");
+      Serial.println("[DASHBOARD] 🛑 Turning OFF motorcycle buzzer immediately...");
+      stopSiren();
+      consecutiveVibrations = 0;
+      lastTheftAlert = millis();    // Refresh cooldown
+      lastSirenStopTime = millis(); // Start acoustic settle window
+      clearDashboardButton();
+    }
+    else if (hasStopCmd && engineRunning) {
       Serial.println("\r\n🛑 [DASHBOARD] STOP ENGINE COMMAND RECEIVED!");
       stopEngine();
       clearDashboardButton();
@@ -2125,7 +2137,7 @@ void clearDashboardButton() {
   http.addHeader("Content-Type", "application/json");
 
   // Reset command and button flags in Firebase so they don't re-trigger
-  int code = http.PATCH("{\"command\":\"NONE\",\"startButton\":false,\"stopButton\":false}");
+  int code = http.PATCH("{\"command\":\"NONE\",\"startButton\":false,\"stopButton\":false,\"muteBuzzer\":false}");
   if (code == HTTP_CODE_OK) {
     Serial.println("[DASHBOARD] ✓ Engine command cleared in Firebase");
   } else {

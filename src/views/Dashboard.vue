@@ -208,7 +208,7 @@
           <div :class="['px-3 py-1.5 rounded-xl text-center', antiTheftAlert.severity === 'high' ? 'bg-red-500/30' : antiTheftAlert.severity === 'medium' ? 'bg-orange-500/30' : 'bg-yellow-500/30']">
             <p class="text-white text-xs sm:text-sm font-bold">Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
           </div>
-          <button v-if="showStopSoundButton" @click="stopSound" class="bg-red-600 hover:bg-red-700 px-3.5 py-2 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-lg">
+          <button v-if="showStopSoundButton" @click="muteAntiTheftAlarm" class="bg-red-600 hover:bg-red-700 px-3.5 py-2 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-lg">
             <span class="material-icons text-base">volume_off</span>
             Mute Alarm
           </button>
@@ -3413,12 +3413,44 @@ const setupAntiTheftListener = () => {
   });
 };
 
-// ✅ Dismiss anti-theft alert & permanently mute current theft alarm
-const dismissAntiTheftAlert = () => {
+// ✅ Dismiss anti-theft alert & permanently mute current theft alarm & turn off motorcycle buzzer
+const dismissAntiTheftAlert = async () => {
   antiTheftAlert.value.active = false;
   lastDismissedTheftTime.value = Date.now();
   stopSound();
   console.log('[ANTI-THEFT] Alert dismissed & muted by user');
+
+  // Remotely turn off the physical motorcycle buzzer
+  try {
+    const uid = userId.value || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+    await update(dbRef(database, `${uid}/engineControl`), {
+      command: 'SILENCE_ALARM',
+      muteBuzzer: true,
+      silenceTimestamp: Date.now()
+    });
+    await update(dbRef(database, `${uid}/antiTheft/status`), {
+      alertActive: false,
+      dismissedAt: Date.now()
+    });
+    console.log('[ANTI-THEFT] 🔕 Sent SILENCE_ALARM command to motorcycle buzzer');
+  } catch (err) {
+    console.error('[ANTI-THEFT] Failed to send silence command:', err);
+  }
+};
+
+const muteAntiTheftAlarm = async () => {
+  stopSound();
+  try {
+    const uid = userId.value || 'DMIARybyNHVhzwAmrx2QQjdpSb13';
+    await update(dbRef(database, `${uid}/engineControl`), {
+      command: 'SILENCE_ALARM',
+      muteBuzzer: true,
+      silenceTimestamp: Date.now()
+    });
+    console.log('[ANTI-THEFT] 🔕 Sent SILENCE_ALARM from Mute Alarm button');
+  } catch (err) {
+    console.error('[ANTI-THEFT] Failed to send silence command:', err);
+  }
 };
 
 // ✅ NEW: Weather Functions

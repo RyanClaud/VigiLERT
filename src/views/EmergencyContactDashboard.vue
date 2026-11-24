@@ -134,10 +134,17 @@
           <p class="text-white/90 text-sm mt-1">{{ antiTheftAlert.message }}</p>
           <p class="text-white/70 text-xs mt-1">Detected at {{ antiTheftAlert.time }} • Severity: {{ antiTheftAlert.severity.toUpperCase() }}</p>
         </div>
-        <button @click="dismissAntiTheftAlert"
-          class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all border border-white/30">
-          Dismiss
-        </button>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button @click="dismissAntiTheftAlert"
+            class="bg-red-600 hover:bg-red-700 px-3.5 py-2 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-lg">
+            <span class="material-icons text-base">volume_off</span>
+            Mute Alarm
+          </button>
+          <button @click="dismissAntiTheftAlert"
+            class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-white text-sm font-bold transition-all border border-white/30">
+            Dismiss
+          </button>
+        </div>
       </div>
     </div>
 
@@ -974,9 +981,25 @@ const acknowledgeRiderSos = () => {
   stopAlertSound();
 };
 
-const dismissAntiTheftAlert = () => { 
+const dismissAntiTheftAlert = async () => { 
   antiTheftAlert.value.active = false; 
   stopAlertSound(); 
+
+  // Remotely turn off the physical motorcycle buzzer
+  try {
+    await update(dbRef(database, `${userUID}/engineControl`), {
+      command: 'SILENCE_ALARM',
+      muteBuzzer: true,
+      silenceTimestamp: Date.now()
+    });
+    await update(dbRef(database, `${userUID}/antiTheft/status`), {
+      alertActive: false,
+      dismissedAt: Date.now()
+    });
+    console.log('[ANTI-THEFT] 🔕 Sent SILENCE_ALARM command to motorcycle buzzer from Emergency Contact');
+  } catch (err) {
+    console.error('[ANTI-THEFT] Failed to send silence command:', err);
+  }
 };
 
 const dismissedCrashKeys = ref(new Set());
