@@ -27,7 +27,7 @@
               <!-- Shield Logo -->
               <div class="w-10 h-10 sm:w-11 sm:h-11 relative flex items-center justify-center">
                 <img 
-                  src="/images/shield-logo.png" 
+                  src="/vigilert-logo.png" 
                   alt="VigiLERT Logo" 
                   class="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(0,184,92,0.5)] group-hover:scale-105 transition-transform" 
                 />
@@ -240,7 +240,7 @@
       <div v-else class="flex flex-col justify-center items-center h-[70vh] gap-4">
         <div class="relative w-16 h-16 flex items-center justify-center">
           <div class="absolute inset-0 rounded-full border-2 border-[#00B85C]/20 border-t-[#00B85C] animate-spin"></div>
-          <img src="/images/shield-logo.png" alt="VigiLERT" class="w-8 h-8 object-contain" />
+          <img src="/vigilert-logo.png" alt="VigiLERT" class="w-8 h-8 object-contain" />
         </div>
         <p class="text-sm font-semibold text-slate-400 animate-pulse tracking-wide">
           Connecting to VigiLERT System...

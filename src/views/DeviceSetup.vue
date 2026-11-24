@@ -10,7 +10,7 @@
       </div>
       <div class="relative max-w-3xl mx-auto text-center">
         <div class="inline-flex items-center justify-center w-20 h-20 bg-[#00B85C]/20 border border-[#00B85C]/40 rounded-full mb-5 shadow-xl">
-          <img src="/images/shield-logo.png" alt="VigiLERT" class="w-12 h-12 object-contain filter drop-shadow" />
+          <img src="/vigilert-logo.png" alt="VigiLERT" class="w-12 h-12 object-contain filter drop-shadow" />
         </div>
         <h1 class="text-3xl md:text-4xl font-black text-white mb-3 tracking-tight">
           Welcome to Vigi<span class="text-[#00B85C]">LERT</span>! 🎉

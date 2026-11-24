@@ -63,7 +63,7 @@
           <div class="flex items-center gap-4 sm:gap-5">
             <div class="relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center">
               <img 
-                src="/images/shield-logo.png" 
+                src="/vigilert-logo.png" 
                 alt="VigiLERT Shield Logo" 
                 class="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(0,184,92,0.4)]"
               />
@@ -124,7 +124,7 @@
             <div class="flex flex-col items-center text-center">
               <div class="w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center mb-1">
                 <img 
-                  src="/images/shield-logo-card.png" 
+                  src="/vigilert-logo.png" 
                   alt="VigiLERT Shield Logo" 
                   class="w-full h-full object-contain"
                 />

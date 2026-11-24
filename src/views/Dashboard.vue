@@ -1485,7 +1485,7 @@ const setupFirebaseListeners = () => {
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('🆘 Emergency Contact SOS', {
           body: 'Your emergency contact has triggered an SOS alert!',
-          icon: '/favicon.ico',
+          icon: '/vigilert-logo.png',
           tag: 'sos-alert'
         });
       }
