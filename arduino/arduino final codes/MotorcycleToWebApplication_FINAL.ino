@@ -580,14 +580,11 @@ void loop() {
         lastVibrationTime = now;
         consecutiveVibrations++;
 
-        Serial.printf("[ANTI-THEFT] 🔔 Vibration pulse %d/%d (window: %lums)
-",
+        Serial.printf("[ANTI-THEFT] Vibration pulse %d/%d (window: %lums)\r\n",
                       consecutiveVibrations, THEFT_DETECTION_REQUIRED, now - vibrationWindowStart);
 
         if (consecutiveVibrations >= THEFT_DETECTION_REQUIRED) {
-          Serial.printf("
-🚨🚨🚨 [ANTI-THEFT] MOVEMENT DETECTED (%d pulses on GPIO %d)! SOUNDING BUZZER & ALERTING GSM... 🚨🚨🚨
-",
+          Serial.printf("\r\n[ANTI-THEFT] MOVEMENT DETECTED (%d pulses on GPIO %d)! SOUNDING BUZZER & ALERTING GSM...\r\n",
                         consecutiveVibrations, vibrationSensorPin);
 
           consecutiveVibrations = 0;  // Reset counter
@@ -595,13 +592,12 @@ void loop() {
 
           // Dispatch SMS via GSM module to emergency contacts and log to Firebase
           if (now - lastTheftAlert >= THEFT_ALERT_COOLDOWN) {
-            Serial.println("[ANTI-THEFT] 📱 Dispatching GSM SMS to emergency contact + Firebase alert...");
+            Serial.println("[ANTI-THEFT] Dispatching GSM SMS to emergency contact + Firebase alert...");
             triggerTheftAlert();
             lastTheftAlert = now;
             theftAlertSent = true;
           } else {
-            Serial.printf("[ANTI-THEFT] Alert cooldown active (%lu s remaining)
-",
+            Serial.printf("[ANTI-THEFT] Alert cooldown active (%lu s remaining)\r\n",
                           (THEFT_ALERT_COOLDOWN - (now - lastTheftAlert)) / 1000);
           }
         }
